@@ -1,3 +1,4 @@
+import uuid
 from pydantic import BaseModel
 from typing import Optional
 
@@ -8,7 +9,7 @@ class CategoriesBase(BaseModel):
 
 
 class Categories(CategoriesBase):
-    id: int
+    id: uuid.UUID
 
     class Config:
         orm_mode = True
