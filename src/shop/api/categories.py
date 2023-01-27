@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends
 from typing import List
 
@@ -18,7 +19,7 @@ async def get_categories(service: CategoriesService = Depends()):
 
 
 @router.get('/{category_id}', response_model=Categories)
-async def get_category_by_id(category_id: int, service: CategoriesService = Depends()):
+async def get_category_by_id(category_id: uuid.UUID, service: CategoriesService = Depends()):
     return service.get_by_id(category_id)
 
 
@@ -28,11 +29,11 @@ async def create_categories(categories_data: CategoriesCreate, service: Categori
 
 
 @router.put('/{category_id}', response_model=Categories)
-async def update_category(category_id: int, category_data: CategoriesUpdate, service: CategoriesService = Depends()):
+async def update_category(category_id: uuid.UUID, category_data: CategoriesUpdate, service: CategoriesService = Depends()):
     return service.update(category_id, category_data)
 
 
 @router.delete('/{category_id}')
-async def delete_category(category_id: int, service: CategoriesService = Depends()):
+async def delete_category(category_id: uuid.UUID, service: CategoriesService = Depends()):
     service.delete(category_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -1,26 +1,33 @@
-from sqlalchemy import create_engine
+from typing import Generator
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from .settings import settings
+from fastapi import HTTPException, status
 
-engine = create_engine(
+engine = create_async_engine(
     settings.database_uri,
-    connect_args={'check_same_thread': False},
+    future=True,
+    echo=True,
 )
 
 Session = sessionmaker(
     engine,
+    expire_on_commit=False,
     autocommit=False,
     autoflush=False,
+    class_=AsyncSession
 )
 
 
-def get_session() -> Session:
-    session = Session()
+async def get_session() -> Generator:
+    session: AsyncSession | None = None
     try:
+        session = Session()
         yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise Exception
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f'Database session create error: {str(e)}'
+        )
     finally:
-        session.close()
+        await session.close()

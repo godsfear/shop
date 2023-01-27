@@ -1,7 +1,11 @@
+import uuid
 from typing import List
 from fastapi import Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
+from sqlalchemy import and_
+from sqlalchemy import select
+from sqlalchemy import update
 
 from ..database import get_session
 from .. import tables
@@ -9,35 +13,48 @@ from ..models.products import ProductsCreate, ProductsUpdate
 
 
 class ProductsService:
-    def __init__(self, session: Session = Depends(get_session)):
+    def __init__(self, session: AsyncSession = Depends(get_session)):
         self.session = session
 
-    def _get(self, product_id: int) -> tables.Products:
-        products = self.session.query(tables.Products).filter_by(id=product_id).first()
-        if not products:
+    async def _get(self, product_id: uuid.UUID) -> tables.Products:
+        async with self.session as db:
+            async with db.begin():
+                query = select(tables.Products).where(id=product_id)
+                res = await db.execute(query)
+                product = res.fetchone()
+        if not product:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        return product[0]
+
+    async def get_all(self) -> List[tables.Products]:
+        async with self.session as db:
+            async with db.begin():
+                query = select(tables.Products)
+                res = await db.execute(query)
+                products = res.fetchall()
         return products
 
-    def get_all(self) -> List[tables.Products]:
-        return self.session.query(tables.Products).all()
+    async def get_by_id(self, product_id: uuid.UUID) -> tables.Products:
+        product = await self._get(product_id)
+        return product
 
-    def get_by_id(self, product_id: int) -> tables.Products:
-        return self._get(product_id)
-
-    def create(self, products_data: ProductsCreate) -> tables.Products:
+    async def create(self, products_data: ProductsCreate) -> tables.Products:
         products = tables.Products(**products_data.dict())
-        self.session.add(products)
-        self.session.commit()
+        async with self.session as db:
+            async with db.begin():
+                db.add(products)
+                await db.flush()
         return products
 
-    def update(self, product_id: int, product_data: ProductsUpdate) -> tables.Products:
-        products = self._get(product_id)
+    async def update(self, product_id: uuid.UUID, product_data: ProductsUpdate) -> tables.Products:
+        products = await self._get(product_id)
         for field, value in product_data:
             setattr(products, field, value)
+        self.session.flush()
         self.session.commit()
         return products
 
-    def delete(self, product_id: int):
+    def delete(self, product_id: uuid.UUID):
         products = self._get(product_id)
         self.session.delete(products)
         self.session.commit()

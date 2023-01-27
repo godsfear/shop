@@ -1,3 +1,4 @@
+import uuid
 from pydantic import BaseModel
 from typing import Optional, List
 from .categories import Categories
@@ -5,12 +6,12 @@ from .categories import Categories
 
 class ProductsBase(BaseModel):
     name: str
-    description: Optional[str]
+    description: str | None
 
 
 class Products(ProductsBase):
-    id: int
-    category: Optional[List[Categories]]
+    id: uuid.UUID
+#  category: List[Categories] | None
 
     class Config:
         orm_mode = True
