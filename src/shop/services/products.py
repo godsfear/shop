@@ -3,7 +3,6 @@ from typing import List
 from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
-from sqlalchemy import and_
 from sqlalchemy import select
 from sqlalchemy import update
 
@@ -19,7 +18,7 @@ class ProductsService:
     async def _get(self, product_id: uuid.UUID) -> tables.Products:
         async with self.session as db:
             async with db.begin():
-                query = select(tables.Products).where(id=product_id)
+                query = select(tables.Products).where(tables.Products.id == product_id)
                 res = await db.execute(query)
                 product = res.fetchone()
         if not product:
@@ -31,7 +30,7 @@ class ProductsService:
             async with db.begin():
                 query = select(tables.Products)
                 res = await db.execute(query)
-                products = res.fetchall()
+                products = res.scalars().all()
         return products
 
     async def get_by_id(self, product_id: uuid.UUID) -> tables.Products:
@@ -47,14 +46,23 @@ class ProductsService:
         return products
 
     async def update(self, product_id: uuid.UUID, product_data: ProductsUpdate) -> tables.Products:
-        products = await self._get(product_id)
-        for field, value in product_data:
-            setattr(products, field, value)
-        self.session.flush()
-        self.session.commit()
-        return products
+        async with self.session as db:
+            async with db.begin():
+                query = (
+                            update(tables.Products)
+                            .where(tables.Products.id == product_id)
+                            .values(**product_data.dict())
+                            .returning(tables.Products)
+                        )
+                res = await db.execute(query)
+                product = res.fetchone()
+                if not product:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        return product
 
     def delete(self, product_id: uuid.UUID):
-        products = self._get(product_id)
-        self.session.delete(products)
-        self.session.commit()
+        pass
+        """async with self.session as db:
+            async with db.begin():
+                query = update(tables.Products).where(id=product_id).values()
+                await db.execute(query)"""
