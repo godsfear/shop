@@ -21,7 +21,8 @@ async def get_products(service: ProductsService = Depends()):
 
 @router.get('/{product_id}', response_model=Products)
 async def get_product_by_id(product_id: uuid.UUID, service: ProductsService = Depends()):
-    return service.get_by_id(product_id)
+    product = await service.get_by_id(product_id)
+    return product
 
 
 @router.post('/', response_model=Products)
@@ -32,7 +33,8 @@ async def create_products(products_data: ProductsCreate, service: ProductsServic
 
 @router.put('/{product_id}', response_model=Products)
 async def update_product(product_id: uuid.UUID, product_data: ProductsUpdate, service: ProductsService = Depends()):
-    return service.update(product_id, product_data)
+    product = await service.update(product_id, product_data)
+    return product
 
 
 @router.delete('/{product_id}')
