@@ -24,7 +24,9 @@ async def get_session() -> Generator:
     try:
         session = Session()
         yield session
+        await session.commit()
     except Exception as e:
+        await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f'Database session create error: {str(e)}'
