@@ -1,22 +1,20 @@
-import uuid
 from datetime import datetime, timedelta
-from typing import List
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
 from jose import JWTError, jwt
 from passlib.hash import bcrypt
 from pydantic import ValidationError
 
-from ..database import get_session
 from .. import tables
-from ..models.user import UserCreate, UserUpdate
+from ..models.user import User, UserCreate
+from ..models.auth import Token
+from ..settings import settings
+from .user import UserService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/signin/')
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> models.User:
+def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     return AuthService.verify_token(token)
 
 
@@ -30,7 +28,7 @@ class AuthService:
         return bcrypt.hash(password)
 
     @classmethod
-    def verify_token(cls, token: str) -> models.User:
+    def verify_token(cls, token: str) -> User:
         exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Could not validate credentials',
@@ -44,19 +42,16 @@ class AuthService:
             )
         except JWTError:
             raise exception from None
-
         user_data = payload.get('user')
-
         try:
-            user = models.User.parse_obj(user_data)
+            user = User.parse_obj(user_data)
         except ValidationError:
             raise exception from None
-
         return user
 
     @classmethod
-    def create_token(cls, user: tables.User) -> models.Token:
-        user_data = models.User.from_orm(user)
+    def create_token(cls, user: tables.User) -> Token:
+        user_data = User.from_orm(user)
         now = datetime.utcnow()
         payload = {
             'iat': now,
@@ -70,46 +65,21 @@ class AuthService:
             settings.jwt_secret,
             algorithm=settings.jwt_algorithm,
         )
-        return models.Token(access_token=token)
+        return Token(access_token=token)
 
-    def __init__(self, session: Session = Depends(get_session)):
-        self.session = session
-
-    def register_new_user(
-        self,
-        user_data: models.UserCreate,
-    ) -> models.Token:
-        user = tables.User(
-            email=user_data.email,
-            username=user_data.username,
-            password_hash=self.hash_password(user_data.password),
-        )
-        self.session.add(user)
-        self.session.commit()
+    async def register_new_user(self, user_data: UserCreate, service: UserService = Depends()) -> Token:
+        user = await service.create(user_data)
         return self.create_token(user)
 
-    def authenticate_user(
-        self,
-        username: str,
-        password: str,
-    ) -> models.Token:
+    async def authenticate_user(self, username: str, password: str, service: UserService = Depends()) -> Token:
         exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Incorrect username or password',
             headers={'WWW-Authenticate': 'Bearer'},
         )
-
-        user = (
-            self.session
-            .query(tables.User)
-            .filter(tables.User.username == username)
-            .first()
-        )
-
+        user = await service.get_by_name(username=username)
         if not user:
-            raise exception
-
-        if not self.verify_password(password, user.password_hash):
-            raise exception
-
+            raise exception from None
+        if not self.verify_password(password, user.passhash):
+            raise exception from None
         return self.create_token(user)

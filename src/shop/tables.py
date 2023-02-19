@@ -200,15 +200,15 @@ class Currency(Base):
     __tablename__: str = 'currency'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    code = Column(String, index=True)
-    type = Column(String, index=True)
+    code = Column(String)
+    type = Column(String)
     name = Column(String)
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self):
-        return f'id={self.id}; code={self.code}; name={self.name}; type={self.type}'
+        return f'id={self.id}; code={self.code}; type={self.type}'
 
 
 class Account(Base):
@@ -216,7 +216,7 @@ class Account(Base):
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     table = Column(String)
-    code = Column(String, index=True)
+    code = Column(String)
     name = Column(String)
     currency = Column(UUID(as_uuid=True), ForeignKey("currency.id"))
     description = Column(String, nullable=True)
@@ -274,7 +274,7 @@ class Data(Base):
     object = Column(UUID(as_uuid=True), nullable=False)
     code = Column(String)
     name = Column(String)
-    hash = Column(String, index=True)
+    hash = Column(String)
     algorithm = Column(String)
     content = Column(BYTEA)
     description = Column(String, nullable=True)

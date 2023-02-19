@@ -3,6 +3,8 @@ from pydantic import BaseModel
 
 
 class EntityBase(BaseModel):
+    category: str
+    code: str
     name: str
     description: str | None
 
