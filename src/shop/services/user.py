@@ -7,8 +7,9 @@ from sqlalchemy import select, update
 
 from ..database import get_session
 from .. import tables
-from ..models.user import UserCreate, UserUpdate, UserSave
 from .auth import AuthService
+from ..models.auth import Token
+from ..models.user import UserCreate, UserUpdate, UserSave
 
 
 class UserService:
@@ -84,3 +85,20 @@ class UserService:
                 if not entity:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return entity
+
+    async def register_new_user(self, user_data: UserCreate) -> Token:
+        user = await self.create(user_data)
+        return AuthService.create_token(user)
+
+    async def authenticate_user(self, username: str, password: str) -> Token:
+        exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Incorrect username or password',
+            headers={'WWW-Authenticate': 'Bearer'},
+        )
+        user = await self.get_by_name(username=username)
+        if not user:
+            raise exception from None
+        if not AuthService.verify_password(password, user.passhash):
+            raise exception from None
+        return AuthService.create_token(user)
