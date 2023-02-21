@@ -45,8 +45,8 @@ class Category(Base):
         return f'category={self.category}; code={self.code}; name={self.name}; value={self.value}'
 
 
-class Status(Base):
-    __tablename__: str = 'status'
+class State(Base):
+    __tablename__: str = 'state'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(String)
@@ -57,7 +57,7 @@ class Status(Base):
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        Index('status_idx', 'category', 'code', unique=True),
+        Index('state_idx', 'category', 'code', unique=True),
     )
 
     def __repr__(self):
