@@ -19,9 +19,13 @@ async def get_user(service: UserService = Depends(), user: User = Depends(AuthSe
 
 
 @router.get('/{user_id}', response_model=User)
-async def get_user_by_id(user_id: uuid.UUID, service: UserService = Depends()):
-    user = await service.get_by_id(user_id)
-    return user
+async def get_user_by_id(
+                            user_id: uuid.UUID, service: UserService = Depends(),
+                            user: User = Depends(AuthService.get_current_user)
+                         ):
+    if user:
+        user = await service.get_by_id(user_id)
+        return user
 
 
 @router.post('/signup', response_model=User)
