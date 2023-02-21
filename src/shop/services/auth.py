@@ -11,14 +11,14 @@ from ..models.auth import Token
 from ..settings import settings
 from .user import UserService
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/signin/')
-
-
-def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
-    return AuthService.verify_token(token)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/user/signin/')
 
 
 class AuthService:
+    @classmethod
+    def get_current_user(cls, token: str = Depends(oauth2_scheme)) -> User:
+        return cls.verify_token(token)
+
     @classmethod
     def verify_password(cls, plain_password: str, hashed_password: str) -> bool:
         return bcrypt.verify(plain_password, hashed_password)

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import List
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,3 +69,18 @@ class UserService:
                 if not user:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return user
+
+    async def expire(self, user_id: uuid.UUID) -> tables.User:
+        async with self.session as db:
+            async with db.begin():
+                query = (
+                    update(tables.User)
+                    .where(tables.User.id == user_id)
+                    .values(ends=datetime.utcnow())
+                    .returning(tables.User)
+                )
+                res = await db.execute(query)
+                entity = res.fetchone()
+                if not entity:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        return entity
