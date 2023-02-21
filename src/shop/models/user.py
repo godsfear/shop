@@ -2,24 +2,24 @@ import uuid
 from pydantic import BaseModel
 
 
-class BaseUser(BaseModel):
+class UserBase(BaseModel):
     username: str
     person_id: uuid.UUID
 
 
-class UserCreate(BaseUser):
+class UserCreate(UserBase):
     password: str
 
 
-class UserUpdate(BaseUser):
+class UserUpdate(UserBase):
     password: str
 
 
-class UserSave(BaseUser):
+class UserSave(UserBase):
     passhash: str
 
 
-class User(BaseUser):
+class User(UserBase):
     id: uuid.UUID
 
     class Config:
