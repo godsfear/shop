@@ -11,7 +11,7 @@ class Entity(Base):
     __tablename__: str = 'entity'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    category = Column(String, ForeignKey("category.code"))
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String)
     name = Column(String)
     value = Column(String)
