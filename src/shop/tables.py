@@ -49,8 +49,9 @@ class State(Base):
     __tablename__: str = 'state'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    category = Column(String)
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String)
+    state = Column(String)
     name = Column(String)
     value = Column(String)
     description = Column(String, nullable=True)

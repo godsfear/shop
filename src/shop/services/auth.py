@@ -6,7 +6,7 @@ from passlib.hash import bcrypt
 from pydantic import ValidationError
 
 from .. import tables
-from ..models.user import User, UserCreate
+from ..models.user import User
 from ..models.auth import Token
 from ..settings import settings
 
