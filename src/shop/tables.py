@@ -12,7 +12,7 @@ class Entity(Base):
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String)
+    code = Column(String, index=True)
     name = Column(String)
     value = Column(String)
     description = Column(String, nullable=True)
@@ -30,8 +30,8 @@ class Category(Base):
     __tablename__: str = 'category'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    category = Column(String)
-    code = Column(String)
+    category = Column(String, index=True)
+    code = Column(String, index=True)
     name = Column(String)
     value = Column(String)
     description = Column(String, nullable=True)
@@ -50,7 +50,7 @@ class State(Base):
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String)
+    code = Column(String, index=True)
     state = Column(String)
     name = Column(String)
     value = Column(String)
@@ -58,7 +58,8 @@ class State(Base):
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        Index('state_idx', 'category', 'code', unique=True),
+        Index('state_idx', 'category', 'code'),
+        Index('state_idx', 'category', 'code', 'state', unique=True),
     )
 
     def __repr__(self):
@@ -83,6 +84,7 @@ class Relation(Base):
     __tablename__: str = 'relation'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
+    code = Column(String, index=True)
     name = Column(String)
     src = Column(String)
     src_id = Column(UUID(as_uuid=True), nullable=False)
@@ -91,8 +93,8 @@ class Relation(Base):
     begins = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        Index('name_src_idx', 'name', 'src', 'trg', 'src_id', unique=True),
-        Index('name_trg_idx', 'name', 'src', 'trg', 'trg_id', unique=True),
+        Index('name_src_idx', 'code', 'src', 'trg', 'src_id', unique=True),
+        Index('name_trg_idx', 'code', 'src', 'trg', 'trg_id', unique=True),
     )
 
     def __repr__(self):
@@ -108,8 +110,9 @@ class Person(Base):
     name_last = Column(String, nullable=False)
     name_third = Column(String, nullable=True)
     birthdate = Column(Date, nullable=False)
+    birth_place = Column(UUID(as_uuid=True), ForeignKey("place.id"))
     __table_args__ = (
-        Index('name_birth_idx', 'name_first', 'name_last', 'name_third', 'birthdate'),
+        Index('name_birth_idx', 'name_first', 'name_last', 'name_third', 'birthdate', 'birth_place'),
     )
 
     def __repr__(self):
@@ -122,7 +125,7 @@ class Company(Base):
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     name = Column(String)
     country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
-    code = Column(String)
+    code = Column(String, index=True)
     begins = Column(Date, nullable=False)
     ends = Column(Date, nullable=True)
     __table_args__ = (
@@ -160,15 +163,14 @@ class Property(Base):
                 value={self.value | self.value_int | self.value_dec | self.value_dt}'
 
 
-class Location(Base):
-    __tablename__: str = 'location'
+class Address(Base):
+    __tablename__: str = 'address'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
     region = Column(UUID(as_uuid=True))
-    area = Column(UUID(as_uuid=True))
-    area_type = Column(UUID(as_uuid=True))
-    zip = Column(String)
+    place = Column(UUID(as_uuid=True), ForeignKey("place.id"))
+    postcode = Column(String)
     street = Column(UUID(as_uuid=True))
     building = Column(String)
     apartment = Column(String)
@@ -201,12 +203,16 @@ class Currency(Base):
     __tablename__: str = 'currency'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    code = Column(String)
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    code = Column(String, index=True)
     type = Column(String)
     name = Column(String)
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (
+        Index('account_idx', 'category', 'code'),
+    )
 
     def __repr__(self):
         return f'id={self.id}; code={self.code}; type={self.type}'
@@ -216,23 +222,31 @@ class Account(Base):
     __tablename__: str = 'account'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    table = Column(String)
-    code = Column(String)
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    code = Column(String, index=True)
+    issuer = Column(String, index=True)
+    issuer_table = Column(String)
     name = Column(String)
     currency = Column(UUID(as_uuid=True), ForeignKey("currency.id"))
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (
+        Index('account_idx', 'category', 'code'),
+        Index('account_idx', 'category', 'code', 'currency'),
+        Index('account_idx', 'category', 'code', 'issuer', 'issuer_table'),
+    )
 
     def __repr__(self):
-        return f'id={self.id}; code={self.code}; name={self.name}'
+        return f'id={self.id}; category={self.category}; code={self.code}; name={self.name}'
 
 
 class Message(Base):
     __tablename__: str = 'message'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    code = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    code = Column(String, index=True)
     name = Column(String)
     sender = Column(UUID(as_uuid=True), ForeignKey("person.id"))
     receiver = Column(UUID(as_uuid=True), ForeignKey("person.id"))
@@ -249,7 +263,8 @@ class Operation(Base):
     __tablename__: str = 'operation'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    code = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    code = Column(String, index=True)
     number = Column(String)
     debit = Column(UUID(as_uuid=True), ForeignKey("account.id"))
     credit = Column(UUID(as_uuid=True), ForeignKey("account.id"))
@@ -258,9 +273,9 @@ class Operation(Base):
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        Index('operation_idx', 'code', 'debit', 'credit', 'begins'),
-        Index('operation_db_idx', 'code', 'debit', 'number', 'begins'),
-        Index('operation_cr_idx', 'code', 'credit', 'number', 'begins'),
+        Index('operation_idx', 'category', 'code', 'debit', 'credit', 'begins'),
+        Index('operation_db_idx', 'category', 'code', 'debit', 'number', 'begins'),
+        Index('operation_cr_idx', 'category', 'code', 'credit', 'number', 'begins'),
     )
 
     def __repr__(self):
@@ -273,7 +288,7 @@ class Data(Base):
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     table = Column(String)
     object = Column(UUID(as_uuid=True), nullable=False)
-    code = Column(String)
+    code = Column(String, index=True)
     name = Column(String)
     hash = Column(String)
     algorithm = Column(String)
@@ -287,3 +302,51 @@ class Data(Base):
 
     def __repr__(self):
         return f'id={self.id}; table={self.table}; object={self.object}; code={self.code}; name={self.name}'
+
+
+class Document(Base):
+    __tablename__: str = 'document'
+
+    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    code = Column(String, index=True)
+    country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
+    name = Column(String)
+    issuer = Column(UUID(as_uuid=True), index=True)
+    issuer_table = Column(String)
+    series = Column(String)
+    number = Column(String)
+    description = Column(String, nullable=True)
+    issue = Column(Date, default=func.current_date(), nullable=False)
+    expire = Column(Date, nullable=True)
+    begins = Column(DateTime(timezone=True), default=func.now())
+    ends = Column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (
+        Index('document_idx', 'category', 'code', 'country', 'series', 'number', 'issue', unique=True),
+        Index('document_idx', 'category', 'code', 'issuer', 'issuer_table'),
+    )
+
+    def __repr__(self):
+        return f'id={self.id}; category={self.category}; code={self.code}; name={self.name}'
+
+
+class Place(Base):
+    __tablename__: str = 'place'
+
+    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    code = Column(String, index=True)
+    country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
+    name = Column(String)
+    value = Column(String)
+    description = Column(String, nullable=True)
+    begins = Column(DateTime(timezone=True), default=func.now())
+    ends = Column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (
+        Index('place_idx', 'category', 'code', 'country'),
+        Index('place_idx', 'category', 'code', 'country', 'name'),
+    )
+
+    def __repr__(self):
+        return f'id={self.id}; category={self.category}; code={self.code}; country={self.country}; \
+                name={self.name}'
