@@ -168,7 +168,7 @@ class Address(Base):
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
-    region = Column(UUID(as_uuid=True))
+    region = Column(UUID(as_uuid=True), ForeignKey("place.id"))
     place = Column(UUID(as_uuid=True), ForeignKey("place.id"))
     postcode = Column(String)
     street = Column(UUID(as_uuid=True))
@@ -177,7 +177,7 @@ class Address(Base):
     begins = Column(Date, default=func.current_date(), nullable=False)
     ends = Column(Date, nullable=True)
     __table_args__ = (
-        Index('address_idx', 'country', 'region', 'area', 'area_type', 'zip', 'street'),
+        Index('address_idx', 'country', 'region', 'area', 'area_type', 'postcode', 'street'),
     )
 
     def __repr__(self):
@@ -338,7 +338,6 @@ class Place(Base):
     code = Column(String, index=True)
     country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
     name = Column(String)
-    value = Column(String)
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
