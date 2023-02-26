@@ -8,6 +8,7 @@ class PersonBase(BaseModel):
     name_last: str
     name_third: str
     birthdate: datetime.date
+    birth_place: uuid.UUID
 
 
 class Person(PersonBase):
