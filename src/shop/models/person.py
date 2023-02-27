@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+import datetime
 from pydantic import BaseModel
 
 
@@ -9,6 +9,8 @@ class PersonBase(BaseModel):
     name_third: str
     birthdate: datetime.date
     birth_place: uuid.UUID
+    begins: datetime.datetime
+    ends: datetime.datetime
 
 
 class Person(PersonBase):
