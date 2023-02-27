@@ -1,3 +1,4 @@
+import datetime
 import uuid
 from pydantic import BaseModel
 
@@ -7,6 +8,8 @@ class StateBase(BaseModel):
     code: str
     name: str
     description: str | None
+    begins: datetime.datetime
+    ends: datetime.datetime
 
 
 class State(StateBase):

@@ -19,7 +19,7 @@ class Entity(Base):
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        Index('name_code_idx', 'category', 'code'),
+        Index('entity_idx', 'category', 'code'),
     )
 
     def __repr__(self):
@@ -129,7 +129,8 @@ class Company(Base):
     begins = Column(Date, nullable=False)
     ends = Column(Date, nullable=True)
     __table_args__ = (
-        Index('company_num_idx', 'country', 'code'),
+        Index('company_idx', 'country', 'code'),
+        Index('company_nane_idx', 'country', 'code', 'name'),
     )
 
     def __repr__(self):
@@ -151,11 +152,11 @@ class Property(Base):
     begins = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        Index('obj_idx', 'table', 'name', 'object'),
-        Index('val_idx', 'table', 'name', 'value'),
-        Index('val_int_idx', 'table', 'name', 'value_int'),
-        Index('val_dec_idx', 'table', 'name', 'value_dec'),
-        Index('val_dt_idx', 'table', 'name', 'value_dt'),
+        Index('obj_idx', 'table', 'code', 'object'),
+        Index('val_idx', 'table', 'code', 'value'),
+        Index('val_int_idx', 'table', 'code', 'value_int'),
+        Index('val_dec_idx', 'table', 'code', 'value_dec'),
+        Index('val_dt_idx', 'table', 'code', 'value_dt'),
     )
 
     def __repr__(self):
@@ -233,8 +234,8 @@ class Account(Base):
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
         Index('account_idx', 'category', 'code'),
-        Index('account_idx', 'category', 'code', 'currency'),
-        Index('account_idx', 'category', 'code', 'issuer', 'issuer_table'),
+        Index('account_currency_idx', 'category', 'code', 'currency'),
+        Index('account_issuer_idx', 'category', 'code', 'issuer', 'issuer_table'),
     )
 
     def __repr__(self):
@@ -323,7 +324,7 @@ class Document(Base):
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
         Index('document_idx', 'category', 'code', 'country', 'series', 'number', 'issue', unique=True),
-        Index('document_idx', 'category', 'code', 'issuer', 'issuer_table'),
+        Index('document_issuer_idx', 'category', 'code', 'issuer', 'issuer_table'),
     )
 
     def __repr__(self):
@@ -343,7 +344,7 @@ class Place(Base):
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
         Index('place_idx', 'category', 'code', 'country'),
-        Index('place_idx', 'category', 'code', 'country', 'name'),
+        Index('place_name_idx', 'category', 'code', 'country', 'name'),
     )
 
     def __repr__(self):

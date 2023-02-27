@@ -1,3 +1,4 @@
+import datetime
 import uuid
 from pydantic import BaseModel
 
@@ -5,6 +6,8 @@ from pydantic import BaseModel
 class UserBase(BaseModel):
     username: str
     person_id: uuid.UUID
+    begins: datetime.datetime
+    ends: datetime.datetime
 
 
 class UserCreate(UserBase):
