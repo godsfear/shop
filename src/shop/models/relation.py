@@ -3,25 +3,27 @@ import uuid
 from pydantic import BaseModel
 
 
-class StateBase(BaseModel):
-    category: uuid.UUID
+class RelationBase(BaseModel):
     code: str
     name: str
-    description: str | None
+    src: str
+    src_id: uuid.UUID
+    trg: str
+    trg_id: uuid.UUID
     begins: datetime.datetime
     ends: datetime.datetime | None
 
 
-class State(StateBase):
+class Relation(RelationBase):
     id: uuid.UUID
 
     class Config:
         orm_mode = True
 
 
-class StateCreate(StateBase):
+class RelationCreate(RelationBase):
     pass
 
 
-class StateUpdate(StateBase):
+class RelationUpdate(RelationBase):
     pass

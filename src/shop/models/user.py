@@ -7,7 +7,7 @@ class UserBase(BaseModel):
     username: str
     person_id: uuid.UUID
     begins: datetime.datetime
-    ends: datetime.datetime
+    ends: datetime.datetime | None
 
 
 class UserCreate(UserBase):

@@ -10,7 +10,7 @@ class PersonBase(BaseModel):
     birthdate: datetime.date
     birth_place: uuid.UUID
     begins: datetime.datetime
-    ends: datetime.datetime
+    ends: datetime.datetime | None
 
 
 class Person(PersonBase):
