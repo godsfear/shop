@@ -254,9 +254,9 @@ class Message(Base):
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        Index('message_idx', 'category', 'code', 'sender', 'begins'),
-        Index('message_idx', 'category', 'code', 'receiver', 'begins'),
         Index('message_idx', 'category', 'code', 'sender', 'receiver', 'begins'),
+        Index('message_sender_idx', 'category', 'code', 'sender', 'begins'),
+        Index('message_receiver_idx', 'category', 'code', 'receiver', 'begins'),
     )
 
     def __repr__(self):
