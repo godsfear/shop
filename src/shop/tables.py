@@ -206,13 +206,12 @@ class Currency(Base):
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
-    type = Column(String)
     name = Column(String)
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        Index('account_idx', 'category', 'code'),
+        Index('currency_idx', 'category', 'code', unique=True),
     )
 
     def __repr__(self):
@@ -225,17 +224,16 @@ class Account(Base):
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
+    currency = Column(UUID(as_uuid=True), ForeignKey("currency.id"))
     issuer = Column(String, index=True)
     issuer_table = Column(String)
     name = Column(String)
-    currency = Column(UUID(as_uuid=True), ForeignKey("currency.id"))
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
         Index('account_idx', 'category', 'code'),
-        Index('account_currency_idx', 'category', 'code', 'currency'),
-        Index('account_issuer_idx', 'category', 'code', 'issuer', 'issuer_table'),
+        Index('account_issuer_idx', 'category', 'code', 'currency', 'issuer_table', 'issuer'),
     )
 
     def __repr__(self):
@@ -255,6 +253,11 @@ class Message(Base):
     content = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (
+        Index('message_idx', 'category', 'code', 'sender', 'begins'),
+        Index('message_idx', 'category', 'code', 'receiver', 'begins'),
+        Index('message_idx', 'category', 'code', 'sender', 'receiver', 'begins'),
+    )
 
     def __repr__(self):
         return f'id={self.id}; code={self.code}; name={self.name}; sender={self.sender}; receiver={self.receiver}'
