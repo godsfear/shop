@@ -3,8 +3,8 @@ import uuid
 from pydantic import BaseModel
 
 
-class StateBase(BaseModel):
-    category: uuid.UUID
+class CompanyBase(BaseModel):
+    country: uuid.UUID
     code: str
     name: str
     description: str | None
@@ -12,16 +12,16 @@ class StateBase(BaseModel):
     ends: datetime.datetime | None
 
 
-class State(StateBase):
+class Company(CompanyBase):
     id: uuid.UUID
 
     class Config:
         orm_mode = True
 
 
-class StateCreate(StateBase):
+class CompanyCreate(CompanyBase):
     pass
 
 
-class StateUpdate(StateBase):
+class CompanyUpdate(CompanyBase):
     pass

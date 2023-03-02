@@ -3,25 +3,26 @@ import uuid
 from pydantic import BaseModel
 
 
-class StateBase(BaseModel):
-    category: uuid.UUID
+class CategoryBase(BaseModel):
+    category: str
     code: str
     name: str
+    value: str | None
     description: str | None
     begins: datetime.datetime
     ends: datetime.datetime | None
 
 
-class State(StateBase):
+class Category(CategoryBase):
     id: uuid.UUID
 
     class Config:
         orm_mode = True
 
 
-class StateCreate(StateBase):
+class CategoryCreate(CategoryBase):
     pass
 
 
-class StateUpdate(StateBase):
+class CategoryUpdate(CategoryBase):
     pass

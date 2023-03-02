@@ -4,12 +4,12 @@ from pydantic import BaseModel
 
 
 class EntityBase(BaseModel):
-    category: str
+    category: uuid.UUID
     code: str
     name: str
     description: str | None
     begins: datetime.datetime
-    ends: datetime.datetime
+    ends: datetime.datetime | None
 
 
 class Entity(EntityBase):

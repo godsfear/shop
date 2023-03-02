@@ -8,12 +8,12 @@ class PropertyBase(BaseModel):
     object: uuid.UUID
     code: str
     name: str
-    value: str
-    value_int: int
-    value_dec: float
-    value_dt: datetime.datetime
+    value: str | None
+    value_int: int | None
+    value_dec: float | None
+    value_dt: datetime.datetime | None
     begins: datetime.datetime
-    ends: datetime.datetime
+    ends: datetime.datetime | None
 
 
 class Property(PropertyBase):
