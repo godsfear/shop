@@ -11,6 +11,7 @@ class CategoryBase(BaseModel):
     description: str | None
     begins: datetime.datetime
     ends: datetime.datetime | None
+    author: uuid.UUID
 
 
 class Category(CategoryBase):

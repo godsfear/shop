@@ -18,6 +18,7 @@ class Entity(Base):
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('entity_idx', 'category', 'code'),
     )
@@ -37,6 +38,7 @@ class Category(Base):
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('category_idx', 'category', 'code', unique=True),
     )
@@ -57,6 +59,7 @@ class State(Base):
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('state_idx', 'category', 'code'),
         Index('state_idx', 'category', 'code', 'state', unique=True),
@@ -92,6 +95,7 @@ class Relation(Base):
     trg_id = Column(UUID(as_uuid=True), nullable=False)
     begins = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('name_src_idx', 'code', 'src', 'trg', 'src_id', unique=True),
         Index('name_trg_idx', 'code', 'src', 'trg', 'trg_id', unique=True),
@@ -128,6 +132,7 @@ class Company(Base):
     code = Column(String, index=True)
     begins = Column(Date, nullable=False)
     ends = Column(Date, nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('company_idx', 'country', 'code'),
         Index('company_nane_idx', 'country', 'code', 'name'),
@@ -151,6 +156,7 @@ class Property(Base):
     value_dt = Column(DateTime(timezone=True))
     begins = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('obj_idx', 'table', 'code', 'object'),
         Index('val_idx', 'table', 'code', 'value'),
@@ -177,6 +183,7 @@ class Address(Base):
     apartment = Column(String)
     begins = Column(Date, default=func.current_date(), nullable=False)
     ends = Column(Date, nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('address_idx', 'country', 'region', 'place', 'postcode', 'street'),
     )
@@ -195,6 +202,7 @@ class Country(Base):
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
 
     def __repr__(self):
         return f'id={self.id}; code={self.code}; name={self.name}'
@@ -210,6 +218,7 @@ class Currency(Base):
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('currency_idx', 'category', 'code', unique=True),
     )
@@ -231,6 +240,7 @@ class Account(Base):
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('account_idx', 'category', 'code'),
         Index('account_issuer_idx', 'category', 'code', 'currency', 'issuer_table', 'issuer'),
@@ -247,15 +257,15 @@ class Message(Base):
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     name = Column(String)
-    sender = Column(UUID(as_uuid=True), ForeignKey("person.id"))
-    receiver = Column(UUID(as_uuid=True), ForeignKey("person.id"))
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
+    receiver = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     description = Column(String, nullable=True)
     content = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        Index('message_idx', 'category', 'code', 'sender', 'receiver', 'begins'),
-        Index('message_sender_idx', 'category', 'code', 'sender', 'begins'),
+        Index('message_idx', 'category', 'code', 'author', 'receiver', 'begins'),
+        Index('message_sender_idx', 'category', 'code', 'author', 'begins'),
         Index('message_receiver_idx', 'category', 'code', 'receiver', 'begins'),
     )
 
@@ -276,6 +286,7 @@ class Operation(Base):
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('operation_idx', 'category', 'code', 'debit', 'credit', 'begins'),
         Index('operation_db_idx', 'category', 'code', 'debit', 'number', 'begins'),
@@ -301,6 +312,7 @@ class Data(Base):
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('data_idx', 'category', 'code', 'table', 'object', 'algorithm', 'hash'),
     )
@@ -326,6 +338,7 @@ class Document(Base):
     expire = Column(Date, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('document_idx', 'category', 'code', 'country', 'series', 'number', 'issue', unique=True),
         Index('document_issuer_idx', 'category', 'code', 'issuer_table', 'issuer'),
@@ -346,6 +359,7 @@ class Place(Base):
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('place_idx', 'category', 'code', 'country'),
         Index('place_name_idx', 'category', 'code', 'country', 'name'),

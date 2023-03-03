@@ -23,7 +23,7 @@ class MessageService:
                         and_(
                             tables.Message.category == message_data.category,
                             tables.Message.code == message_data.code,
-                            tables.Message.sender == message_data.sender,
+                            tables.Message.sender == message_data.author,
                             tables.Message.receiver == message_data.receiver,
                             tables.Message.begins.date() == message_data.begins.date(),
                         )
@@ -42,7 +42,7 @@ class MessageService:
                         and_(
                             tables.Message.category == message_data.category,
                             tables.Message.code == message_data.code,
-                            tables.Message.sender == message_data.sender,
+                            tables.Message.sender == message_data.author,
                             tables.Message.begins.date() == message_data.begins.date(),
                         )
                     )

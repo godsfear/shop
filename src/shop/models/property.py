@@ -14,6 +14,7 @@ class PropertyBase(BaseModel):
     value_dt: datetime.datetime | None
     begins: datetime.datetime
     ends: datetime.datetime | None
+    author: uuid.UUID
 
 
 class Property(PropertyBase):

@@ -14,10 +14,32 @@ class CategoryService:
     def __init__(self, session: AsyncSession = Depends(get_session)):
         self.session = session
 
-    async def get_all(self) -> List[tables.Category]:
+    async def get_by_category(self, category_data: CategoryBase) -> List[tables.Category]:
         async with self.session as db:
             async with db.begin():
-                query = select(tables.Category)
+                query = (
+                    select(tables.Category).
+                    where(
+                        and_(
+                            tables.Category.category == category_data.category,
+                        )
+                    )
+                )
+                res = await db.execute(query)
+                category = res.scalars().all()
+        return category
+
+    async def get_by_code(self, category_data: CategoryBase) -> List[tables.Category]:
+        async with self.session as db:
+            async with db.begin():
+                query = (
+                    select(tables.Category).
+                    where(
+                        and_(
+                            tables.Category.code == category_data.code,
+                        )
+                    )
+                )
                 res = await db.execute(query)
                 category = res.scalars().all()
         return category

@@ -13,6 +13,7 @@ class AddressBase(BaseModel):
     apartment: str
     begins: datetime.datetime
     ends: datetime.datetime | None
+    author: uuid.UUID
 
 
 class Address(AddressBase):
