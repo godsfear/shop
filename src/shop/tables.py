@@ -290,9 +290,10 @@ class Data(Base):
     __tablename__: str = 'data'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    code = Column(String, index=True)
     table = Column(String)
     object = Column(UUID(as_uuid=True), nullable=False)
-    code = Column(String, index=True)
     name = Column(String)
     hash = Column(String)
     algorithm = Column(String)
@@ -301,7 +302,7 @@ class Data(Base):
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        Index('data_object_idx', 'table', 'object', 'code', 'algorithm', 'hash'),
+        Index('data_idx', 'category', 'code', 'table', 'object', 'algorithm', 'hash'),
     )
 
     def __repr__(self):
@@ -316,8 +317,8 @@ class Document(Base):
     code = Column(String, index=True)
     country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
     name = Column(String)
-    issuer = Column(UUID(as_uuid=True), index=True)
     issuer_table = Column(String)
+    issuer = Column(UUID(as_uuid=True), index=True)
     series = Column(String)
     number = Column(String)
     description = Column(String, nullable=True)
@@ -327,7 +328,7 @@ class Document(Base):
     ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
         Index('document_idx', 'category', 'code', 'country', 'series', 'number', 'issue', unique=True),
-        Index('document_issuer_idx', 'category', 'code', 'issuer', 'issuer_table'),
+        Index('document_issuer_idx', 'category', 'code', 'issuer_table', 'issuer'),
     )
 
     def __repr__(self):
@@ -353,22 +354,3 @@ class Place(Base):
     def __repr__(self):
         return f'id={self.id}; category={self.category}; code={self.code}; country={self.country}; \
                 name={self.name}'
-
-
-class Group(Base):
-    __tablename__: str = 'group'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    table = Column(String, index=True)
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String, index=True)
-    name = Column(String)
-    description = Column(String, nullable=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    __table_args__ = (
-        Index('group_idx', 'table', 'category', 'code'),
-    )
-
-    def __repr__(self):
-        return f'id={self.id}; table={self.table}; category={self.category}; code={self.code}; name={self.name}'
