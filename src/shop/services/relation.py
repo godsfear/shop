@@ -21,6 +21,7 @@ class RelationService:
                     select(tables.Relation).
                     where(
                         and_(
+                            tables.Relation.category == relation_data.category,
                             tables.Relation.code == relation_data.code,
                             tables.Relation.src == relation_data.src,
                             tables.Relation.trg == relation_data.trg,
@@ -39,6 +40,7 @@ class RelationService:
                     select(tables.Relation).
                     where(
                         and_(
+                            tables.Relation.category == relation_data.category,
                             tables.Relation.code == relation_data.code,
                             tables.Relation.src == relation_data.src,
                             tables.Relation.trg == relation_data.trg,

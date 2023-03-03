@@ -87,6 +87,7 @@ class Relation(Base):
     __tablename__: str = 'relation'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     name = Column(String)
     src = Column(String)
@@ -235,7 +236,7 @@ class Account(Base):
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     currency = Column(UUID(as_uuid=True), ForeignKey("currency.id"))
-    issuer = Column(String, index=True)
+    issuer = Column(UUID(as_uuid=True), index=True)
     issuer_table = Column(String)
     name = Column(String)
     description = Column(String, nullable=True)
@@ -369,3 +370,23 @@ class Place(Base):
     def __repr__(self):
         return f'id={self.id}; category={self.category}; code={self.code}; country={self.country}; \
                 name={self.name}'
+
+
+class Group(Base):
+    __tablename__: str = 'group'
+
+    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    code = Column(String, index=True)
+    name = Column(String)
+    value = Column(String)
+    description = Column(String, nullable=True)
+    begins = Column(DateTime(timezone=True), default=func.now())
+    ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
+    __table_args__ = (
+        Index('group_idx', 'category', 'code'),
+    )
+
+    def __repr__(self):
+        return f'id={self.id}; category={self.category}; code={self.code}; name={self.name}'

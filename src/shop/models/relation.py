@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 
 class RelationBase(BaseModel):
+    category: str
     code: str
     name: str
     src: str
