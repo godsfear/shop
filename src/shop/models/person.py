@@ -7,6 +7,7 @@ class PersonBase(BaseModel):
     name_first: str
     name_last: str
     name_third: str
+    sex: bool
     birthdate: datetime.date
     birth_place: uuid.UUID
     begins: datetime.datetime
