@@ -12,6 +12,7 @@ class RelationBase(BaseModel):
     trg_id: uuid.UUID
     begins: datetime.datetime
     ends: datetime.datetime | None
+    author: uuid.UUID
 
 
 class Relation(RelationBase):

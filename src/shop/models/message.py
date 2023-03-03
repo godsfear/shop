@@ -6,7 +6,7 @@ from pydantic import BaseModel
 class MessageBase(BaseModel):
     category: uuid.UUID
     code: str
-    sender: uuid.UUID
+    author: uuid.UUID
     receiver: uuid.UUID
     name: str
     content: str

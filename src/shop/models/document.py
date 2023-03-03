@@ -17,6 +17,7 @@ class DocumentBase(BaseModel):
     expire: datetime.date
     begins: datetime.datetime
     ends: datetime.datetime | None
+    author: uuid.UUID
 
 
 class Document(DocumentBase):

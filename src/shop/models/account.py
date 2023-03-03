@@ -13,7 +13,7 @@ class AccountBase(BaseModel):
     description: str | None
     begins: datetime.datetime
     ends: datetime.datetime | None
-
+    author: uuid.UUID
 
 class Account(AccountBase):
     id: uuid.UUID
