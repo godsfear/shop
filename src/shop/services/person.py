@@ -14,10 +14,22 @@ class PersonService:
     def __init__(self, session: AsyncSession = Depends(get_session)):
         self.session = session
 
-    async def get_all(self) -> List[tables.Person]:
+    async def person_idx(self, person_data: PersonBase) -> List[tables.Person]:
         async with self.session as db:
             async with db.begin():
-                query = select(tables.Person)
+                query = (
+                    select(tables.Person).
+                    where(
+                        and_(
+                            tables.Person.name_first == person_data.name_first,
+                            tables.Person.name_last == person_data.name_last,
+                            tables.Person.name_third == person_data.name_third,
+                            tables.Person.sex == person_data.sex,
+                            tables.Person.birthdate == person_data.birthdate,
+                            tables.Person.birth_place == person_data.birth_place,
+                        )
+                    )
+                )
                 res = await db.execute(query)
                 person = res.scalars().all()
         return person

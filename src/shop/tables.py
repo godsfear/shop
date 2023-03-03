@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime, Date, Index, Integer, Numeric
+from sqlalchemy import Column, String, ForeignKey, DateTime, Date, Index, Integer, Numeric, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.postgresql import UUID, BYTEA
 from sqlalchemy.sql import func
@@ -113,10 +113,11 @@ class Person(Base):
     name_first = Column(String, nullable=False)
     name_last = Column(String, nullable=False)
     name_third = Column(String, nullable=True)
+    sex = Column(Boolean)
     birthdate = Column(Date, nullable=False)
     birth_place = Column(UUID(as_uuid=True), ForeignKey("place.id"))
     __table_args__ = (
-        Index('name_birth_idx', 'name_first', 'name_last', 'name_third', 'birthdate', 'birth_place'),
+        Index('person_idx', 'name_first', 'name_last', 'name_third', 'sex', 'birthdate', 'birth_place'),
     )
 
     def __repr__(self):
