@@ -25,7 +25,7 @@ class MessageService:
                             tables.Message.code == message_data.code,
                             tables.Message.sender == message_data.sender,
                             tables.Message.receiver == message_data.receiver,
-                            tables.Message.begins >= message_data.begins,
+                            tables.Message.begins.date() == message_data.begins.date(),
                         )
                     )
                 )
@@ -43,7 +43,7 @@ class MessageService:
                             tables.Message.category == message_data.category,
                             tables.Message.code == message_data.code,
                             tables.Message.sender == message_data.sender,
-                            tables.Message.begins >= message_data.begins,
+                            tables.Message.begins.date() == message_data.begins.date(),
                         )
                     )
                 )
