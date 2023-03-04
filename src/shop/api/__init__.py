@@ -6,7 +6,7 @@ from .person import router as person_router
 from .property import router as property_router
 from .property import router as category_router
 
-router = APIRouter()
+router = APIRouter(prefix='/api/v1')
 router.include_router(auth_router)
 router.include_router(entity_router)
 router.include_router(user_router)
