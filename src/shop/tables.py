@@ -98,8 +98,8 @@ class Relation(Base):
     ends = Column(DateTime(timezone=True), nullable=True)
     author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
-        Index('name_src_idx', 'code', 'src', 'trg', 'src_id', unique=True),
-        Index('name_trg_idx', 'code', 'src', 'trg', 'trg_id', unique=True),
+        Index('name_src_idx', 'code', 'src', 'trg', 'src_id'),
+        Index('name_trg_idx', 'code', 'src', 'trg', 'trg_id'),
     )
 
     def __repr__(self):
@@ -372,21 +372,24 @@ class Place(Base):
                 name={self.name}'
 
 
-class Group(Base):
-    __tablename__: str = 'group'
+class Rate(Base):
+    __tablename__: str = 'rate'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
+    table = Column(String, index=True)
+    object = Column(UUID(as_uuid=True))
     name = Column(String)
-    value = Column(String)
+    value = Column(Numeric)
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
-        Index('group_idx', 'category', 'code'),
+        Index('rate_idx', 'category', 'code', 'table', 'object'),
     )
 
     def __repr__(self):
-        return f'id={self.id}; category={self.category}; code={self.code}; name={self.name}'
+        return f'id={self.id}; category={self.category}; code={self.code}; table={self.table}; object={self.object}; \
+            name={self.name}'
