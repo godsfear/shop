@@ -3,18 +3,19 @@ import uuid
 from pydantic import BaseModel
 
 
-class UserBase(BaseModel):
-    email: str | None
-    phone: str | None
-    person_id: uuid.UUID
-    checked: bool
-    begins: datetime.datetime
-    ends: datetime.datetime | None
-
-
 class UserEditable(BaseModel):
     email: str | None
     phone: str | None
+
+
+class UserCheck(BaseModel):
+    checked: bool
+
+
+class UserBase(UserEditable, UserCheck):
+    person_id: uuid.UUID
+    begins: datetime.datetime
+    ends: datetime.datetime | None
 
 
 class UserCreate(UserBase):
@@ -25,9 +26,8 @@ class UserUpdate(UserEditable):
     password: str
 
 
-class UserSave(UserEditable):
+class UserSave(UserEditable, UserCheck):
     passhash: str
-    checked: bool
 
 
 class User(UserBase):
