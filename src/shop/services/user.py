@@ -9,7 +9,7 @@ from ..database import get_session
 from .. import tables
 from .auth import AuthService
 from ..models.auth import Token
-from ..models.user import UserCreate, UserUpdate, UserSave
+from ..models.user import UserCreate, UserUpdate, UserSave, UserCheck
 
 
 class UserService:
@@ -52,7 +52,7 @@ class UserService:
             async with db.begin():
                 db.add(user)
                 await db.flush()
-        return user
+        return await self.send_notify(user)
 
     async def update(self, user_id: uuid.UUID, user_data: UserUpdate) -> tables.User:
         async with self.session as db:
@@ -70,10 +70,29 @@ class UserService:
                 user = res.fetchone()
                 if not user:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        return await self.check_notify(user)
+        return await self.send_notify(user)
 
-    async def check_notify(self, user: tables.User) -> tables.User:
-        pass
+    async def receive_notify(self, user_data: tables.User) -> tables.User:
+        async with self.session as db:
+            async with db.begin():
+                query = (
+                    update(tables.User)
+                    .where(tables.User.id == user_data.id)
+                    .values(checked=True)
+                    .returning(tables.User)
+                )
+                res = await db.execute(query)
+                user = res.fetchone()
+                if not user:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        return user
+
+    async def send_notify(self, user: tables.User) -> tables.User:
+        if user.email:
+            pass
+        if user.phone:
+            pass
+        return user
 
     async def expire(self, user_id: uuid.UUID) -> tables.User:
         async with self.session as db:
