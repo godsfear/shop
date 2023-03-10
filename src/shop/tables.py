@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime, Date, Index, Integer, Numeric, Boolean
+from sqlalchemy import Column, String, ForeignKey, DateTime, Date, Index, Integer, Numeric, Boolean, CheckConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.postgresql import UUID, BYTEA
 from sqlalchemy.sql import func
@@ -73,11 +73,16 @@ class User(Base):
     __tablename__: str = 'user'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    username = Column(String, index=True, unique=True)
+    email = Column(String, index=True, unique=True, nullable=True)
+    phone = Column(String, index=True, unique=True, nullable=True)
     passhash = Column(String)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     person_id = Column(UUID(as_uuid=True), ForeignKey("person.id"))
+    checked = Column(Boolean, default=False)
+    __table_args__ = (
+        CheckConstraint('NOT(email IS NULL AND phone IS NULL)'),
+    )
 
     def __repr__(self):
         return f'id={self.id}; name={self.username}'

@@ -59,6 +59,7 @@ class UserService:
             async with db.begin():
                 user_save = UserSave(**user_data.dict())
                 user_save.passhash = AuthService.hash_password(user_data.password)
+                user_save.checked = False
                 query = (
                             update(tables.User)
                             .where(tables.User.id == user_id)
@@ -69,7 +70,10 @@ class UserService:
                 user = res.fetchone()
                 if not user:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        return user
+        return await self.check_notify(user)
+
+    async def check_notify(self, user: tables.User) -> tables.User:
+        pass
 
     async def expire(self, user_id: uuid.UUID) -> tables.User:
         async with self.session as db:
