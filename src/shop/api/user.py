@@ -36,7 +36,7 @@ async def create_user(user_data: UserCreate, service: UserService = Depends()):
 
 @router.post('/name', response_model=List[User])
 async def get_user_by_name(user_data: UserBase, service: UserService = Depends()):
-    user = await service.get_by_name(user_data.username)
+    user = await service.get_by_prop(user_data.email if user_data.email else user_data.phone)
     return user
 
 
