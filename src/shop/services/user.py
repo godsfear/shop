@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, or_
 
 from ..database import get_session
 from .. import tables
@@ -34,10 +34,10 @@ class UserService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return user[0]
 
-    async def get_by_name(self, username: str) -> tables.User:
+    async def get_by_prop(self, prop: str) -> tables.User:
         async with self.session as db:
             async with db.begin():
-                query = select(tables.User).where(tables.User.username == username)
+                query = select(tables.User).where(or_(tables.User.email == prop, tables.User.phone == prop))
                 res = await db.execute(query)
                 user = res.fetchone()
         if not user:
