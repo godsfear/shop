@@ -113,13 +113,13 @@ class UserService:
         user = await self.create(user_data)
         return AuthService.create_token(user)
 
-    async def authenticate_user(self, username: str, password: str) -> Token:
+    async def authenticate_user(self, prop: str, password: str) -> Token:
         exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Incorrect username or password',
             headers={'WWW-Authenticate': 'Bearer'},
         )
-        user = await self.get_by_name(username=username)
+        user = await self.get_by_prop(prop=prop)
         if not user:
             raise exception from None
         if not AuthService.verify_password(password, user.passhash):

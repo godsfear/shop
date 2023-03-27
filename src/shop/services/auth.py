@@ -10,7 +10,7 @@ from ..models.user import User
 from ..models.auth import Token
 from ..settings import settings
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/signin/')
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/signin/')
 
 
 class AuthService:
