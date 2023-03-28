@@ -203,8 +203,10 @@ class Country(Base):
     __tablename__: str = 'country'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    code = Column(String, index=True)
-    name = Column(String)
+    iso2 = Column(String, index=True, unique=True)
+    iso3 = Column(String, index=True, unique=True)
+    m49 = Column(String, index=True, unique=True)
+    name = Column(String, index=True)
     currency = Column(UUID(as_uuid=True), ForeignKey("currency.id"))
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
@@ -215,6 +217,38 @@ class Country(Base):
         return f'id={self.id}; code={self.code}; name={self.name}'
 
 
+class CountryFlag(Base):
+    __tablename__: str = 'countryFlag'
+    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
+    country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
+    code = Column(String, index=True)
+    picture = Column(BYTEA)
+    begins = Column(DateTime(timezone=True), default=func.now())
+    ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
+
+    def __repr__(self):
+        return f'id={self.id}; country={self.country}; code={self.code}'
+
+
+class Translation(Base):
+    __tablename__: str = 'translation'
+    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
+    table = Column(String)
+    object = Column(UUID(as_uuid=True), nullable=False)
+    language = Column(String, index=True)
+    text = Column(String)
+    begins = Column(DateTime(timezone=True), default=func.now())
+    ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
+    __table_args__ = (
+        Index('translation_idx', 'table', 'object', 'language'),
+    )
+
+    def __repr__(self):
+        return f'id={self.id}; table={self.table}; object={self.object} language={self.language}'
+
+
 class Currency(Base):
     __tablename__: str = 'currency'
 
@@ -222,6 +256,10 @@ class Currency(Base):
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     name = Column(String)
+    name_plural = Column(String)
+    symbol = Column(String)
+    decimal_digits = Column(Integer)
+    rounding = Column(Numeric)
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)

@@ -12,8 +12,8 @@ router = APIRouter(
 
 @router.get('/{property_id}', response_model=Property)
 async def get_property_by_id(property_id: uuid.UUID, service: PropertyService = Depends()):
-    property = await service.get_by_id(property_id)
-    return property
+    property_ = await service.get_by_id(property_id)
+    return property_
 
 
 @router.post('/', response_model=Property)
