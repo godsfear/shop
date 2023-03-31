@@ -35,11 +35,7 @@ class CurrencyService:
             async with db.begin():
                 query = (
                     select(tables.Currency).
-                    where(
-                        and_(
-                            tables.Currency.category == currency_data.category,
-                        )
-                    )
+                    where(tables.Currency.category == currency_data.category)
                 )
                 res = await db.execute(query)
                 currency = res.scalars().all()
@@ -69,6 +65,24 @@ class CurrencyService:
                 query = (
                     update(tables.Currency)
                     .where(tables.Currency.id == currency_id)
+                    .values(**currency_data.dict())
+                    .returning(tables.Currency)
+                )
+                res = await db.execute(query)
+                currency = res.fetchone()
+                if not currency:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        return currency
+
+    async def update_by_code(self, currency_data: CurrencyUpdate) -> tables.Currency:
+        async with self.session as db:
+            async with db.begin():
+                query = (
+                    update(tables.Currency)
+                    .where(
+                        tables.Currency.category == currency_data.category,
+                        tables.Currency.code == currency_data.code
+                    )
                     .values(**currency_data.dict())
                     .returning(tables.Currency)
                 )

@@ -237,9 +237,11 @@ class Currency(Base):
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
+    numcode = Column(Integer, index=True, nullable=False)
     name = Column(String)
     name_plural = Column(String)
     symbol = Column(String)
+    symbol_native = Column(String)
     decimal_digits = Column(Integer)
     rounding = Column(Numeric)
     description = Column(String, nullable=True)
@@ -251,7 +253,7 @@ class Currency(Base):
     )
 
     def __repr__(self):
-        return f'id={self.id}; code={self.code}; type={self.type}'
+        return f'id={self.id}; code={self.code}; name={self.name}'
 
 
 class Account(Base):
