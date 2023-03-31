@@ -214,7 +214,7 @@ class Country(Base):
     author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
 
     def __repr__(self):
-        return f'id={self.id}; code={self.code}; name={self.name}'
+        return f'id={self.id}; iso2={self.iso2}; iso3={self.iso3}; name={self.name}'
 
 
 class CountryFlag(Base):
@@ -229,24 +229,6 @@ class CountryFlag(Base):
 
     def __repr__(self):
         return f'id={self.id}; country={self.country}; code={self.code}'
-
-
-class Translation(Base):
-    __tablename__: str = 'translation'
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    table = Column(String)
-    object = Column(UUID(as_uuid=True), nullable=False)
-    language = Column(String, index=True)
-    text = Column(String)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
-    __table_args__ = (
-        Index('translation_idx', 'table', 'object', 'language'),
-    )
-
-    def __repr__(self):
-        return f'id={self.id}; table={self.table}; object={self.object} language={self.language}'
 
 
 class Currency(Base):
@@ -436,3 +418,36 @@ class Rate(Base):
     def __repr__(self):
         return f'id={self.id}; category={self.category}; code={self.code}; table={self.table}; object={self.object}; \
             name={self.name}'
+
+
+class Language(Base):
+    __tablename__: str = 'language'
+
+    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
+    iso2 = Column(String, index=True, unique=True)
+    name = Column(String, index=True)
+    begins = Column(DateTime(timezone=True), default=func.now())
+    ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
+
+    def __repr__(self):
+        return f'id={self.id}; iso2={self.iso2}; name={self.name}'
+
+
+class Translation(Base):
+    __tablename__: str = 'translation'
+    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
+    table = Column(String)
+    object = Column(UUID(as_uuid=True), nullable=False)
+    language = Column(UUID(as_uuid=True), ForeignKey("language.id"))
+    text = Column(String)
+    description = Column(String)
+    begins = Column(DateTime(timezone=True), default=func.now())
+    ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
+    __table_args__ = (
+        Index('translation_idx', 'table', 'object', 'language'),
+    )
+
+    def __repr__(self):
+        return f'id={self.id}; table={self.table}; object={self.object} language={self.language}'
