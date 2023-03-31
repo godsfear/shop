@@ -5,9 +5,7 @@ from typing import List
 from ..models.currency import Currency, CurrencyCreate, CurrencyUpdate, CurrencyBase
 from ..services.currency import CurrencyService
 
-router = APIRouter(
-    prefix='/currency',
-)
+router = APIRouter(prefix='/currency',tags=['currency'])
 
 
 @router.get('/{currency_id}', response_model=Currency)
@@ -37,6 +35,12 @@ async def get_currency_by_category_code(currency_data: CurrencyBase, service: Cu
 @router.put('/{currency_id}', response_model=Currency)
 async def update_currency(currency_id: uuid.UUID, currency_data: CurrencyUpdate, service: CurrencyService = Depends()):
     currency = await service.update(currency_id, currency_data)
+    return currency
+
+
+@router.put('/category_code', response_model=Currency)
+async def update_currency_by_category_code(currency_data: CurrencyUpdate,service: CurrencyService = Depends()):
+    currency = await service.update_by_code(currency_data)
     return currency
 
 
