@@ -65,7 +65,7 @@ class CurrencyService:
                 query = (
                     update(tables.Currency)
                     .where(tables.Currency.id == currency_id)
-                    .values(**currency_data.dict())
+                    .values(**currency_data.dict(exclude_none=True))
                     .returning(tables.Currency)
                 )
                 res = await db.execute(query)
@@ -83,7 +83,7 @@ class CurrencyService:
                         tables.Currency.category == currency_data.category,
                         tables.Currency.code == currency_data.code
                     )
-                    .values(**currency_data.dict())
+                    .values(**currency_data.dict(exclude_none=True))
                     .returning(tables.Currency)
                 )
                 res = await db.execute(query)
