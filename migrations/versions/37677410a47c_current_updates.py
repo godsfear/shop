@@ -1,8 +1,8 @@
-"""first run alemdic
+"""current updates
 
-Revision ID: 195e989577c1
+Revision ID: 37677410a47c
 Revises: 
-Create Date: 2023-03-11 15:49:47.782052
+Create Date: 2023-04-03 10:49:53.164526
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '195e989577c1'
+revision = '37677410a47c'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -85,7 +85,9 @@ def upgrade() -> None:
     op.create_index(op.f('ix_company_code'), 'company', ['code'], unique=False)
     op.create_table('country',
     sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
-    sa.Column('code', sa.String(), nullable=True),
+    sa.Column('iso2', sa.String(), nullable=True),
+    sa.Column('iso3', sa.String(), nullable=True),
+    sa.Column('m49', sa.String(), nullable=True),
     sa.Column('name', sa.String(), nullable=True),
     sa.Column('currency', postgresql.UUID(as_uuid=True), nullable=True),
     sa.Column('description', sa.String(), nullable=True),
@@ -95,12 +97,36 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('id')
     )
-    op.create_index(op.f('ix_country_code'), 'country', ['code'], unique=False)
+    op.create_index(op.f('ix_country_iso2'), 'country', ['iso2'], unique=True)
+    op.create_index(op.f('ix_country_iso3'), 'country', ['iso3'], unique=True)
+    op.create_index(op.f('ix_country_m49'), 'country', ['m49'], unique=True)
+    op.create_index(op.f('ix_country_name'), 'country', ['name'], unique=False)
+    op.create_table('countryFlag',
+    sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column('country', postgresql.UUID(as_uuid=True), nullable=True),
+    sa.Column('code', sa.String(), nullable=True),
+    sa.Column('picture', postgresql.BYTEA(), nullable=True),
+    sa.Column('begins', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('ends', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('author', postgresql.UUID(as_uuid=True), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id')
+    )
+    op.create_index(op.f('ix_countryFlag_code'), 'countryFlag', ['code'], unique=False)
     op.create_table('currency',
     sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
     sa.Column('category', postgresql.UUID(as_uuid=True), nullable=True),
-    sa.Column('code', sa.String(), nullable=True),
+    sa.Column('iso', sa.String(), nullable=True),
+    sa.Column('iso_num', sa.Integer(), nullable=False),
+    sa.Column('adjective', sa.String(), nullable=True),
     sa.Column('name', sa.String(), nullable=True),
+    sa.Column('name_plural', sa.String(), nullable=True),
+    sa.Column('name_minor', sa.String(), nullable=True),
+    sa.Column('name_minor_plural', sa.String(), nullable=True),
+    sa.Column('symbol', sa.String(), nullable=True),
+    sa.Column('symbol_native', sa.String(), nullable=True),
+    sa.Column('decimals', sa.Integer(), nullable=True),
+    sa.Column('rounding', sa.Numeric(), nullable=True),
     sa.Column('description', sa.String(), nullable=True),
     sa.Column('begins', sa.DateTime(timezone=True), nullable=True),
     sa.Column('ends', sa.DateTime(timezone=True), nullable=True),
@@ -108,8 +134,9 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('id')
     )
-    op.create_index('currency_idx', 'currency', ['category', 'code'], unique=True)
-    op.create_index(op.f('ix_currency_code'), 'currency', ['code'], unique=False)
+    op.create_index('currency_idx', 'currency', ['category', 'iso_num'], unique=True)
+    op.create_index(op.f('ix_currency_iso'), 'currency', ['iso'], unique=False)
+    op.create_index(op.f('ix_currency_iso_num'), 'currency', ['iso_num'], unique=False)
     op.create_table('data',
     sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
     sa.Column('category', postgresql.UUID(as_uuid=True), nullable=True),
@@ -167,6 +194,18 @@ def upgrade() -> None:
     )
     op.create_index('entity_idx', 'entity', ['category', 'code'], unique=False)
     op.create_index(op.f('ix_entity_code'), 'entity', ['code'], unique=False)
+    op.create_table('language',
+    sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column('iso2', sa.String(), nullable=True),
+    sa.Column('name', sa.String(), nullable=True),
+    sa.Column('begins', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('ends', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('author', postgresql.UUID(as_uuid=True), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id')
+    )
+    op.create_index(op.f('ix_language_iso2'), 'language', ['iso2'], unique=True)
+    op.create_index(op.f('ix_language_name'), 'language', ['name'], unique=False)
     op.create_table('message',
     sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
     sa.Column('category', postgresql.UUID(as_uuid=True), nullable=True),
@@ -305,6 +344,20 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_state_code'), 'state', ['code'], unique=False)
     op.create_index('state_idx', 'state', ['category', 'code', 'state'], unique=True)
+    op.create_table('translation',
+    sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column('table', sa.String(), nullable=True),
+    sa.Column('object', postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column('language', postgresql.UUID(as_uuid=True), nullable=True),
+    sa.Column('text', sa.String(), nullable=True),
+    sa.Column('description', sa.String(), nullable=True),
+    sa.Column('begins', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('ends', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('author', postgresql.UUID(as_uuid=True), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id')
+    )
+    op.create_index('translation_idx', 'translation', ['table', 'object', 'language'], unique=False)
     op.create_table('user',
     sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
     sa.Column('email', sa.String(), nullable=True),
@@ -328,6 +381,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_user_phone'), table_name='user')
     op.drop_index(op.f('ix_user_email'), table_name='user')
     op.drop_table('user')
+    op.drop_index('translation_idx', table_name='translation')
+    op.drop_table('translation')
     op.drop_index('state_idx', table_name='state')
     op.drop_index(op.f('ix_state_code'), table_name='state')
     op.drop_table('state')
@@ -361,6 +416,9 @@ def downgrade() -> None:
     op.drop_index('message_idx', table_name='message')
     op.drop_index(op.f('ix_message_code'), table_name='message')
     op.drop_table('message')
+    op.drop_index(op.f('ix_language_name'), table_name='language')
+    op.drop_index(op.f('ix_language_iso2'), table_name='language')
+    op.drop_table('language')
     op.drop_index(op.f('ix_entity_code'), table_name='entity')
     op.drop_index('entity_idx', table_name='entity')
     op.drop_table('entity')
@@ -372,10 +430,16 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_data_code'), table_name='data')
     op.drop_index('data_idx', table_name='data')
     op.drop_table('data')
-    op.drop_index(op.f('ix_currency_code'), table_name='currency')
+    op.drop_index(op.f('ix_currency_iso_num'), table_name='currency')
+    op.drop_index(op.f('ix_currency_iso'), table_name='currency')
     op.drop_index('currency_idx', table_name='currency')
     op.drop_table('currency')
-    op.drop_index(op.f('ix_country_code'), table_name='country')
+    op.drop_index(op.f('ix_countryFlag_code'), table_name='countryFlag')
+    op.drop_table('countryFlag')
+    op.drop_index(op.f('ix_country_name'), table_name='country')
+    op.drop_index(op.f('ix_country_m49'), table_name='country')
+    op.drop_index(op.f('ix_country_iso3'), table_name='country')
+    op.drop_index(op.f('ix_country_iso2'), table_name='country')
     op.drop_table('country')
     op.drop_index(op.f('ix_company_code'), table_name='company')
     op.drop_index('company_nane_idx', table_name='company')
