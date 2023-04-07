@@ -235,8 +235,8 @@ class Currency(Base):
     __tablename__: str = 'currency'
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    iso = Column(String, index=True)
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"), nullable=False)
+    iso = Column(String, index=True, nullable=False)
     iso_num = Column(Integer, index=True, nullable=False)
     adjective = Column(String)
     name = Column(String)
@@ -245,18 +245,19 @@ class Currency(Base):
     name_minor_plural = Column(String)
     symbol = Column(String)
     symbol_native = Column(String)
-    decimal_digits = Column(Integer)
+    decimals = Column(Integer)
     rounding = Column(Numeric)
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
     author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
-        Index('currency_idx', 'category', 'code', unique=True),
+        Index('currency_idx', 'category', 'iso', unique=True),
+        Index('currency_idx', 'category', 'iso_num'),
     )
 
     def __repr__(self):
-        return f'id={self.id}; code={self.code}; name={self.name}'
+        return f'id={self.id}; category={self.category}; code={self.code}; name={self.name}'
 
 
 class Account(Base):

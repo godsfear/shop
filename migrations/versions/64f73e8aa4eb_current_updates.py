@@ -1,8 +1,8 @@
-"""add foreighn keys
+"""current updates
 
-Revision ID: 9aea61ffcac1
-Revises: 195e989577c1
-Create Date: 2023-03-11 15:52:09.496328
+Revision ID: 64f73e8aa4eb
+Revises: 37677410a47c
+Create Date: 2023-04-03 10:51:16.629206
 
 """
 from alembic import op
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '9aea61ffcac1'
-down_revision = '195e989577c1'
+revision = '64f73e8aa4eb'
+down_revision = '37677410a47c'
 branch_labels = None
 depends_on = None
 
@@ -23,18 +23,21 @@ def upgrade() -> None:
     op.create_foreign_key(None, 'account', 'category', ['category'], ['id'])
     op.create_foreign_key(None, 'account', 'user', ['author'], ['id'])
     op.create_unique_constraint(None, 'address', ['id'])
-    op.create_foreign_key(None, 'address', 'place', ['region'], ['id'])
     op.create_foreign_key(None, 'address', 'user', ['author'], ['id'])
     op.create_foreign_key(None, 'address', 'country', ['country'], ['id'])
     op.create_foreign_key(None, 'address', 'place', ['place'], ['id'])
+    op.create_foreign_key(None, 'address', 'place', ['region'], ['id'])
     op.create_unique_constraint(None, 'category', ['id'])
     op.create_foreign_key(None, 'category', 'user', ['author'], ['id'])
     op.create_unique_constraint(None, 'company', ['id'])
     op.create_foreign_key(None, 'company', 'country', ['country'], ['id'])
     op.create_foreign_key(None, 'company', 'user', ['author'], ['id'])
     op.create_unique_constraint(None, 'country', ['id'])
-    op.create_foreign_key(None, 'country', 'user', ['author'], ['id'])
     op.create_foreign_key(None, 'country', 'currency', ['currency'], ['id'])
+    op.create_foreign_key(None, 'country', 'user', ['author'], ['id'])
+    op.create_unique_constraint(None, 'countryFlag', ['id'])
+    op.create_foreign_key(None, 'countryFlag', 'user', ['author'], ['id'])
+    op.create_foreign_key(None, 'countryFlag', 'country', ['country'], ['id'])
     op.create_unique_constraint(None, 'currency', ['id'])
     op.create_foreign_key(None, 'currency', 'user', ['author'], ['id'])
     op.create_foreign_key(None, 'currency', 'category', ['category'], ['id'])
@@ -46,36 +49,41 @@ def upgrade() -> None:
     op.create_foreign_key(None, 'document', 'category', ['category'], ['id'])
     op.create_foreign_key(None, 'document', 'user', ['author'], ['id'])
     op.create_unique_constraint(None, 'entity', ['id'])
-    op.create_foreign_key(None, 'entity', 'user', ['author'], ['id'])
     op.create_foreign_key(None, 'entity', 'category', ['category'], ['id'])
+    op.create_foreign_key(None, 'entity', 'user', ['author'], ['id'])
+    op.create_unique_constraint(None, 'language', ['id'])
+    op.create_foreign_key(None, 'language', 'user', ['author'], ['id'])
     op.create_unique_constraint(None, 'message', ['id'])
-    op.create_foreign_key(None, 'message', 'user', ['author'], ['id'])
-    op.create_foreign_key(None, 'message', 'user', ['receiver'], ['id'])
     op.create_foreign_key(None, 'message', 'category', ['category'], ['id'])
+    op.create_foreign_key(None, 'message', 'user', ['receiver'], ['id'])
+    op.create_foreign_key(None, 'message', 'user', ['author'], ['id'])
     op.create_unique_constraint(None, 'operation', ['id'])
     op.create_foreign_key(None, 'operation', 'category', ['category'], ['id'])
-    op.create_foreign_key(None, 'operation', 'account', ['debit'], ['id'])
     op.create_foreign_key(None, 'operation', 'account', ['credit'], ['id'])
     op.create_foreign_key(None, 'operation', 'user', ['author'], ['id'])
+    op.create_foreign_key(None, 'operation', 'account', ['debit'], ['id'])
     op.create_unique_constraint(None, 'person', ['id'])
     op.create_foreign_key(None, 'person', 'place', ['birth_place'], ['id'])
     op.create_unique_constraint(None, 'place', ['id'])
+    op.create_foreign_key(None, 'place', 'user', ['author'], ['id'])
     op.create_foreign_key(None, 'place', 'country', ['country'], ['id'])
     op.create_foreign_key(None, 'place', 'category', ['category'], ['id'])
-    op.create_foreign_key(None, 'place', 'user', ['author'], ['id'])
     op.create_unique_constraint(None, 'property', ['id'])
     op.create_foreign_key(None, 'property', 'user', ['author'], ['id'])
     op.create_unique_constraint(None, 'rate', ['id'])
     op.create_foreign_key(None, 'rate', 'category', ['category'], ['id'])
     op.create_foreign_key(None, 'rate', 'user', ['author'], ['id'])
     op.create_unique_constraint(None, 'relation', ['id'])
-    op.create_foreign_key(None, 'relation', 'user', ['author'], ['id'])
     op.create_foreign_key(None, 'relation', 'category', ['category'], ['id'])
+    op.create_foreign_key(None, 'relation', 'user', ['author'], ['id'])
     op.drop_index('state_idx', table_name='state')
     op.create_index('state_idx', 'state', ['category', 'code'], unique=False)
     op.create_unique_constraint(None, 'state', ['id'])
-    op.create_foreign_key(None, 'state', 'category', ['category'], ['id'])
     op.create_foreign_key(None, 'state', 'user', ['author'], ['id'])
+    op.create_foreign_key(None, 'state', 'category', ['category'], ['id'])
+    op.create_unique_constraint(None, 'translation', ['id'])
+    op.create_foreign_key(None, 'translation', 'user', ['author'], ['id'])
+    op.create_foreign_key(None, 'translation', 'language', ['language'], ['id'])
     op.create_unique_constraint(None, 'user', ['id'])
     op.create_foreign_key(None, 'user', 'person', ['person_id'], ['id'])
     # ### end Alembic commands ###
@@ -85,6 +93,9 @@ def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_constraint(None, 'user', type_='foreignkey')
     op.drop_constraint(None, 'user', type_='unique')
+    op.drop_constraint(None, 'translation', type_='foreignkey')
+    op.drop_constraint(None, 'translation', type_='foreignkey')
+    op.drop_constraint(None, 'translation', type_='unique')
     op.drop_constraint(None, 'state', type_='foreignkey')
     op.drop_constraint(None, 'state', type_='foreignkey')
     op.drop_constraint(None, 'state', type_='unique')
@@ -113,6 +124,8 @@ def downgrade() -> None:
     op.drop_constraint(None, 'message', type_='foreignkey')
     op.drop_constraint(None, 'message', type_='foreignkey')
     op.drop_constraint(None, 'message', type_='unique')
+    op.drop_constraint(None, 'language', type_='foreignkey')
+    op.drop_constraint(None, 'language', type_='unique')
     op.drop_constraint(None, 'entity', type_='foreignkey')
     op.drop_constraint(None, 'entity', type_='foreignkey')
     op.drop_constraint(None, 'entity', type_='unique')
@@ -126,6 +139,9 @@ def downgrade() -> None:
     op.drop_constraint(None, 'currency', type_='foreignkey')
     op.drop_constraint(None, 'currency', type_='foreignkey')
     op.drop_constraint(None, 'currency', type_='unique')
+    op.drop_constraint(None, 'countryFlag', type_='foreignkey')
+    op.drop_constraint(None, 'countryFlag', type_='foreignkey')
+    op.drop_constraint(None, 'countryFlag', type_='unique')
     op.drop_constraint(None, 'country', type_='foreignkey')
     op.drop_constraint(None, 'country', type_='foreignkey')
     op.drop_constraint(None, 'country', type_='unique')

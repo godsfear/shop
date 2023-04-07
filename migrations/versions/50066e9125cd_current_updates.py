@@ -1,8 +1,8 @@
-"""add foreighn keys
+"""current updates
 
-Revision ID: 248cc7b65264
-Revises: d478f0140968
-Create Date: 2023-03-31 20:09:15.797963
+Revision ID: 50066e9125cd
+Revises: 5d2cd2ce4b19
+Create Date: 2023-04-06 23:45:18.299025
 
 """
 from alembic import op
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '248cc7b65264'
-down_revision = 'd478f0140968'
+revision = '50066e9125cd'
+down_revision = '5d2cd2ce4b19'
 branch_labels = None
 depends_on = None
 

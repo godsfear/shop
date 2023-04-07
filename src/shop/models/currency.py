@@ -5,16 +5,19 @@ from pydantic import BaseModel
 
 class CurrencyBase(BaseModel):
     category: uuid.UUID
-    code: str
+    iso: str
+    iso_num: int
 
 
 class CurrencyUpdate(CurrencyBase):
-    numcode: int | None = None
     name: str | None = None
     name_plural: str | None = None
+    name_minor: str | None = None
+    name_minor_plural: str | None = None
+    adjective: str | None = None
     symbol: str | None = None
     symbol_native: str | None = None
-    decimal_digits: int | None = None
+    decimals: int | None = None
     rounding: float | None = None
     description: str | None = None
     ends: datetime.datetime | None = None
