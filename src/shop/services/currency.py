@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, and_
+from sqlalchemy import select, update
 
 from ..database import get_session
 from .. import tables
@@ -21,7 +21,7 @@ class CurrencyService:
                     select(tables.Currency).
                     where(
                         tables.Currency.category == currency_data.category,
-                        tables.Currency.iso == currency_data.iso
+                        tables.Currency.iso == currency_data.iso.upper()
                     )
                 )
                 res = await db.execute(query)
@@ -79,7 +79,7 @@ class CurrencyService:
                     update(tables.Currency)
                     .where(
                         tables.Currency.category == currency_data.category,
-                        tables.Currency.iso == currency_data.iso
+                        tables.Currency.iso == currency_data.iso.upper()
                     )
                     .values(**currency_data.dict(exclude_none=True))
                     .returning(tables.Currency)

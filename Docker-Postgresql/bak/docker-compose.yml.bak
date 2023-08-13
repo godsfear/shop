@@ -1,0 +1,25 @@
+version: '3'
+services:
+    postgres:
+        container_name: postgresql_4test
+        build:
+            context: ./postgresql
+            dockerfile: Dockerfile
+        ports:
+            - "${POSTGRES_PORT}:5432"
+        volumes:
+            - postgres_data_volume_test:/var/lib/postgresql/data
+        environment:
+            - POSTGRES_DB=${POSTGRES_DB}
+            - POSTGRES_USER=${POSTGRES_USER}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+        networks:
+            - docker-network
+
+volumes:
+    postgres_data_volume_test:
+        external: true
+
+networks:
+    docker-network:
+        driver: bridge
