@@ -6,23 +6,23 @@ from pydantic import BaseModel
 class CountryBase(BaseModel):
     code: str
     name: str
-    currency: uuid.UUID
-    description: str | None
-    begins: datetime.datetime
-    ends: datetime.datetime | None
     author: uuid.UUID
+    currency: uuid.UUID | None = None
+    description: str | None = None
+    ends: datetime.datetime | None = None
 
 
-class Country(CountryBase):
-    id: uuid.UUID
-
-    class Config:
-        orm_mode = True
+class CountryUpdate(CountryBase):
+    pass
 
 
 class CountryCreate(CountryBase):
     pass
 
 
-class CountryUpdate(CountryBase):
-    pass
+class Country(CountryUpdate):
+    id: uuid.UUID
+    begins: datetime.datetime
+
+    class Config:
+        orm_mode = True
