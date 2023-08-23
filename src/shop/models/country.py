@@ -7,7 +7,6 @@ class CountryBase(BaseModel):
     code: str
     name: str
     author: uuid.UUID
-    currency: uuid.UUID | None = None
     description: str | None = None
     ends: datetime.datetime | None = None
 
