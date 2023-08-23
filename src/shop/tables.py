@@ -207,7 +207,6 @@ class Country(Base):
     iso3 = Column(String, index=True, unique=True)
     m49 = Column(String, index=True, unique=True)
     name = Column(String, index=True)
-    currency = Column(UUID(as_uuid=True), ForeignKey("currency.id"))
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
     ends = Column(DateTime(timezone=True), nullable=True)
