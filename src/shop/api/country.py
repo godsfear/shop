@@ -5,9 +5,7 @@ from typing import List
 from ..models.country import Country, CountryCreate, CountryUpdate, CountryBase
 from ..services.country import CountryService
 
-router = APIRouter(
-    prefix='/country',
-)
+router = APIRouter(prefix='/country', tags=['country'])
 
 
 @router.get('/all', response_model=List[Country])

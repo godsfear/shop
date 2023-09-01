@@ -5,7 +5,7 @@ from typing import List
 from ..models.currency import Currency, CurrencyCreate, CurrencyUpdate, CurrencyBase
 from ..services.currency import CurrencyService
 
-router = APIRouter(prefix='/currency',tags=['currency'])
+router = APIRouter(prefix='/currency', tags=['currency'])
 
 
 @router.get('/{currency_id}', response_model=Currency)

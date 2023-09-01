@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, ForeignKey, DateTime, Date, Index, Integer, Numeric, Boolean, CheckConstraint
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.dialects.postgresql import UUID, BYTEA
+from sqlalchemy.dialects.postgresql import UUID, BYTEA, SMALLINT
 from sqlalchemy.sql import func
 
 Base = declarative_base()
@@ -205,7 +205,7 @@ class Country(Base):
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     iso2 = Column(String, index=True, unique=True)
     iso3 = Column(String, index=True, unique=True)
-    m49 = Column(String, index=True, unique=True)
+    m49 = Column(SMALLINT, index=True, unique=True)
     name = Column(String, index=True)
     description = Column(String, nullable=True)
     begins = Column(DateTime(timezone=True), default=func.now())
