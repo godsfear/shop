@@ -5,9 +5,7 @@ from typing import List
 from ..models.company import Company, CompanyCreate, CompanyUpdate, CompanyBase
 from ..services.company import CompanyService
 
-router = APIRouter(
-    prefix='/company',
-)
+router = APIRouter(prefix='/company', tags=['company'])
 
 
 @router.get('/all', response_model=List[Company])

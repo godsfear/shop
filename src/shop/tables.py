@@ -235,8 +235,8 @@ class Currency(Base):
 
     id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"), nullable=False)
-    iso = Column(String, index=True, nullable=False)
-    iso_num = Column(Integer, index=True, nullable=False)
+    code = Column(String, index=True, nullable=False)
+    num = Column(SMALLINT, index=True, nullable=False)
     adjective = Column(String)
     name = Column(String)
     name_plural = Column(String)
@@ -251,8 +251,8 @@ class Currency(Base):
     ends = Column(DateTime(timezone=True), nullable=True)
     author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
-        Index('currency_idx', 'category', 'iso', unique=True),
-        Index('currency_idx', 'category', 'iso_num'),
+        Index('currency_idx', 'category', 'code', unique=True),
+        Index('currency_idx', 'category', 'num'),
     )
 
     def __repr__(self):

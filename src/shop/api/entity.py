@@ -5,9 +5,7 @@ from typing import List
 from ..models.entity import Entity, EntityCreate, EntityUpdate, EntityBase
 from ..services.entity import EntityService
 
-router = APIRouter(
-    prefix='/entity',
-)
+router = APIRouter(prefix='/entity', tags=['entity'])
 
 
 @router.get('/all', response_model=List[Entity])

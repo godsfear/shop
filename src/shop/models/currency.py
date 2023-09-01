@@ -5,11 +5,11 @@ from pydantic import BaseModel
 
 class CurrencyBase(BaseModel):
     category: uuid.UUID
-    iso: str
-    iso_num: int
 
 
 class CurrencyUpdate(CurrencyBase):
+    code: str
+    num: int | None = None
     name: str | None = None
     name_plural: str | None = None
     name_minor: str | None = None

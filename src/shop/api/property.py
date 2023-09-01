@@ -5,9 +5,7 @@ from typing import List
 from ..models.property import Property, PropertyCreate, PropertyUpdate, PropertyBase
 from ..services.property import PropertyService
 
-router = APIRouter(
-    prefix='/property',
-)
+router = APIRouter(prefix='/property', tags=['property'])
 
 
 @router.get('/{property_id}', response_model=Property)

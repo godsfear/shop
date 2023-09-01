@@ -5,9 +5,7 @@ from typing import List
 from ..models.person import Person, PersonCreate, PersonUpdate, PersonBase
 from ..services.person import PersonService
 
-router = APIRouter(
-    prefix='/person',
-)
+router = APIRouter(prefix='/person', tags=['person'])
 
 
 @router.get('/all', response_model=List[Person])

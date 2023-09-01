@@ -27,11 +27,7 @@ class CountryService:
             async with db.begin():
                 query = (
                     select(tables.Country).
-                    where(
-                        and_(
-                            tables.Country.code == country_data.code,
-                        )
-                    )
+                    where(tables.Country.iso3 == country_data.iso3)
                 )
                 res = await db.execute(query)
                 country = res.fetchone()
