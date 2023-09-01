@@ -9,13 +9,12 @@ class PersonBase(BaseModel):
     name_third: str
     sex: bool
     birthdate: datetime.date
-    birth_place: uuid.UUID
-    begins: datetime.datetime
-    ends: datetime.datetime | None
+    birth_place: uuid.UUID | None = None
 
 
 class Person(PersonBase):
     id: uuid.UUID
+    begins: datetime.datetime
 
     class Config:
         orm_mode = True
@@ -26,4 +25,4 @@ class PersonCreate(PersonBase):
 
 
 class PersonUpdate(PersonBase):
-    pass
+    ends: datetime.datetime | None = None

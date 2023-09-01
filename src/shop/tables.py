@@ -127,7 +127,7 @@ class Person(Base):
     )
 
     def __repr__(self):
-        return f'id={self.id}; name={self.name_first}{self.name_third}{self.name_last}; birth={self.birthdate}'
+        return f'id={self.id}; name={self.name_last} {self.name_first} {self.name_third}; birth={self.birthdate}'
 
 
 class Company(Base):
