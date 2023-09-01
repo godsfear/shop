@@ -14,14 +14,14 @@ class CurrencyService:
     def __init__(self, session: AsyncSession = Depends(get_session)):
         self.session = session
 
-    async def get_by_category_code(self, currency_data: CurrencyBase) -> tables.Currency:
+    async def get_by_category_code(self, currency_data: CurrencyUpdate) -> tables.Currency:
         async with self.session as db:
             async with db.begin():
                 query = (
                     select(tables.Currency).
                     where(
                         tables.Currency.category == currency_data.category,
-                        tables.Currency.iso == currency_data.iso.upper()
+                        tables.Currency.code.upper() == currency_data.code.upper()
                     )
                 )
                 res = await db.execute(query)

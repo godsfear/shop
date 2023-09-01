@@ -21,7 +21,7 @@ async def create_currency(currency_data: CurrencyCreate, service: CurrencyServic
 
 
 @router.post('/category_code', response_model=Currency)
-async def get_currency_by_category_code(currency_data: CurrencyBase, service: CurrencyService = Depends()):
+async def get_currency_by_category_code(currency_data: CurrencyUpdate, service: CurrencyService = Depends()):
     currency = await service.get_by_category_code(currency_data)
     return currency
 

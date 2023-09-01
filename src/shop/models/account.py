@@ -15,6 +15,7 @@ class AccountBase(BaseModel):
     ends: datetime.datetime | None
     author: uuid.UUID
 
+
 class Account(AccountBase):
     id: uuid.UUID
 

@@ -5,9 +5,7 @@ from typing import List
 from ..models.place import Place, PlaceCreate, PlaceUpdate, PlaceBase
 from ..services.place import PlaceService
 
-router = APIRouter(
-    prefix='/place',
-)
+router = APIRouter(prefix='/place', tags=['place'])
 
 
 @router.get('/{place_id}', response_model=Place)

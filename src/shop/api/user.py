@@ -6,9 +6,7 @@ from ..models.user import User, UserCreate, UserUpdate, UserBase
 from ..services.user import UserService
 from ..services.auth import AuthService
 
-router = APIRouter(
-    prefix='/user',
-)
+router = APIRouter(prefix='/user', tags=['user'])
 
 
 @router.get('/all', response_model=List[User])

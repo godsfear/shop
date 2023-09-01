@@ -5,9 +5,7 @@ from typing import List
 from ..models.category import Category, CategoryCreate, CategoryUpdate, CategoryBase
 from ..services.category import CategoryService
 
-router = APIRouter(
-    prefix='/category',
-)
+router = APIRouter(prefix='/category', tags=['category'])
 
 
 @router.get('/{category_id}', response_model=Category)
