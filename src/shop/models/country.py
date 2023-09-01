@@ -4,18 +4,19 @@ from pydantic import BaseModel
 
 
 class CountryBase(BaseModel):
-    code: str
+    iso2: str
+    iso3: str
+    m49: int
     name: str
-    author: uuid.UUID
+
+
+class CountryUpdate(CountryBase):
+    author: uuid.UUID | None = None
     description: str | None = None
     ends: datetime.datetime | None = None
 
 
-class CountryUpdate(CountryBase):
-    pass
-
-
-class CountryCreate(CountryBase):
+class CountryCreate(CountryUpdate):
     pass
 
 
