@@ -50,7 +50,11 @@ class PersonService:
             async with db.begin():
                 db.add(person)
                 await db.flush()
-        return person
+        if person.id:
+            query = select(tables.Person).where(tables.Person.id == person.id)
+            res = await db.execute(query)
+            person = res.fetchone()
+        return person[0]
 
     async def update(self, person_id: uuid.UUID, person_data: PersonUpdate) -> tables.Person:
         async with self.session as db:
