@@ -4,18 +4,12 @@ from pydantic import BaseModel
 
 
 class UserEditable(BaseModel):
-    email: str | None
-    phone: str | None
+    email: str | None = None
+    phone: str | None = None
 
 
-class UserCheck(BaseModel):
-    checked: bool
-
-
-class UserBase(UserEditable, UserCheck):
+class UserBase(UserEditable):
     person_id: uuid.UUID
-    begins: datetime.datetime
-    ends: datetime.datetime | None
 
 
 class UserCreate(UserBase):
@@ -23,15 +17,18 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(UserEditable):
+    checked: bool
     password: str
+    ends: datetime.datetime | None = None
 
 
-class UserSave(UserEditable, UserCheck):
+class UserSave(UserBase):
     passhash: str
 
 
 class User(UserBase):
     id: uuid.UUID
+    begins: datetime.datetime
 
     class Config:
         orm_mode = True

@@ -85,7 +85,7 @@ class User(Base):
     )
 
     def __repr__(self):
-        return f'id={self.id}; name={self.username}'
+        return f'id={self.id}; email={self.email}; phone={self.phone}; person={self.person_id}'
 
 
 class Relation(Base):
