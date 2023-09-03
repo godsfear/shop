@@ -9,7 +9,7 @@ from ..database import get_session
 from .. import tables
 from .auth import AuthService
 from ..models.auth import Token
-from ..models.user import UserCreate, UserUpdate, UserSave, UserCheck
+from ..models.user import UserCreate, UserUpdate, UserSave
 
 
 class UserService:
@@ -45,14 +45,18 @@ class UserService:
         return user[0]
 
     async def create(self, user_data: UserCreate) -> tables.User:
-        user_save = UserSave(**user_data.dict())
+        user_save = UserSave(**user_data.dict(), passhash='')
         user_save.passhash = AuthService.hash_password(user_data.password)
         user = tables.User(**user_save.dict())
         async with self.session as db:
             async with db.begin():
                 db.add(user)
                 await db.flush()
-        return await self.send_notify(user)
+        if user.id:
+            query = select(tables.User).where(tables.User.id == user.id)
+            res = await db.execute(query)
+            user = res.fetchone()
+        return user[0]
 
     async def update(self, user_id: uuid.UUID, user_data: UserUpdate) -> tables.User:
         async with self.session as db:
@@ -70,9 +74,9 @@ class UserService:
                 user = res.fetchone()
                 if not user:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        return await self.send_notify(user)
+        return user
 
-    async def receive_notify(self, user_data: tables.User) -> tables.User:
+    """async def receive_notify(self, user_data: tables.User) -> tables.User:
         async with self.session as db:
             async with db.begin():
                 query = (
@@ -90,9 +94,9 @@ class UserService:
     async def send_notify(self, user: tables.User) -> tables.User:
         if user.email:
             pass
-        if user.phone:
+        elif user.phone:
             pass
-        return user
+        return user"""
 
     async def expire(self, user_id: uuid.UUID) -> tables.User:
         async with self.session as db:
@@ -111,7 +115,8 @@ class UserService:
 
     async def register_new_user(self, user_data: UserCreate) -> Token:
         user = await self.create(user_data)
-        return AuthService.create_token(user)
+        token = AuthService.create_token(user)
+        return token
 
     async def authenticate_user(self, prop: str, password: str) -> Token:
         exception = HTTPException(
