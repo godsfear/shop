@@ -1,8 +1,10 @@
-from typing import Generator
+from typing import Generator, Dict
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from .settings import settings
 from fastapi import HTTPException, status
+import uuid
+import datetime
 
 engine = create_async_engine(
     settings.database_uri,
@@ -33,3 +35,10 @@ async def get_session() -> Generator:
         )
     finally:
         await session.close()
+
+
+def serialize2str(_dict: Dict) -> Dict:
+    for key, value in _dict.items():
+        if isinstance(value, (uuid.UUID, datetime.datetime)):
+            _dict[key] = str(value)
+    return _dict
