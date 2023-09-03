@@ -5,6 +5,7 @@ from jose import JWTError, jwt
 from passlib.hash import bcrypt
 from pydantic import ValidationError
 
+from ..database import serialize2str
 from .. import tables
 from ..models.user import User
 from ..models.auth import Token
@@ -57,7 +58,7 @@ class AuthService:
             'nbf': now,
             'exp': now + timedelta(seconds=settings.jwt_expires_s),
             'sub': str(user_data.id),
-            'user': user_data.to_dict(),
+            'user': serialize2str(user_data.dict()),
         }
         token = jwt.encode(
             payload,
