@@ -53,8 +53,7 @@ class UserService:
                 db.add(user)
                 await db.flush()
         if user.id:
-            query = select(tables.User).where(tables.User.id == user.id)
-            res = await db.execute(query)
+            res = await db.execute(select(tables.User).where(tables.User.id == user.id))
             user = res.fetchone()
         return user[0]
 

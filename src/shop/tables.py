@@ -456,3 +456,22 @@ class Translation(Base):
 
     def __repr__(self):
         return f'id={self.id}; table={self.table}; object={self.object} language={self.language}'
+
+
+class Access(Base):
+    __tablename__: str = 'access'
+
+    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
+    table = Column(String, index=True)
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    code = Column(String, index=True)
+    object = Column(UUID(as_uuid=True), index=True)
+    begins = Column(DateTime(timezone=True), default=func.now())
+    ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
+    __table_args__ = (
+        Index('access_idx', 'table', 'category', 'code'),
+    )
+
+    def __repr__(self):
+        return f'id={self.id}; table={self.table}; category={self.category}; code={self.code}; object={self.object}'
