@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = 'HS256'
     jwt_secret: str = ''
     jwt_expires_s: int = 3600
+    sql_echo: bool = True
 
 
 settings = Settings(

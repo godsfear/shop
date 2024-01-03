@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class CategoryBase(BaseModel):
@@ -15,10 +15,8 @@ class CategoryBase(BaseModel):
 
 
 class Category(CategoryBase):
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
-
-    class Config:
-        orm_mode = True
 
 
 class CategoryCreate(CategoryBase):

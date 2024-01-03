@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DataBase(BaseModel):
@@ -18,10 +18,8 @@ class DataBase(BaseModel):
 
 
 class Data(DataBase):
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
-
-    class Config:
-        orm_mode = True
 
 
 class DataCreate(DataBase):

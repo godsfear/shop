@@ -1,16 +1,24 @@
 import uuid
 from sqlalchemy import Column, String, ForeignKey, DateTime, Date, Index, Integer, Numeric, Boolean, CheckConstraint
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.postgresql import UUID, BYTEA, SMALLINT
+from sqlalchemy.orm import DeclarativeBase, declared_attr, Mapped, mapped_column
 from sqlalchemy.sql import func
 
-Base = declarative_base()
+"""from sqlalchemy.ext.declarative import declarative_base
+Base = declarative_base()"""
+
+
+class Base(DeclarativeBase):
+    __abstract__ = True
+
+    @declared_attr.directive
+    def __tablename__(cls) -> str:
+        return cls.__name__.lower()
+
+    id: Mapped[uuid.UUID] = mapped_column(unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
 
 
 class Entity(Base):
-    __tablename__: str = 'entity'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     name = Column(String)
@@ -28,9 +36,6 @@ class Entity(Base):
 
 
 class Category(Base):
-    __tablename__: str = 'category'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(String, index=True)
     code = Column(String, index=True)
     name = Column(String)
@@ -48,9 +53,6 @@ class Category(Base):
 
 
 class State(Base):
-    __tablename__: str = 'state'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     state = Column(String)
@@ -70,9 +72,6 @@ class State(Base):
 
 
 class User(Base):
-    __tablename__: str = 'user'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     email = Column(String, index=True, unique=True, nullable=True)
     phone = Column(String, index=True, unique=True, nullable=True)
     passhash = Column(String)
@@ -89,9 +88,6 @@ class User(Base):
 
 
 class Relation(Base):
-    __tablename__: str = 'relation'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     name = Column(String)
@@ -113,9 +109,6 @@ class Relation(Base):
 
 
 class Person(Base):
-    __tablename__: str = 'person'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     name_first = Column(String, nullable=False)
     name_last = Column(String, nullable=False)
     name_third = Column(String, nullable=True)
@@ -131,9 +124,6 @@ class Person(Base):
 
 
 class Company(Base):
-    __tablename__: str = 'company'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     name = Column(String)
     country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
     code = Column(String, index=True)
@@ -150,9 +140,6 @@ class Company(Base):
 
 
 class Property(Base):
-    __tablename__: str = 'property'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     table = Column(String)
     object = Column(UUID(as_uuid=True), nullable=False)
     code = Column(String)
@@ -178,9 +165,6 @@ class Property(Base):
 
 
 class Address(Base):
-    __tablename__: str = 'address'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
     region = Column(UUID(as_uuid=True), ForeignKey("place.id"))
     place = Column(UUID(as_uuid=True), ForeignKey("place.id"))
@@ -200,9 +184,6 @@ class Address(Base):
 
 
 class Country(Base):
-    __tablename__: str = 'country'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     iso2 = Column(String, index=True, unique=True)
     iso3 = Column(String, index=True, unique=True)
     m49 = Column(SMALLINT, index=True, unique=True)
@@ -217,8 +198,6 @@ class Country(Base):
 
 
 class CountryFlag(Base):
-    __tablename__: str = 'countryFlag'
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
     code = Column(String, index=True)
     picture = Column(BYTEA)
@@ -231,9 +210,6 @@ class CountryFlag(Base):
 
 
 class Currency(Base):
-    __tablename__: str = 'currency'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"), nullable=False)
     code = Column(String, index=True, nullable=False)
     num = Column(SMALLINT, index=True, nullable=False)
@@ -260,9 +236,6 @@ class Currency(Base):
 
 
 class Account(Base):
-    __tablename__: str = 'account'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     currency = Column(UUID(as_uuid=True), ForeignKey("currency.id"))
@@ -283,9 +256,6 @@ class Account(Base):
 
 
 class Message(Base):
-    __tablename__: str = 'message'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     name = Column(String)
@@ -302,13 +272,10 @@ class Message(Base):
     )
 
     def __repr__(self):
-        return f'id={self.id}; code={self.code}; name={self.name}; sender={self.sender}; receiver={self.receiver}'
+        return f'id={self.id}; code={self.code}; name={self.name}; sender={self.author}; receiver={self.receiver}'
 
 
 class Operation(Base):
-    __tablename__: str = 'operation'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     number = Column(String)
@@ -330,9 +297,6 @@ class Operation(Base):
 
 
 class Data(Base):
-    __tablename__: str = 'data'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     table = Column(String)
@@ -354,9 +318,6 @@ class Data(Base):
 
 
 class Document(Base):
-    __tablename__: str = 'document'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
@@ -381,9 +342,6 @@ class Document(Base):
 
 
 class Place(Base):
-    __tablename__: str = 'place'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
@@ -403,9 +361,6 @@ class Place(Base):
 
 
 class Rate(Base):
-    __tablename__: str = 'rate'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)
     table = Column(String, index=True)
@@ -426,9 +381,6 @@ class Rate(Base):
 
 
 class Language(Base):
-    __tablename__: str = 'language'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     iso2 = Column(String, index=True, unique=True)
     name = Column(String, index=True)
     begins = Column(DateTime(timezone=True), default=func.now())
@@ -440,8 +392,6 @@ class Language(Base):
 
 
 class Translation(Base):
-    __tablename__: str = 'translation'
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     table = Column(String)
     object = Column(UUID(as_uuid=True), nullable=False)
     language = Column(UUID(as_uuid=True), ForeignKey("language.id"))
@@ -459,9 +409,6 @@ class Translation(Base):
 
 
 class Access(Base):
-    __tablename__: str = 'access'
-
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
     table = Column(String, index=True)
     category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
     code = Column(String, index=True)

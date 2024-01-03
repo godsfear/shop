@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class PlaceBase(BaseModel):
@@ -15,10 +15,8 @@ class PlaceBase(BaseModel):
 
 
 class Place(PlaceBase):
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
-
-    class Config:
-        orm_mode = True
 
 
 class PlaceCreate(PlaceBase):

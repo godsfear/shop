@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class StateBase(BaseModel):
@@ -14,10 +14,8 @@ class StateBase(BaseModel):
 
 
 class State(StateBase):
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
-
-    class Config:
-        orm_mode = True
 
 
 class StateCreate(StateBase):
