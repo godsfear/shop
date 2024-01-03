@@ -5,13 +5,13 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
 
-from ..database import get_session
+from ..database import db_helper
 from .. import tables
 from ..models.entity import EntityCreate, EntityUpdate, EntityBase
 
 
 class EntityService:
-    def __init__(self, session: AsyncSession = Depends(get_session)):
+    def __init__(self, session: AsyncSession = Depends(db_helper.scoped_session_dependency)):
         self.session = session
 
     async def get_all(self) -> List[tables.Entity]:
@@ -20,7 +20,7 @@ class EntityService:
                 query = select(tables.Entity)
                 res = await db.execute(query)
                 entity = res.scalars().all()
-        return entity
+        return list(entity)
 
     async def get_by_category_code(self, entity_data: EntityBase) -> List[tables.Entity]:
         async with self.session as db:
@@ -36,7 +36,7 @@ class EntityService:
                 )
                 res = await db.execute(query)
                 entity = res.scalars().all()
-        return entity
+        return list(entity)
 
     async def get_by_id(self, entity_id: uuid.UUID) -> tables.Entity:
         async with self.session as db:

@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, or_
 
-from ..database import get_session
+from ..database import db_helper
 from .. import tables
 from .auth import AuthService
 from ..models.auth import Token
@@ -13,7 +13,7 @@ from ..models.user import UserCreate, UserUpdate, UserSave
 
 
 class UserService:
-    def __init__(self, session: AsyncSession = Depends(get_session)):
+    def __init__(self, session: AsyncSession = Depends(db_helper.scoped_session_dependency)):
         self.session = session
 
     async def get_all(self) -> List[tables.User]:

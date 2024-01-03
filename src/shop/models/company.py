@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class CompanyBase(BaseModel):
@@ -14,10 +14,8 @@ class CompanyBase(BaseModel):
 
 
 class Company(CompanyBase):
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
-
-    class Config:
-        orm_mode = True
 
 
 class CompanyCreate(CompanyBase):

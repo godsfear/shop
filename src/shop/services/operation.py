@@ -5,13 +5,13 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
 
-from ..database import get_session
+from ..database import db_helper
 from .. import tables
 from ..models.operation import OperationCreate, OperationUpdate, OperationBase
 
 
 class OperationService:
-    def __init__(self, session: AsyncSession = Depends(get_session)):
+    def __init__(self, session: AsyncSession = Depends(db_helper.scoped_session_dependency)):
         self.session = session
 
     async def operation_idx(self, operation_data: OperationBase) -> List[tables.Operation]:

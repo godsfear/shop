@@ -1,6 +1,6 @@
 import uuid
 import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class PersonBase(BaseModel):
@@ -13,11 +13,9 @@ class PersonBase(BaseModel):
 
 
 class Person(PersonBase):
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     begins: datetime.datetime
-
-    class Config:
-        orm_mode = True
 
 
 class PersonCreate(PersonBase):

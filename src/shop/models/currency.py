@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class CurrencyBase(BaseModel):
@@ -25,11 +25,9 @@ class CurrencyUpdate(CurrencyBase):
 
 
 class Currency(CurrencyUpdate):
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     begins: datetime.datetime
-
-    class Config:
-        orm_mode = True
 
 
 class CurrencyCreate(CurrencyUpdate):
