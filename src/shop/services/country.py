@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, and_
+from sqlalchemy import select, update, and_, func
 
 from shop.database import db_helper
 from shop.tables import Country
@@ -23,13 +23,13 @@ class CountryService:
     async def get_by_code(self, country_data: CountryGet) -> Country | None:
         query = None
         if country_data.iso3:
-            query = (select(Country).where(Country.iso3 == country_data.iso3))
+            query = (select(Country).where(func.lower(Country.iso3) == country_data.iso3.lower()))
         elif country_data.iso2:
-            query = (select(Country).where(Country.iso2 == country_data.iso2))
+            query = (select(Country).where(func.lower(Country.iso2) == country_data.iso2.lower()))
         elif country_data.m49:
             query = (select(Country).where(Country.m49 == country_data.m49))
         elif country_data.name:
-            query = (select(Country).where(Country.name == country_data.name))
+            query = (select(Country).where(func.lower(Country.name) == country_data.name.lower()))
         res = await self.session.execute(query)
         country = res.scalar_one()
         return country
