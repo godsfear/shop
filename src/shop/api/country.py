@@ -2,8 +2,8 @@ import uuid
 from fastapi import APIRouter, Depends
 from typing import List
 
-from ..models.country import Country, CountryCreate, CountryUpdate, CountryBase
-from ..services.country import CountryService
+from shop.models import Country, CountryCreate, CountryUpdate, CountryGet
+from shop.services import CountryService
 
 router = APIRouter(prefix='/country', tags=['country'])
 
@@ -26,8 +26,8 @@ async def create_country(country_data: CountryCreate, service: CountryService = 
     return country
 
 
-@router.post('/by_code', response_model=List[Country])
-async def get_country_by_category_code(country_data: CountryBase, service: CountryService = Depends()):
+@router.post('/by_code', response_model=Country)
+async def get_country_by_category_code(country_data: CountryGet, service: CountryService = Depends()):
     country = await service.get_by_code(country_data)
     return country
 

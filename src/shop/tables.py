@@ -1,11 +1,9 @@
+import datetime
 import uuid
 from sqlalchemy import Column, String, ForeignKey, DateTime, Date, Index, Integer, Numeric, Boolean, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID, BYTEA, SMALLINT
 from sqlalchemy.orm import DeclarativeBase, declared_attr, Mapped, mapped_column
 from sqlalchemy.sql import func
-
-"""from sqlalchemy.ext.declarative import declarative_base
-Base = declarative_base()"""
 
 
 class Base(DeclarativeBase):
@@ -16,23 +14,6 @@ class Base(DeclarativeBase):
         return cls.__name__.lower()
 
     id: Mapped[uuid.UUID] = mapped_column(unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-
-
-class Entity(Base):
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String, index=True)
-    name = Column(String)
-    value = Column(String)
-    description = Column(String, nullable=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
-    __table_args__ = (
-        Index('entity_idx', 'category', 'code'),
-    )
-
-    def __repr__(self):
-        return f'id={self.id}; category={self.category}; code={self.code}; name={self.name}'
 
 
 class Category(Base):
@@ -50,6 +31,23 @@ class Category(Base):
 
     def __repr__(self):
         return f'category={self.category}; code={self.code}; name={self.name}; value={self.value}'
+
+
+class Entity(Base):
+    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
+    code = Column(String, index=True)
+    name = Column(String)
+    value = Column(String)
+    description = Column(String, nullable=True)
+    begins = Column(DateTime(timezone=True), default=func.now())
+    ends = Column(DateTime(timezone=True), nullable=True)
+    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
+    __table_args__ = (
+        Index('entity_idx', 'category', 'code'),
+    )
+
+    def __repr__(self):
+        return f'id={self.id}; category={self.category}; code={self.code}; name={self.name}'
 
 
 class State(Base):
@@ -184,14 +182,14 @@ class Address(Base):
 
 
 class Country(Base):
-    iso2 = Column(String, index=True, unique=True)
-    iso3 = Column(String, index=True, unique=True)
-    m49 = Column(SMALLINT, index=True, unique=True)
-    name = Column(String, index=True)
-    description = Column(String, nullable=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
+    iso2: Mapped[str] = Column(String, index=True, unique=True)
+    iso3: Mapped[str] = Column(String, index=True, unique=True)
+    m49: Mapped[int] = Column(SMALLINT, index=True, unique=True)
+    name: Mapped[str] = Column(String, index=True)
+    description: Mapped[str | None] = Column(String, nullable=True)
+    begins: Mapped[datetime.datetime] = Column(DateTime(timezone=True), default=func.now())
+    ends: Mapped[datetime.datetime | None] = Column(DateTime(timezone=True), nullable=True)
+    author: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), ForeignKey("user.id"))
 
     def __repr__(self):
         return f'id={self.id}; iso2={self.iso2}; iso3={self.iso3}; name={self.name}'
