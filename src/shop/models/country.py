@@ -10,17 +10,24 @@ class CountryBase(BaseModel):
     name: str
 
 
-class CountryUpdate(CountryBase):
+class CountryGet(CountryBase):
+    iso2: str | None = None
+    iso3: str | None = None
+    m49: int | None = None
+    name: str | None = None
+
+
+class CountryUpdate(BaseModel):
     author: uuid.UUID | None = None
     description: str | None = None
     ends: datetime.datetime | None = None
 
 
-class CountryCreate(CountryUpdate):
+class CountryCreate(CountryBase, CountryUpdate):
     pass
 
 
-class Country(CountryUpdate):
+class Country(CountryCreate):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     begins: datetime.datetime

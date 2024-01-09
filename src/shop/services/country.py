@@ -5,9 +5,9 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
 
-from ..database import db_helper
-from ..tables import Country 
-from ..models.country import CountryCreate, CountryUpdate, CountryBase
+from shop.database import db_helper
+from shop.tables import Country
+from shop.models import CountryCreate, CountryUpdate, CountryGet
 
 
 class CountryService:
@@ -20,11 +20,16 @@ class CountryService:
         country = res.scalars().all()
         return list(country)
 
-    async def get_by_code(self, country_data: CountryBase) -> Country | None:
-        query = (
-            select(Country).
-            where(Country.iso3 == country_data.iso3)
-        )
+    async def get_by_code(self, country_data: CountryGet) -> Country | None:
+        query = None
+        if country_data.iso3:
+            query = (select(Country).where(Country.iso3 == country_data.iso3))
+        elif country_data.iso2:
+            query = (select(Country).where(Country.iso2 == country_data.iso2))
+        elif country_data.m49:
+            query = (select(Country).where(Country.m49 == country_data.m49))
+        elif country_data.name:
+            query = (select(Country).where(Country.name == country_data.name))
         res = await self.session.execute(query)
         country = res.scalar_one()
         return country
@@ -46,12 +51,13 @@ class CountryService:
         query = (
             update(Country)
             .where(Country.id == country_id)
-            .values(**country_data.model_dump())
+            .values(**country_data.model_dump(exclude_unset=True))
             .returning(Country)
         )
-        await self.session.execute(query)
+        country = await self.session.execute(query)
         await self.session.commit()
-        return await self.get_by_id(country_id)
+        await self.session.refresh(country)
+        return country.scalar_one()
 
     async def expire(self, country_id: uuid.UUID) -> Country:
         query = (
@@ -60,6 +66,7 @@ class CountryService:
             .values(ends=datetime.utcnow())
             .returning(Country)
         )
-        await self.session.execute(query)
+        country = await self.session.execute(query)
         await self.session.commit()
-        return await self.get_by_id(country_id)
+        await self.session.refresh(country)
+        return country.scalar_one()

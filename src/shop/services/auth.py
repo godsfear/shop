@@ -44,21 +44,21 @@ class AuthService:
             raise exception from None
         user_data = payload.get('user')
         try:
-            user = User.parse_obj(user_data)
+            user = User.model_validate(user_data)
         except ValidationError:
             raise exception from None
         return user
 
     @classmethod
     def create_token(cls, user: tables.User) -> Token:
-        user_data = User.from_orm(user)
+        user_data = User.model_validate(user)
         now = datetime.utcnow()
         payload = {
             'iat': now,
             'nbf': now,
             'exp': now + timedelta(seconds=settings.jwt_expires_s),
             'sub': str(user_data.id),
-            'user': serialize2str(user_data.dict()),
+            'user': serialize2str(user_data.model_dump()),
         }
         token = jwt.encode(
             payload,
