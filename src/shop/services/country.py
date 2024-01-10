@@ -44,7 +44,6 @@ class CountryService:
         country = Country(**country_data.model_dump())
         self.session.add(country)
         await self.session.commit()
-        await self.session.refresh(country)
         return country
 
     async def update(self, country_id: uuid.UUID, country_data: CountryUpdate) -> Country:
@@ -56,7 +55,6 @@ class CountryService:
         )
         country = await self.session.execute(query)
         await self.session.commit()
-        await self.session.refresh(country)
         return country.scalar_one()
 
     async def expire(self, country_id: uuid.UUID) -> Country:
@@ -68,5 +66,4 @@ class CountryService:
         )
         country = await self.session.execute(query)
         await self.session.commit()
-        await self.session.refresh(country)
         return country.scalar_one()
