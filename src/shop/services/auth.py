@@ -1,15 +1,15 @@
+import bcrypt
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.hash import bcrypt
 from pydantic import ValidationError
 
-from ..database import serialize2str
-from .. import tables
-from ..models.user import User
-from ..models.auth import Token
-from ..settings import settings
+from shop.database import serialize2str
+from shop import tables
+from shop.models.user import User
+from shop.models.auth import Token
+from shop.settings import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/signin/')
 
@@ -21,11 +21,11 @@ class AuthService:
 
     @classmethod
     def verify_password(cls, plain_password: str, hashed_password: str) -> bool:
-        return bcrypt.verify(plain_password, hashed_password)
+        return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
     @classmethod
     def hash_password(cls, password: str) -> str:
-        return bcrypt.hash(password)
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
     @classmethod
     def verify_token(cls, token: str) -> User:

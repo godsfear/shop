@@ -45,9 +45,9 @@ class UserService:
         return user[0]
 
     async def create(self, user_data: UserCreate) -> tables.User:
-        user_save = UserSave(**user_data.dict(), passhash='')
+        user_save = UserSave(**user_data.model_dump(), passhash='')
         user_save.passhash = AuthService.hash_password(user_data.password)
-        user = tables.User(**user_save.dict())
+        user = tables.User(**user_save.model_dump())
         async with self.session as db:
             async with db.begin():
                 db.add(user)
@@ -60,7 +60,7 @@ class UserService:
     async def update(self, user_id: uuid.UUID, user_data: UserUpdate) -> tables.User:
         async with self.session as db:
             async with db.begin():
-                user_save = UserSave(**user_data.dict())
+                user_save = UserSave(**user_data.model_dump())
                 user_save.passhash = AuthService.hash_password(user_data.password)
                 user_save.checked = False
                 query = (
