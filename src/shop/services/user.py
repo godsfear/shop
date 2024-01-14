@@ -5,69 +5,59 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, or_
 
-from ..database import db_helper
-from .. import tables
+from shop.database import db_helper
+from shop.tables import User
 from .auth import AuthService
-from ..models.auth import Token
-from ..models.user import UserCreate, UserUpdate, UserSave
+from shop.models.auth import Token
+from shop.models.user import UserCreate, UserUpdate, UserSave
 
 
 class UserService:
     def __init__(self, session: AsyncSession = Depends(db_helper.scoped_session_dependency)):
         self.session = session
 
-    async def get_all(self) -> List[tables.User]:
-        async with self.session as db:
-            async with db.begin():
-                query = select(tables.User)
-                res = await db.execute(query)
-                user = res.scalars().all()
+    async def get_all(self) -> List[User]:
+        query = select(User)
+        res = await self.session.execute(query)
+        user = res.scalars().all()
+        return list(user)
+
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        query = select(User).where(User.id == user_id)
+        res = await self.session.execute(query)
+        user = res.scalar_one()
         return user
 
-    async def get_by_id(self, user_id: uuid.UUID) -> tables.User:
-        async with self.session as db:
-            async with db.begin():
-                query = select(tables.User).where(tables.User.id == user_id)
-                res = await db.execute(query)
-                user = res.fetchone()
-        if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        return user[0]
+    async def get_by_prop(self, prop: str) -> User | None:
+        query = select(User).where(or_(User.email == prop, User.phone == prop))
+        res = await self.session.execute(query)
+        user = res.scalar_one()
+        return user
 
-    async def get_by_prop(self, prop: str) -> tables.User:
-        async with self.session as db:
-            async with db.begin():
-                query = select(tables.User).where(or_(tables.User.email == prop, tables.User.phone == prop))
-                res = await db.execute(query)
-                user = res.fetchone()
-        if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        return user[0]
-
-    async def create(self, user_data: UserCreate) -> tables.User:
+    async def create(self, user_data: UserCreate) -> User:
         user_save = UserSave(**user_data.model_dump(), passhash='')
         user_save.passhash = AuthService.hash_password(user_data.password)
-        user = tables.User(**user_save.model_dump())
+        user = User(**user_save.model_dump())
         async with self.session as db:
             async with db.begin():
                 db.add(user)
                 await db.flush()
         if user.id:
-            res = await db.execute(select(tables.User).where(tables.User.id == user.id))
+            res = await db.execute(select(User).where(User.id == user.id))
             user = res.fetchone()
         return user[0]
 
-    async def update(self, user_id: uuid.UUID, user_data: UserUpdate) -> tables.User:
+    async def update(self, user_id: uuid.UUID, user_data: UserUpdate) -> User:
         async with self.session as db:
             async with db.begin():
                 user_save = UserSave(**user_data.model_dump())
                 user_save.passhash = AuthService.hash_password(user_data.password)
                 user_save.checked = False
                 query = (
-                            update(tables.User)
-                            .where(tables.User.id == user_id)
+                            update(User)
+                            .where(User.id == user_id)
                             .values(**user_save.dict())
-                            .returning(tables.User)
+                            .returning(User)
                         )
                 res = await db.execute(query)
                 user = res.fetchone()
@@ -97,14 +87,14 @@ class UserService:
             pass
         return user"""
 
-    async def expire(self, user_id: uuid.UUID) -> tables.User:
+    async def expire(self, user_id: uuid.UUID) -> User:
         async with self.session as db:
             async with db.begin():
                 query = (
-                    update(tables.User)
-                    .where(tables.User.id == user_id)
+                    update(User)
+                    .where(User.id == user_id)
                     .values(ends=datetime.utcnow())
-                    .returning(tables.User)
+                    .returning(User)
                 )
                 res = await db.execute(query)
                 entity = res.fetchone()
