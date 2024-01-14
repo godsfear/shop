@@ -3,27 +3,29 @@ import uuid
 from pydantic import BaseModel, ConfigDict
 
 
-class UserEditable(BaseModel):
-    email: str | None = None
-    phone: str | None = None
-
-
-class UserBase(UserEditable):
+class UserBase(BaseModel):
     person_id: uuid.UUID
 
 
 class UserCreate(UserBase):
+    email: str | None = None
+    phone: str | None = None
     password: str
 
 
-class UserUpdate(UserEditable):
-    checked: bool
+class UserUpdate(UserBase):
     password: str
+    email: str | None = None
+    phone: str | None = None
     ends: datetime.datetime | None = None
 
 
 class UserSave(UserBase):
     passhash: str
+
+
+class UserValidate(UserBase):
+    validated: bool
 
 
 class User(UserBase):
