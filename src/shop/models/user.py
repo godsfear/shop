@@ -14,18 +14,21 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(UserBase):
-    password: str
     email: str | None = None
     phone: str | None = None
     ends: datetime.datetime | None = None
 
 
-class UserSave(UserBase):
-    passhash: str
-
-
-class UserValidate(UserBase):
-    validated: bool
+# class UserSave(UserBase):
+#     passhash: str
+#
+#
+# class UserValidate(UserBase):
+#     validated: bool
+#
+#
+# class UserUpdatePass(UserBase):
+#     password: str
 
 
 class User(UserBase):

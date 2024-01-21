@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List, Annotated
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_, func
@@ -11,7 +11,7 @@ from shop.models import CountryCreate, CountryUpdate, CountryGet
 
 
 class CountryService:
-    def __init__(self, session: AsyncSession = Depends(db_helper.scoped_session_dependency)):
+    def __init__(self, session: Annotated[AsyncSession, Depends(db_helper.scoped_session_dependency)]):
         self.session = session
 
     async def get_all(self) -> List[Country]:

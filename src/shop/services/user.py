@@ -9,7 +9,7 @@ from shop.database import db_helper
 from shop.tables import User
 from .auth import AuthService
 from shop.models.auth import Token
-from shop.models.user import UserCreate, UserUpdate, UserSave
+from shop.models.user import UserCreate, UserUpdate
 
 
 class UserService:
@@ -38,14 +38,9 @@ class UserService:
         user_save = UserSave(**user_data.model_dump(), passhash='')
         user_save.passhash = AuthService.hash_password(user_data.password)
         user = User(**user_save.model_dump())
-        async with self.session as db:
-            async with db.begin():
-                db.add(user)
-                await db.flush()
-        if user.id:
-            res = await db.execute(select(User).where(User.id == user.id))
-            user = res.fetchone()
-        return user[0]
+        self.session.add(user)
+        await self.session.commit()
+        return user
 
     async def update(self, user_id: uuid.UUID, user_data: UserUpdate) -> User:
         async with self.session as db:
