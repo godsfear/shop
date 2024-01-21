@@ -10,3 +10,4 @@ psycopg2
 passlib[bcrypt]
 python-jose[cryptography]
 python-multipart
+starlette
