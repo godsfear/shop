@@ -133,3 +133,5 @@ certs/
 
 # IDEA
 .idea
+/venv/
+/venv/

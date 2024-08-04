@@ -1,421 +1,300 @@
 import datetime
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime, Date, Index, Integer, Numeric, Boolean, CheckConstraint
-from sqlalchemy.dialects.postgresql import UUID, BYTEA, SMALLINT
+
+from typing import List
+from sqlalchemy import String, ForeignKey, DateTime, Date, Index, Integer, Numeric, Boolean, CheckConstraint
+from sqlalchemy.dialects.postgresql import UUID, BYTEA, SMALLINT, ARRAY
 from sqlalchemy.orm import DeclarativeBase, declared_attr, Mapped, mapped_column
 from sqlalchemy.sql import func
 
 
 class Base(DeclarativeBase):
-    __abstract__ = True
+    __abstract__: bool = True
 
     @declared_attr.directive
     def __tablename__(cls) -> str:
         return cls.__name__.lower()
 
     id: Mapped[uuid.UUID] = mapped_column(unique=True, primary_key=True, nullable=False, default=uuid.uuid4)
-
-
-class Category(Base):
-    category: Mapped[str] = mapped_column(String, index=True)
-    code: Mapped[str] = mapped_column(String, index=True)
-    name: Mapped[str] = mapped_column(String)
-    value: Mapped[str] = mapped_column(String)
-    description: Mapped[str] = mapped_column(String, nullable=True)
     begins: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=func.now())
-    ends: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    author: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"))
-    __table_args__ = (
-        Index('category_idx', 'category', 'code', unique=True),
-    )
+    ends: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    def __repr__(self):
-        return f'category={self.category}; code={self.code}; name={self.name}; value={self.value}'
+    def __repr__(self) -> str:
+        return "<{klass} @{id:x} {attrs}>".format(
+            klass=self.__class__.__name__,
+            id=id(self) & 0xFFFFFF,
+            attrs=" ".join("{}={!r}".format(k, v) for k, v in self.__dict__.items()),
+        )
 
 
-class Entity(Base):
+class BaseCategory(Base):
+    __abstract__: bool = True
+    __unique_index__: bool = False
+
     category: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code: Mapped[str] = mapped_column(String, index=True)
-    name: Mapped[str] = mapped_column(String)
-    value: Mapped[str] = mapped_column(String)
-    description: Mapped[str] = mapped_column(String, nullable=True)
-    begins: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=func.now())
-    ends: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    author: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"))
-    __table_args__ = (
-        Index('entity_idx', 'category', 'code'),
-    )
+    code: Mapped[str] = mapped_column(String)
+    user: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"), index=True)
 
-    def __repr__(self):
-        return f'id={self.id}; category={self.category}; code={self.code}; name={self.name}'
+    @declared_attr.directive
+    def __table_args__(cls) -> tuple[Index]:
+        return (
+            Index(
+                f"{cls.__name__.lower()}_category_code_idx",
+                'category', 'code',
+                unique=cls.__unique_index__
+            ),
+        )
 
 
-class State(Base):
-    category: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code: Mapped[str] = mapped_column(String, index=True)
-    state: Mapped[str] = mapped_column(String)
-    name: Mapped[str] = mapped_column(String)
-    value: Mapped[str] = mapped_column(String)
-    description: Mapped[str] = mapped_column(String, nullable=True)
-    begins: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=func.now())
-    ends: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    author: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"))
-    __table_args__ = (
-        Index('state_idx', 'category', 'code'),
-        Index('state_idx', 'category', 'code', 'state', unique=True),
-    )
+class CrossTable(Base):
+    __abstract__: bool = True
 
-    def __repr__(self):
-        return f'category={self.category}; code={self.code}; name={self.name}; value={self.value}'
+    table: Mapped[str] = mapped_column(String)
+    object: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+
+    @declared_attr.directive
+    def __table_args__(cls) -> tuple[Index]:
+        return (Index(f"{cls.__name__.lower()}_table_object_idx", 'table', 'object'),)
+
+
+class Description:
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class User(Base):
-    email: Mapped[str] = mapped_column(String, index=True, unique=True, nullable=True)
-    phone: Mapped[str] = mapped_column(String, index=True, unique=True, nullable=True)
+    email: Mapped[str | None] = mapped_column(String, index=True, unique=True, nullable=True)
+    phone: Mapped[str | None] = mapped_column(String, index=True, unique=True, nullable=True)
     password: Mapped[str] = mapped_column(String)
-    begins: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=func.now())
-    ends: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    person_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("person.id"))
+    person: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("person.id"))
     validated: Mapped[bool] = mapped_column(Boolean, default=False)
+
     __table_args__ = (
         CheckConstraint('NOT(email IS NULL AND phone IS NULL)'),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; email={self.email}; phone={self.phone}; person={self.person_id}'
+
+class Category(Base, Description):
+    category: Mapped[uuid.UUID] = mapped_column(String)
+    code: Mapped[str] = mapped_column(String)
+    name: Mapped[str] = mapped_column(String)
+    value: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    __table_args__ = (
+        Index('category_idx', 'category', 'code'),
+    )
 
 
-class Relation(Base):
-    category: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code: Mapped[str] = mapped_column(String, index=True)
+class Entity(BaseCategory, Description):
+    name: Mapped[str] = mapped_column(String)
+    value: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class Procedure(BaseCategory, CrossTable, Description):
+    name: Mapped[str] = mapped_column(String, index=True)
+    procedure: Mapped[str] = mapped_column(String)
+
+
+class State(BaseCategory, CrossTable, Description):
+    state: Mapped[str] = mapped_column(String)
+    name: Mapped[str] = mapped_column(String)
+    next: Mapped[List[str] | None] = mapped_column(ARRAY(String), nullable=True)
+    proc_in: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("procedure.id"), nullable=True)
+    proc_out: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("procedure.id"), nullable=True)
+
+    __table_args__ = (
+        Index('state_idx', 'category', 'code', 'state'),
+        Index('state_object_idx', 'table', 'object', 'category', 'code', 'state', unique=True),
+    )
+
+
+class Relation(BaseCategory):
     name: Mapped[str] = mapped_column(String)
     src: Mapped[str] = mapped_column(String)
     src_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     trg: Mapped[str] = mapped_column(String)
     trg_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    begins: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=func.now(), nullable=False)
-    ends: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    author: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"))
+
     __table_args__ = (
-        Index('name_src_idx', 'code', 'src', 'trg', 'src_id'),
-        Index('name_trg_idx', 'code', 'src', 'trg', 'trg_id'),
+        Index('name_src_idx', 'category', 'code', 'src', 'trg', 'src_id'),
+        Index('name_trg_idx', 'category', 'code', 'src', 'trg', 'trg_id'),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; name={self.name}; \
-                src={self.src}; src_id={self.src_id}; trg={self.trg}; trg_id={self.trg_id}'
 
-
-class Person(Base):
-    name_first: Mapped[str] = mapped_column(String, nullable=False)
-    name_last: Mapped[str] = mapped_column(String, nullable=False)
-    name_third: Mapped[str] = mapped_column(String, nullable=True)
-    sex: Mapped[bool] = mapped_column(Boolean)
-    birthdate: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    birth_place: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("place.id"))
-    __table_args__ = (
-        Index('person_idx', 'name_first', 'name_last', 'name_third', 'sex', 'birthdate', 'birth_place'),
-    )
-
-    def __repr__(self):
-        return f'id={self.id}; name={self.name_last} {self.name_first} {self.name_third}; birth={self.birthdate}'
-
-
-class Company(Base):
+class Company(BaseCategory):
     name: Mapped[str] = mapped_column(String)
     country: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("country.id"))
-    code: Mapped[str] = mapped_column(String, index=True)
-    begins: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    ends: Mapped[datetime.date] = mapped_column(Date, nullable=True)
-    author: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"))
+    registered: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    closed: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+
     __table_args__ = (
-        Index('company_nane_idx', 'country', 'code', 'name'),
+        Index('company_nane_idx', 'category', 'country', 'code', 'name'),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; name={self.name}; country={self.country}; code={self.code}'
 
-
-class Property(Base):
-    table: Mapped[str] = mapped_column(String)
-    object: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    code: Mapped[str] = mapped_column(String)
+class Property(BaseCategory, CrossTable):
     name: Mapped[str] = mapped_column(String)
-    value: Mapped[str] = mapped_column(String)
-    value_int: Mapped[int] = mapped_column(Integer)
-    value_dec: Mapped[float] = mapped_column(Numeric)
-    value_dt: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
-    begins: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=func.now(), nullable=False)
-    ends: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    author: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"))
+    value: Mapped[str | None] = mapped_column(String, nullable=True)
+    value_int: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    value_dec: Mapped[float | None] = mapped_column(Numeric, nullable=True)
+    value_dt: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     __table_args__ = (
-        Index('obj_idx', 'table', 'code', 'object'),
-        Index('val_idx', 'table', 'code', 'value'),
-        Index('val_int_idx', 'table', 'code', 'value_int'),
-        Index('val_dec_idx', 'table', 'code', 'value_dec'),
-        Index('val_dt_idx', 'table', 'code', 'value_dt'),
+        Index('obj_idx', 'table', 'category', 'code', 'object'),
+        Index('val_idx', 'table', 'category', 'code', 'value'),
+        Index('val_int_idx', 'table', 'category', 'code', 'value_int'),
+        Index('val_dec_idx', 'table', 'category', 'code', 'value_dec'),
+        Index('val_dt_idx', 'table', 'category', 'code', 'value_dt'),
+        CheckConstraint('NOT(value IS NULL AND value_int IS NULL AND value_dec IS NULL AND value_dt IS NULL)'),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; table={self.table}; name={self.name}; object={self.object}; \
-                value={self.value | self.value_int | self.value_dec | self.value_dt}'
 
-
-class Address(Base):
+class Address(BaseCategory):
     country: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("country.id"))
     region: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("place.id"))
     place: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("place.id"))
-    postcode: Mapped[str] = mapped_column(String)
-    street: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    postcode: Mapped[str] = mapped_column(String, nullable=True)
+    position: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     building: Mapped[str] = mapped_column(String)
-    apartment: Mapped[str] = mapped_column(String)
-    begins: Mapped[datetime.date] = mapped_column(Date, default=func.current_date(), nullable=False)
-    ends: Mapped[datetime.date] = mapped_column(Date, nullable=True)
-    author: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"))
+    apartment: Mapped[str | None] = mapped_column(String, nullable=True)
+
     __table_args__ = (
-        Index('address_idx', 'country', 'region', 'place', 'postcode', 'street'),
+        Index('address_idx', 'country', 'region', 'place', 'postcode', 'position'),
     )
 
-    def __repr__(self):
-        return f'id={self.id}'
 
-
-class Country(Base):
+class Country(Base, Description):
     iso2: Mapped[str] = mapped_column(String, index=True, unique=True)
     iso3: Mapped[str] = mapped_column(String, index=True, unique=True)
-    m49: Mapped[int] = mapped_column(SMALLINT, index=True, unique=True)
+    m49: Mapped[int] = mapped_column(SMALLINT, index=True, nullable=True)
     name: Mapped[str] = mapped_column(String, index=True)
-    description: Mapped[str | None] = mapped_column(String, nullable=True)
-    begins: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=func.now())
-    ends: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    author: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"))
-
-    def __repr__(self):
-        return f'id={self.id}; iso2={self.iso2}; iso3={self.iso3}; name={self.name}'
+    user: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"))
 
 
-class CountryFlag(Base):
-    country: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("country.id"))
-    code: Mapped[str] = mapped_column(String, index=True)
+class Picture(BaseCategory, CrossTable, Description):
     picture: Mapped[bytes] = mapped_column(BYTEA)
-    begins: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=func.now())
-    ends: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    author: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"))
-
-    def __repr__(self):
-        return f'id={self.id}; country={self.country}; code={self.code}'
 
 
-class Currency(Base):
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"), nullable=False)
-    code = Column(String, index=True, nullable=False)
-    num = Column(SMALLINT, index=True, nullable=False)
-    adjective = Column(String)
-    name = Column(String)
-    name_plural = Column(String)
-    name_minor = Column(String)
-    name_minor_plural = Column(String)
-    symbol = Column(String)
-    symbol_native = Column(String)
-    decimals = Column(Integer)
-    rounding = Column(Numeric)
-    description = Column(String, nullable=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
+class Currency(BaseCategory, Description):
+    __unique_index__: bool = True
+
+    num: Mapped[int] = mapped_column(SMALLINT, index=True, nullable=False)
+    adjective: Mapped[str] = mapped_column(String)
+    name: Mapped[str] = mapped_column(String)
+    name_plural: Mapped[str] = mapped_column(String)
+    name_minor: Mapped[str] = mapped_column(String)
+    name_minor_plural: Mapped[str] = mapped_column(String)
+    symbol: Mapped[str] = mapped_column(String)
+    symbol_native: Mapped[str] = mapped_column(String)
+    decimals: Mapped[int] = mapped_column(Integer)
+    rounding: Mapped[float] = mapped_column(Numeric)
+
     __table_args__ = (
-        Index('currency_idx', 'category', 'code', unique=True),
-        Index('currency_idx', 'category', 'num'),
+        Index('currency_num_idx', 'category', 'num'),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; category={self.category}; code={self.code}; name={self.name}'
 
+class Account(BaseCategory, CrossTable, Description):
+    currency: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("currency.id"))
+    name: Mapped[str] = mapped_column(String)
 
-class Account(Base):
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String, index=True)
-    currency = Column(UUID(as_uuid=True), ForeignKey("currency.id"))
-    issuer = Column(UUID(as_uuid=True), index=True)
-    issuer_table = Column(String)
-    name = Column(String)
-    description = Column(String, nullable=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
-        Index('account_idx', 'category', 'code'),
-        Index('account_issuer_idx', 'category', 'code', 'currency', 'issuer_table', 'issuer'),
+        Index('account_issuer_idx', 'category', 'code', 'currency', 'table', 'object', unique=True),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; category={self.category}; code={self.code}; name={self.name}'
 
+class Message(BaseCategory):
+    name: Mapped[str] = mapped_column(String)
+    receiver: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"))
+    title: Mapped[str] = mapped_column(String)
+    content: Mapped[str] = mapped_column(String)
 
-class Message(Base):
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String, index=True)
-    name = Column(String)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
-    receiver = Column(UUID(as_uuid=True), ForeignKey("user.id"))
-    description = Column(String, nullable=True)
-    content = Column(String, nullable=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        Index('message_idx', 'category', 'code', 'author', 'receiver', 'begins'),
-        Index('message_sender_idx', 'category', 'code', 'author', 'begins'),
+        Index('message_idx', 'category', 'code', 'user', 'receiver', 'begins'),
+        Index('message_sender_idx', 'category', 'code', 'user', 'begins'),
         Index('message_receiver_idx', 'category', 'code', 'receiver', 'begins'),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; code={self.code}; name={self.name}; sender={self.author}; receiver={self.receiver}'
 
+class Operation(BaseCategory, Description):
+    number: Mapped[str] = mapped_column(String)
+    debit: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("account.id"))
+    credit: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("account.id"))
+    amount: Mapped[float] = mapped_column(Numeric)
 
-class Operation(Base):
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String, index=True)
-    number = Column(String)
-    debit = Column(UUID(as_uuid=True), ForeignKey("account.id"))
-    credit = Column(UUID(as_uuid=True), ForeignKey("account.id"))
-    amount = Column(Numeric)
-    description = Column(String, nullable=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('operation_idx', 'category', 'code', 'debit', 'credit', 'begins'),
         Index('operation_db_idx', 'category', 'code', 'debit', 'number', 'begins'),
         Index('operation_cr_idx', 'category', 'code', 'credit', 'number', 'begins'),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; code={self.code}; debit={self.debit}; credit={self.credit}; amount={self.amount}'
 
+class Data(BaseCategory, CrossTable, Description):
+    name: Mapped[str] = mapped_column(String)
+    hash: Mapped[str] = mapped_column(String)
+    algorithm: Mapped[str] = mapped_column(String)
+    content: Mapped[bytes] = mapped_column(BYTEA)
 
-class Data(Base):
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String, index=True)
-    table = Column(String)
-    object = Column(UUID(as_uuid=True), nullable=False)
-    name = Column(String)
-    hash = Column(String)
-    algorithm = Column(String)
-    content = Column(BYTEA)
-    description = Column(String, nullable=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
         Index('data_idx', 'category', 'code', 'table', 'object', 'algorithm', 'hash'),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; table={self.table}; object={self.object}; code={self.code}; name={self.name}'
 
+class Document(BaseCategory, CrossTable, Description):
+    country: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("country.id"))
+    name: Mapped[str] = mapped_column(String)
+    series: Mapped[str] = mapped_column(String)
+    number: Mapped[str] = mapped_column(String)
+    issue: Mapped[datetime.date] = mapped_column(Date, default=func.current_date(), nullable=False)
+    expire: Mapped[datetime.date] = mapped_column(Date, nullable=True)
 
-class Document(Base):
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String, index=True)
-    country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
-    name = Column(String)
-    issuer_table = Column(String)
-    issuer = Column(UUID(as_uuid=True), index=True)
-    series = Column(String)
-    number = Column(String)
-    description = Column(String, nullable=True)
-    issue = Column(Date, default=func.current_date(), nullable=False)
-    expire = Column(Date, nullable=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
-        Index('document_idx', 'category', 'code', 'country', 'series', 'number', 'issue', unique=True),
-        Index('document_issuer_idx', 'category', 'code', 'issuer_table', 'issuer'),
+        Index('document_idx', 'category', 'code', 'country', 'series', 'number', 'issue'),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; category={self.category}; code={self.code}; name={self.name}'
 
+class Place(BaseCategory, Description):
+    country: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("country.id"), index=True)
+    name: Mapped[str] = mapped_column(String)
 
-class Place(Base):
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String, index=True)
-    country = Column(UUID(as_uuid=True), ForeignKey("country.id"))
-    name = Column(String)
-    description = Column(String, nullable=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
-        Index('place_idx', 'category', 'code', 'country'),
-        Index('place_name_idx', 'category', 'code', 'country', 'name'),
+        Index('place_name_idx', 'country', 'name'),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; category={self.category}; code={self.code}; country={self.country}; \
-                name={self.name}'
 
+class Person(Base):
+    name_first: Mapped[str] = mapped_column(String, nullable=False)
+    name_last: Mapped[str] = mapped_column(String, nullable=False)
+    name_third: Mapped[str | None] = mapped_column(String, nullable=True)
+    sex: Mapped[bool] = mapped_column(Boolean)
+    birthdate: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    birth_place: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("place.id"))
 
-class Rate(Base):
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String, index=True)
-    table = Column(String, index=True)
-    object = Column(UUID(as_uuid=True))
-    name = Column(String)
-    value = Column(Numeric)
-    description = Column(String, nullable=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
     __table_args__ = (
-        Index('rate_idx', 'category', 'code', 'table', 'object'),
+        Index(
+            'person_idx', 'name_first', 'name_last', 'name_third', 'sex', 'birthdate', 'birth_place'
+        ),
     )
 
-    def __repr__(self):
-        return f'id={self.id}; category={self.category}; code={self.code}; table={self.table}; object={self.object}; \
-            name={self.name}'
+
+class Rate(BaseCategory, CrossTable, Description):
+    name: Mapped[str] = mapped_column(String)
+    value: Mapped[float] = mapped_column(Numeric)
 
 
-class Language(Base):
-    iso2 = Column(String, index=True, unique=True)
-    name = Column(String, index=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
-
-    def __repr__(self):
-        return f'id={self.id}; iso2={self.iso2}; name={self.name}'
+class Position(Base):
+    rate: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("rate.id"), index=True)
+    value: Mapped[float] = mapped_column(Numeric)
 
 
-class Translation(Base):
-    table = Column(String)
-    object = Column(UUID(as_uuid=True), nullable=False)
-    language = Column(UUID(as_uuid=True), ForeignKey("language.id"))
-    text = Column(String)
-    description = Column(String)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
-    __table_args__ = (
-        Index('translation_idx', 'table', 'object', 'language'),
-    )
-
-    def __repr__(self):
-        return f'id={self.id}; table={self.table}; object={self.object} language={self.language}'
+class Language(BaseCategory):
+    iso: Mapped[str] = mapped_column(String, index=True)
+    name: Mapped[str] = mapped_column(String, index=True)
 
 
-class Access(Base):
-    table = Column(String, index=True)
-    category = Column(UUID(as_uuid=True), ForeignKey("category.id"))
-    code = Column(String, index=True)
-    object = Column(UUID(as_uuid=True), index=True)
-    begins = Column(DateTime(timezone=True), default=func.now())
-    ends = Column(DateTime(timezone=True), nullable=True)
-    author = Column(UUID(as_uuid=True), ForeignKey("user.id"))
-    __table_args__ = (
-        Index('access_idx', 'table', 'category', 'code'),
-    )
+class Translation(CrossTable):
+    language: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("language.id"), index=True)
+    text: Mapped[str] = mapped_column(String)
 
-    def __repr__(self):
-        return f'id={self.id}; table={self.table}; category={self.category}; code={self.code}; object={self.object}'
+
+class Access(BaseCategory, CrossTable):
+    ...
