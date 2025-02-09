@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     jwt_secret: str = ''
     jwt_expires_s: int = 3600
     sql_echo: bool = True
+    api_prefix: str = '/api/v1'
 
 
 settings = Settings()
