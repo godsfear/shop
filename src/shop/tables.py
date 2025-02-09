@@ -2,15 +2,26 @@ import datetime
 import uuid
 
 from typing import List
-from sqlalchemy import String, ForeignKey, DateTime, Date, Index, Integer, Numeric, Boolean, CheckConstraint
+from sqlalchemy import String, ForeignKey, DateTime, Date, Index, Integer, Numeric, Boolean, CheckConstraint, MetaData
 from sqlalchemy.dialects.postgresql import UUID, BYTEA, SMALLINT, ARRAY
 from sqlalchemy.orm import DeclarativeBase, declared_attr, Mapped, mapped_column
 from sqlalchemy.sql import func
 
 
+metadata = MetaData(naming_convention={
+    "ix": "ix_%(table_name)s_%(column_0_name)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s"
+})
+
 class Base(DeclarativeBase):
     __abstract__: bool = True
 
+    metadata = metadata
+
+    # noinspection PyMethodParameters
     @declared_attr.directive
     def __tablename__(cls) -> str:
         return cls.__name__.lower()
@@ -35,6 +46,7 @@ class BaseCategory(Base):
     code: Mapped[str] = mapped_column(String)
     user: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("user.id"), index=True)
 
+    # noinspection PyMethodParameters
     @declared_attr.directive
     def __table_args__(cls) -> tuple[Index]:
         return (
@@ -50,11 +62,12 @@ class CrossTable(Base):
     __abstract__: bool = True
 
     table: Mapped[str] = mapped_column(String)
-    object: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    objectid: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
 
+    # noinspection PyMethodParameters
     @declared_attr.directive
     def __table_args__(cls) -> tuple[Index]:
-        return (Index(f"{cls.__name__.lower()}_table_object_idx", 'table', 'object'),)
+        return (Index(f"{cls.__name__.lower()}_table_objectid_idx", 'table', 'objectid'),)
 
 
 class Description:
@@ -65,7 +78,7 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String, index=True, unique=True, nullable=True)
     phone: Mapped[str | None] = mapped_column(String, index=True, unique=True, nullable=True)
     password: Mapped[str] = mapped_column(String)
-    person: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("person.id"))
+    person: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("person.id"), index=True)
     validated: Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (
@@ -74,7 +87,7 @@ class User(Base):
 
 
 class Category(Base, Description):
-    category: Mapped[uuid.UUID] = mapped_column(String)
+    category: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     code: Mapped[str] = mapped_column(String)
     name: Mapped[str] = mapped_column(String)
     value: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -103,7 +116,7 @@ class State(BaseCategory, CrossTable, Description):
 
     __table_args__ = (
         Index('state_idx', 'category', 'code', 'state'),
-        Index('state_object_idx', 'table', 'object', 'category', 'code', 'state', unique=True),
+        Index('state_objectid_idx', 'table', 'objectid', 'category', 'code', 'state', unique=True),
     )
 
 
@@ -127,7 +140,7 @@ class Company(BaseCategory):
     closed: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
 
     __table_args__ = (
-        Index('company_nane_idx', 'category', 'country', 'code', 'name'),
+        Index('company_name_idx', 'category', 'country', 'code', 'name'),
     )
 
 
@@ -139,7 +152,7 @@ class Property(BaseCategory, CrossTable):
     value_dt: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        Index('obj_idx', 'table', 'category', 'code', 'object'),
+        Index('obj_idx', 'table', 'category', 'code', 'objectid'),
         Index('val_idx', 'table', 'category', 'code', 'value'),
         Index('val_int_idx', 'table', 'category', 'code', 'value_int'),
         Index('val_dec_idx', 'table', 'category', 'code', 'value_dec'),
@@ -198,7 +211,7 @@ class Account(BaseCategory, CrossTable, Description):
     name: Mapped[str] = mapped_column(String)
 
     __table_args__ = (
-        Index('account_issuer_idx', 'category', 'code', 'currency', 'table', 'object', unique=True),
+        Index('account_issuer_idx', 'category', 'code', 'currency', 'table', 'objectid', unique=True),
     )
 
 
@@ -235,7 +248,7 @@ class Data(BaseCategory, CrossTable, Description):
     content: Mapped[bytes] = mapped_column(BYTEA)
 
     __table_args__ = (
-        Index('data_idx', 'category', 'code', 'table', 'object', 'algorithm', 'hash'),
+        Index('data_idx', 'category', 'code', 'table', 'objectid', 'algorithm', 'hash'),
     )
 
 

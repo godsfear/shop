@@ -9,9 +9,9 @@ from .currency import router as currency_router
 from .company import router as company_router
 from .country import router as country_router
 from .place import router as place_router
+from ..settings import settings
 
-
-router = APIRouter(prefix='/api/v1')
+router = APIRouter(prefix=settings.api_prefix, tags=['api'])
 router.include_router(auth_router)
 router.include_router(entity_router)
 router.include_router(user_router)
