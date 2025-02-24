@@ -58,7 +58,7 @@ class UserService:
                 user = res.fetchone()
                 if not user:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        return user
+        return user[0]
 
     """async def receive_notify(self, user_data: tables.User) -> tables.User:
         async with self.session as db:
@@ -95,7 +95,7 @@ class UserService:
                 entity = res.fetchone()
                 if not entity:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        return entity
+        return entity[0]
 
     async def register_new_user(self, user_data: UserCreate) -> Token:
         user = await self.create(user_data)
