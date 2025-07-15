@@ -2,6 +2,9 @@ from geoalchemy2 import Geography
 import datetime
 import uuid6
 
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID, BYTEA, SMALLINT, ARRAY, JSONB
+from sqlalchemy.orm import DeclarativeBase, declared_attr, Mapped, mapped_column
+from sqlalchemy.sql import func
 from sqlalchemy import (String,
                         ForeignKey,
                         DateTime,
@@ -10,13 +13,7 @@ from sqlalchemy import (String,
                         Integer,
                         Numeric,
                         Boolean,
-                        CheckConstraint,
-                        MetaData,
-                        or_)
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, BYTEA, SMALLINT, ARRAY, JSONB
-from sqlalchemy.orm import DeclarativeBase, declared_attr, Mapped, mapped_column
-from sqlalchemy.sql import func
-
+                        MetaData)
 
 UUID_TYPE = PG_UUID(as_uuid=True)
 
@@ -94,21 +91,20 @@ class DescriptionMixin:
 
 
 class User(Base):
-    email: Mapped[str | None] = mapped_column(String, index=True, unique=True, nullable=True)
-    phone: Mapped[str | None] = mapped_column(String, index=True, unique=True, nullable=True)
+    contact: Mapped[dict] = mapped_column(JSONB)
     password_hash: Mapped[str] = mapped_column(String)
     person: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("person.id"), index=True)
     validated: Mapped[bool] = mapped_column(Boolean, default=False)
     public_key: Mapped[str] = mapped_column(String)
 
-    __table_args__ = (
-        CheckConstraint(or_(email.is_not(None), phone.is_not(None))),
+    __table_args__ = ( # type: ignore
+        Index('ix_user_contact', 'contact', postgresql_using='gin'),
     )
 
 
 class Category(BaseCategory, DescriptionMixin):
     value: Mapped[dict] = mapped_column(JSONB, nullable=True)
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_category_value','category', 'code', 'value', postgresql_using='gin'),
     )
 
@@ -127,7 +123,7 @@ class State(BaseCategory, CrossTable, DescriptionMixin):
     proc_in: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("procedure.id"), nullable=True)
     proc_out: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("procedure.id"), nullable=True)
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_state_main', 'category', 'code', 'table', 'objectid'),
     )
 
@@ -136,7 +132,7 @@ class Relation(BaseCategory, CrossTable, DescriptionMixin):
     related_table: Mapped[str] = mapped_column(String, nullable=False)
     related_id: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, nullable=False)
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_name_src', 'category', 'code', 'table', 'objectid', 'related_table'),
         Index('ix_name_trg', 'category', 'code', 'table', 'related_table', 'related_id'),
     )
@@ -147,7 +143,7 @@ class Company(BaseCategory):
     registered: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     closed: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_company_name', 'category', 'country', 'code', 'name'),
     )
 
@@ -155,7 +151,7 @@ class Company(BaseCategory):
 class Property(BaseCategory, CrossTable, DescriptionMixin):
     value: Mapped[dict] = mapped_column(JSONB, nullable=False)
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_property_main',
               'table', 'category', 'code', 'objectid'
         ),
@@ -175,7 +171,7 @@ class Address(BaseCategory, CrossTable, DescriptionMixin):
     postcode: Mapped[str] = mapped_column(String, nullable=True)
     geo: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("GEO.id"))
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_address', 'country', 'region', 'place', 'postcode', 'position'),
     )
 
@@ -209,7 +205,7 @@ class Currency(BaseCategory, DescriptionMixin):
     decimals: Mapped[int] = mapped_column(Integer)
     rounding: Mapped[float] = mapped_column(Numeric)
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('uq_currency_code', 'category', 'code', unique=True),
         Index('uq_currency_num', 'category', 'num', unique=True),
     )
@@ -218,7 +214,7 @@ class Currency(BaseCategory, DescriptionMixin):
 class Account(BaseCategory, CrossTable, DescriptionMixin):
     currency: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("currency.id"))
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('uq_account_issuer', 'category', 'code', 'currency', 'table', 'objectid', unique=True),
     )
 
@@ -233,7 +229,7 @@ class Message(BaseCategory):
     title: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(String)
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_message', 'category', 'code', 'creator', 'receiver', 'begins'),
         Index('ix_message_sender', 'category', 'code', 'creator', 'begins'),
         Index('ix_message_receiver', 'category', 'code', 'receiver', 'begins'),
@@ -246,7 +242,7 @@ class Operation(BaseCategory, DescriptionMixin):
     credit: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("account.id"))
     amount: Mapped[float] = mapped_column(Numeric)
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_operation', 'category', 'code', 'debit', 'credit', 'begins'),
         Index('ix_operation_db', 'category', 'code', 'debit', 'number', 'begins'),
         Index('ix_operation_cr', 'category', 'code', 'credit', 'number', 'begins'),
@@ -259,7 +255,7 @@ class Data(BaseCategory, CrossTable, DescriptionMixin):
     algorithm: Mapped[str] = mapped_column(String)
     content: Mapped[bytes] = mapped_column(BYTEA)
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_data', 'category', 'code', 'table', 'objectid', 'algorithm', 'hash'),
     )
 
@@ -272,7 +268,7 @@ class Document(BaseCategory, CrossTable, DescriptionMixin):
     expire: Mapped[datetime.date] = mapped_column(Date, nullable=True)
     content: Mapped[str] = mapped_column(String)
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_document', 'category', 'code', 'country', 'series', 'number', 'issue'),
     )
 
@@ -280,7 +276,7 @@ class Document(BaseCategory, CrossTable, DescriptionMixin):
 class Place(BaseCategory, DescriptionMixin):
     country: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("country.id"), index=True)
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_place_name', 'country', 'name'),
     )
 
@@ -292,7 +288,7 @@ class Person(Base):
     birth_place: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("place.id"))
     sensitive: Mapped[list[str]] = mapped_column(ARRAY(String),nullable=True)
 
-    __table_args__ = (
+    __table_args__ = ( # type: ignore
         Index('ix_person',
               'name', 'sex', 'birthdate', 'birth_place', postgresql_using='gin')
     )
