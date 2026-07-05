@@ -10,6 +10,7 @@ venv/
 
 graphify-out/
 certs/
+keyservice/
 
 .idea/
 

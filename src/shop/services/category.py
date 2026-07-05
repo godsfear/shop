@@ -1,77 +1,45 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
+
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
 
 from ..database import db_helper
 from .. import tables
-from ..models.category import CategoryCreate, CategoryUpdate, CategoryBase
+from ..models.category import CategoryCreate, CategoryUpdate, CategoryFilter
 
 
 class CategoryService:
     def __init__(self, session: AsyncSession = Depends(db_helper.scoped_session_dependency)):
         self.session = session
 
-    async def get_by_category(self, category_data: CategoryBase) -> List[tables.Category]:
+    async def find(self, flt: CategoryFilter) -> List[tables.Category]:
+        conditions = []
+        if flt.category is not None:
+            conditions.append(tables.Category.category == flt.category)
+        if flt.code is not None:
+            conditions.append(tables.Category.code == flt.code)
+        if not conditions:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Пустой фильтр')
         async with self.session as db:
             async with db.begin():
-                query = (
-                    select(tables.Category).
-                    where(
-                        and_(
-                            tables.Category.category == category_data.category,
-                        )
-                    )
-                )
-                res = await db.execute(query)
+                res = await db.execute(select(tables.Category).where(and_(*conditions)))
                 category = res.scalars().all()
-        return category
-
-    async def get_by_code(self, category_data: CategoryBase) -> List[tables.Category]:
-        async with self.session as db:
-            async with db.begin():
-                query = (
-                    select(tables.Category).
-                    where(
-                        and_(
-                            tables.Category.code == category_data.code,
-                        )
-                    )
-                )
-                res = await db.execute(query)
-                category = res.scalars().all()
-        return category
-
-    async def get_by_category_code(self, category_data: CategoryBase) -> List[tables.Category]:
-        async with self.session as db:
-            async with db.begin():
-                query = (
-                    select(tables.Category).
-                    where(
-                        and_(
-                            tables.Category.category == category_data.category,
-                            tables.Category.code == category_data.code
-                        )
-                    )
-                )
-                res = await db.execute(query)
-                category = res.scalars().all()
-        return category
+        return list(category)
 
     async def get_by_id(self, category_id: uuid.UUID) -> tables.Category:
         async with self.session as db:
             async with db.begin():
-                query = select(tables.Category).where(tables.Category.id == category_id)
-                res = await db.execute(query)
-                category = res.fetchone()
-        if not category:
+                res = await db.execute(select(tables.Category).where(tables.Category.id == category_id))
+                category = res.scalar_one_or_none()
+        if category is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        return category[0]
+        return category
 
     async def create(self, category_data: CategoryCreate) -> tables.Category:
-        category = tables.Category(**category_data.dict())
+        category = tables.Category(**category_data.model_dump())
         async with self.session as db:
             async with db.begin():
                 db.add(category)
@@ -79,17 +47,20 @@ class CategoryService:
         return category
 
     async def update(self, category_id: uuid.UUID, category_data: CategoryUpdate) -> tables.Category:
+        values = category_data.model_dump(exclude_unset=True)
+        if not values:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Нет полей для обновления')
         async with self.session as db:
             async with db.begin():
                 query = (
                     update(tables.Category)
                     .where(tables.Category.id == category_id)
-                    .values(**category_data.dict())
+                    .values(**values)
                     .returning(tables.Category)
                 )
                 res = await db.execute(query)
-                category = res.fetchone()
-                if not category:
+                category = res.scalar_one_or_none()
+                if category is None:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return category
 
@@ -99,11 +70,11 @@ class CategoryService:
                 query = (
                     update(tables.Category)
                     .where(tables.Category.id == category_id)
-                    .values(ends=datetime.utcnow())
+                    .values(ends=datetime.now(timezone.utc))
                     .returning(tables.Category)
                 )
                 res = await db.execute(query)
-                category = res.fetchone()
-                if not category:
+                category = res.scalar_one_or_none()
+                if category is None:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return category

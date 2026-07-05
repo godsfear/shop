@@ -1,6 +1,10 @@
 import logging.config
 import logging.handlers
+from pathlib import Path
 
+# лог живёт рядом с пакетом независимо от рабочей директории запуска
+LOG_DIR = Path(__file__).resolve().parent / "logs"
+LOG_DIR.mkdir(exist_ok=True)
 
 logger = logging.getLogger("log")
 
@@ -13,7 +17,7 @@ logging_config = {
             "datefmt": "%Y-%m-%dT%H:%M:%S%z"
         },
         "json": {
-            "()": "jsonlogger.JSONFormatter",
+            "()": "shop.jsonlogger.JSONFormatter",
             "fmt_keys": {
                 "level": "levelname",
                 "message": "message",
@@ -35,7 +39,7 @@ logging_config = {
         "file": {
             "class": "logging.handlers.TimedRotatingFileHandler",
             "formatter": "json",
-            "filename": "logs/shop.log",
+            "filename": str(LOG_DIR / "shop.log"),
             "when": "D",
             "interval": 1,
         }

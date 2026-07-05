@@ -1,13 +1,14 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Annotated
+
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_, func
 
 from shop.database import db_helper
 from shop.tables import Country
-from shop.models import CountryCreate, CountryUpdate, CountryGet
+from shop.models import CountryCreate, CountryUpdate, CountryFilter
 
 
 class CountryService:
@@ -15,29 +16,32 @@ class CountryService:
         self.session = session
 
     async def get_all(self) -> List[Country]:
-        query = select(Country)
-        res = await self.session.execute(query)
-        country = res.scalars().all()
-        return list(country)
+        res = await self.session.execute(select(Country))
+        return list(res.scalars().all())
 
-    async def get_by_code(self, country_data: CountryGet) -> Country | None:
-        query = None
-        if country_data.iso3:
-            query = (select(Country).where(func.lower(Country.iso3) == country_data.iso3.lower()))
-        elif country_data.iso2:
-            query = (select(Country).where(func.lower(Country.iso2) == country_data.iso2.lower()))
-        elif country_data.m49:
-            query = (select(Country).where(Country.m49 == country_data.m49))
-        elif country_data.name:
-            query = (select(Country).where(func.lower(Country.name) == country_data.name.lower()))
-        res = await self.session.execute(query)
-        country = res.scalar_one()
+    async def find(self, flt: CountryFilter) -> Country:
+        conditions = []
+        if flt.iso2 is not None:
+            conditions.append(func.lower(Country.iso2) == flt.iso2.lower())
+        if flt.iso3 is not None:
+            conditions.append(func.lower(Country.iso3) == flt.iso3.lower())
+        if flt.m49 is not None:
+            conditions.append(Country.m49 == flt.m49)
+        if flt.name is not None:
+            conditions.append(func.lower(Country.name) == flt.name.lower())
+        if not conditions:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Пустой фильтр')
+        res = await self.session.execute(select(Country).where(and_(*conditions)))
+        country = res.scalar_one_or_none()
+        if country is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return country
 
-    async def get_by_id(self, country_id: uuid.UUID) -> Country | None:
-        query = select(Country).where(Country.id == country_id)
-        res = await self.session.execute(query)
-        country = res.scalar_one()
+    async def get_by_id(self, country_id: uuid.UUID) -> Country:
+        res = await self.session.execute(select(Country).where(Country.id == country_id))
+        country = res.scalar_one_or_none()
+        if country is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return country
 
     async def create(self, country_data: CountryCreate) -> Country:
@@ -47,23 +51,32 @@ class CountryService:
         return country
 
     async def update(self, country_id: uuid.UUID, country_data: CountryUpdate) -> Country:
+        values = country_data.model_dump(exclude_unset=True)
+        if not values:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Нет полей для обновления')
         query = (
             update(Country)
             .where(Country.id == country_id)
-            .values(**country_data.model_dump(exclude_unset=True))
+            .values(**values)
             .returning(Country)
         )
-        country = await self.session.execute(query)
+        res = await self.session.execute(query)
         await self.session.commit()
-        return country.scalar_one()
+        country = res.scalar_one_or_none()
+        if country is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        return country
 
     async def expire(self, country_id: uuid.UUID) -> Country:
         query = (
             update(Country)
             .where(Country.id == country_id)
-            .values(ends=datetime.utcnow())
+            .values(ends=datetime.now(timezone.utc))
             .returning(Country)
         )
-        country = await self.session.execute(query)
+        res = await self.session.execute(query)
         await self.session.commit()
-        return country.scalar_one()
+        country = res.scalar_one_or_none()
+        if country is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        return country

@@ -1,34 +1,52 @@
-import datetime
 import uuid
-from pydantic import BaseModel, ConfigDict
+from decimal import Decimal
+
+from pydantic import BaseModel
+
+from .base import CreatorMixin, ReadMixin
 
 
 class CurrencyBase(BaseModel):
     category: uuid.UUID
-
-
-class CurrencyUpdate(CurrencyBase):
     code: str
+    name: str
     num: int | None = None
+    adjective: str
+    name_plural: str
+    name_minor: str
+    name_minor_plural: str
+    symbol: str
+    symbol_native: str
+    decimals: int = 2
+    rounding: Decimal = Decimal("0")
+    description: str | None = None
+
+
+class CurrencyCreate(CurrencyBase):
+    pass
+
+
+class CurrencyUpdate(BaseModel):
+    category: uuid.UUID | None = None
+    code: str | None = None
     name: str | None = None
+    num: int | None = None
+    adjective: str | None = None
     name_plural: str | None = None
     name_minor: str | None = None
     name_minor_plural: str | None = None
-    adjective: str | None = None
     symbol: str | None = None
     symbol_native: str | None = None
     decimals: int | None = None
-    rounding: float | None = None
+    rounding: Decimal | None = None
     description: str | None = None
-    ends: datetime.datetime | None = None
-    author: uuid.UUID | None = None
 
 
-class Currency(CurrencyUpdate):
-    model_config = ConfigDict(from_attributes=True)
-    id: uuid.UUID
-    begins: datetime.datetime
+class CurrencyFilter(BaseModel):
+    category: uuid.UUID | None = None
+    code: str | None = None
+    num: int | None = None
 
 
-class CurrencyCreate(CurrencyUpdate):
+class Currency(CurrencyBase, ReadMixin, CreatorMixin):
     pass

@@ -1,8 +1,9 @@
 import uuid
-from fastapi import APIRouter, Depends
 from typing import List
 
-from ..models.user import User, UserCreate, UserUpdate, UserBase
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from ..models.user import Contact, User, UserCreate, UserUpdate
 from ..services.user import UserService
 from ..services.auth import AuthService
 
@@ -10,41 +11,39 @@ router = APIRouter(prefix='/user', tags=['user'])
 
 
 @router.get('/all', response_model=List[User])
-async def get_user(service: UserService = Depends(), user: User = Depends(AuthService.get_current_user)):
-    if user:
-        user = await service.get_all()
-        return user
+async def get_users(service: UserService = Depends(),
+                    user: User = Depends(AuthService.get_current_user)):
+    return await service.get_all()
+
+
+@router.post('/find', response_model=User)
+async def find_user_by_contact(contact: Contact, service: UserService = Depends(),
+                               user: User = Depends(AuthService.get_current_user)):
+    prop = contact.email or contact.phone
+    if not prop:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Нужен email или phone')
+    found = await service.get_by_contact(prop)
+    if found is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return found
 
 
 @router.get('/{user_id}', response_model=User)
-async def get_user_by_id(
-                            user_id: uuid.UUID, service: UserService = Depends(),
-                            user: User = Depends(AuthService.get_current_user)
-                         ):
-    if user:
-        user = await service.get_by_id(user_id)
-        return user
+async def get_user_by_id(user_id: uuid.UUID, service: UserService = Depends(),
+                         user: User = Depends(AuthService.get_current_user)):
+    return await service.get_by_id(user_id)
 
 
-@router.post('/signup', response_model=User)
+@router.post('/', response_model=User, status_code=status.HTTP_201_CREATED)
 async def create_user(user_data: UserCreate, service: UserService = Depends()):
-    user = await service.create(user_data)
-    return user
+    return await service.create(user_data)
 
 
-@router.post('/name', response_model=List[User])
-async def get_user_by_name(user_data: UserBase, service: UserService = Depends()):
-    user = await service.get_by_prop(user_data.email if user_data.email else user_data.phone)
-    return user
-
-
-@router.put('/{user_id}', response_model=User)
+@router.patch('/{user_id}', response_model=User)
 async def update_user(user_id: uuid.UUID, user_data: UserUpdate, service: UserService = Depends()):
-    user = await service.update(user_id, user_data)
-    return user
+    return await service.update(user_id, user_data)
 
 
 @router.delete('/{user_id}', response_model=User)
 async def delete_user(user_id: uuid.UUID, service: UserService = Depends()):
-    user = await service.expire(user_id)
-    return user
+    return await service.expire(user_id)

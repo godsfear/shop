@@ -1,37 +1,31 @@
-import datetime
 import uuid
-from pydantic import BaseModel, ConfigDict
+
+from pydantic import BaseModel, Field
+
+from .base import ReadMixin
+
+
+class Contact(BaseModel):
+    """Контакты пользователя; хранятся в JSONB-поле user.contact."""
+    email: str | None = None
+    phone: str | None = None
 
 
 class UserBase(BaseModel):
-    person_id: uuid.UUID
+    person: uuid.UUID
+    contact: Contact
 
 
 class UserCreate(UserBase):
-    email: str | None = None
-    phone: str | None = None
-    password: str
+    password: str = Field(min_length=8)
+    public_key: str = ''
 
 
-class UserUpdate(UserBase):
-    email: str | None = None
-    phone: str | None = None
-    ends: datetime.datetime | None = None
+class UserUpdate(BaseModel):
+    contact: Contact | None = None
+    password: str | None = Field(default=None, min_length=8)
+    public_key: str | None = None
 
 
-# class UserSave(UserBase):
-#     passhash: str
-#
-#
-# class UserValidate(UserBase):
-#     validated: bool
-#
-#
-# class UserUpdatePass(UserBase):
-#     password: str
-
-
-class User(UserBase):
-    model_config = ConfigDict(from_attributes=True)
-    id: uuid.UUID
-    begins: datetime.datetime
+class User(UserBase, ReadMixin):
+    validated: bool = False

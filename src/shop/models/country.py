@@ -1,33 +1,34 @@
-import datetime
-import uuid
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, Field
+
+from .base import CreatorMixin, ReadMixin
 
 
 class CountryBase(BaseModel):
-    iso2: str
-    iso3: str
-    m49: int
+    iso2: str = Field(min_length=2, max_length=2)
+    iso3: str = Field(min_length=3, max_length=3)
+    m49: int | None = Field(default=None, ge=0, le=999)
     name: str
+    description: str | None = None
 
 
-class CountryGet(CountryBase):
+class CountryCreate(CountryBase):
+    pass
+
+
+class CountryUpdate(BaseModel):
+    iso2: str | None = Field(default=None, min_length=2, max_length=2)
+    iso3: str | None = Field(default=None, min_length=3, max_length=3)
+    m49: int | None = Field(default=None, ge=0, le=999)
+    name: str | None = None
+    description: str | None = None
+
+
+class CountryFilter(BaseModel):
     iso2: str | None = None
     iso3: str | None = None
     m49: int | None = None
     name: str | None = None
 
 
-class CountryUpdate(BaseModel):
-    author: uuid.UUID | None = None
-    description: str | None = None
-    ends: datetime.datetime | None = None
-
-
-class CountryCreate(CountryBase, CountryUpdate):
+class Country(CountryBase, ReadMixin, CreatorMixin):
     pass
-
-
-class Country(CountryCreate):
-    model_config = ConfigDict(from_attributes=True)
-    id: uuid.UUID
-    begins: datetime.datetime
