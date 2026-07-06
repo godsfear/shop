@@ -3,6 +3,7 @@ import uuid
 from pydantic import BaseModel, Field
 
 from .base import ReadMixin
+from .person import PersonCreate
 
 
 class Contact(BaseModel):
@@ -21,6 +22,14 @@ class UserCreate(UserBase):
     public_key: str = ''
 
 
+class SignUp(BaseModel):
+    """Регистрация: персона создаётся вместе с учёткой одной транзакцией."""
+    person: PersonCreate
+    contact: Contact
+    password: str = Field(min_length=8)
+    public_key: str = ''
+
+
 class UserUpdate(BaseModel):
     contact: Contact | None = None
     password: str | None = Field(default=None, min_length=8)
@@ -33,5 +42,4 @@ class UserRoles(BaseModel):
 
 
 class User(UserBase, ReadMixin):
-    validated: bool = False
     roles: list[str] = []

@@ -22,4 +22,4 @@ async def trigger_event(table: str, objectid: uuid.UUID, event: str,
                         service: FSMService = Depends(),
                         payload: TokenPayload = Depends(get_token_payload)):
     """Выполнить переход; context передаётся guard'ам и action'ам."""
-    return await service.trigger(table, objectid, event, creator=payload.sub, **context)
+    return await service.trigger(table, objectid, event, creator=payload.sub, context=context)

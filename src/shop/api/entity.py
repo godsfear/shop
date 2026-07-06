@@ -1,7 +1,7 @@
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from ..models.auth import TokenPayload
 from ..models.entity import Entity, EntityCreate, EntityUpdate, EntityFilter
@@ -12,8 +12,10 @@ router = APIRouter(prefix='/entity', tags=['entity'])
 
 
 @router.get('/all', response_model=List[Entity])
-async def get_entities(service: EntityService = Depends()):
-    return await service.get_all()
+async def get_entities(service: EntityService = Depends(),
+                       limit: int = Query(100, ge=1, le=1000),
+                       offset: int = Query(0, ge=0)):
+    return await service.get_all(limit=limit, offset=offset)
 
 
 @router.post('/find', response_model=List[Entity])

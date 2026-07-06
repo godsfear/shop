@@ -84,7 +84,10 @@ async def _register_failure(session: AsyncSession, row_id, attempts_before: int,
                    ' — помечено мёртвым' if dead else '', error)
     await session.execute(
         update(tables.Outbox)
-        .where(tables.Outbox.id == row_id)
+        .where(tables.Outbox.id == row_id,
+               # после rollback блокировка снята: конкурентный воркер мог уже
+               # успешно обработать событие — не воскрешать его
+               tables.Outbox.processed.is_(None))
         .values(attempts=attempts, error=error,
                 processed=now if dead else None))
     await session.commit()

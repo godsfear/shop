@@ -89,9 +89,16 @@ class FSMService:
         return {'state': machine.state, 'available': machine.available_events()}
 
     async def trigger(self, table: str, objectid: uuid.UUID, event: str,
-                      creator: uuid.UUID | None = None, **context) -> dict:
+                      creator: uuid.UUID | None = None,
+                      context: dict | None = None) -> dict:
         """Переход: закрывает активную строку состояния и пишет новую.
-        Строка объекта блокируется — конкурентные переходы сериализуются."""
+        Строка объекта блокируется — конкурентные переходы сериализуются.
+        context передаётся guard'ам/action'ам; ключи 'event' и 'self'
+        зарезервированы сигнатурой миксина."""
+        context = context or {}
+        if reserved := {'event', 'self'} & set(context):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                detail=f'зарезервированные ключи context: {sorted(reserved)}')
         config = await self._config(table, objectid, lock=True)
         row = await self._current_row(table, objectid)
         machine = self._machine(config, table, objectid, row)
@@ -101,6 +108,9 @@ class FSMService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
         if row is not None:
             row.ends = datetime.now(timezone.utc)
+            # закрыть старое состояние ДО вставки нового: uq_property_active_state
+            # проверяется на каждом statement, а flush упорядочивает INSERT раньше UPDATE
+            await self.session.flush()
         self.session.add(tables.Property(
             table=table, objectid=objectid, code=STATE_CODE,
             value={'state': new_state, 'event': event}, creator=creator))

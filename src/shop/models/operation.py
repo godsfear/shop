@@ -12,16 +12,17 @@ class OperationBase(BaseModel):
     number: str
     debit: uuid.UUID
     credit: uuid.UUID
-    amount: Decimal = Field(gt=0)
+    amount_db: Decimal = Field(gt=0)   # сумма в валюте дебет-счёта
     description: str | None = None
 
 
 class OperationCreate(OperationBase):
-    pass
+    # в одной валюте можно не указывать (= amount_db); для кросс-валютной — обязательна
+    amount_cr: Decimal | None = Field(default=None, gt=0)
 
 
 class Operation(OperationBase, ReadMixin, CreatorMixin):
-    pass
+    amount_cr: Decimal                 # сумма в валюте кредит-счёта
 
 
 class Balance(BaseModel):

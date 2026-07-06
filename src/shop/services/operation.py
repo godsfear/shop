@@ -5,9 +5,10 @@ Operation пишется СИНХРОННО и в той же транзакци
 пересчитывает консумер (exactly-once в пределах БД, см. outbox.py).
 Balance ведётся через versioned_update: история балансов — копии-версии.
 
-Упрощения каркаса: debit-счёт уменьшается, credit-счёт увеличивается на
-amount; обе стороны обязаны быть в одной валюте (кросс-валютные проводки —
-позже, с курсом и двумя суммами).
+Суммы двух сторон раздельные: amount_db в валюте дебет-счёта (списание),
+amount_cr — в валюте кредит-счёта (зачисление). В одной валюте суммы обязаны
+совпадать; кросс-валютная проводка требует обе суммы — применённый курс
+фиксируется самими суммами, справочник курсов — таблица Rate.
 """
 import uuid
 from decimal import Decimal
@@ -34,30 +35,41 @@ class OperationService:
         if data.debit == data.credit:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                                 detail='дебет и кредит — один и тот же счёт')
-        async with self.session as db:
-            async with db.begin():
-                currencies = {}
-                for side, account_id in (('debit', data.debit), ('credit', data.credit)):
-                    cur = (await db.execute(
-                        select(tables.Account.currency)
-                        .where(tables.Account.id == account_id))).scalar_one_or_none()
-                    if cur is None:
-                        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                            detail=f'счёт {side} не найден')
-                    currencies[side] = cur
-                if currencies['debit'] != currencies['credit']:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                        detail='счета в разных валютах — кросс-валютные '
-                                               'проводки пока не поддерживаются')
-                operation = tables.Operation(**data.model_dump(), creator=creator)
-                db.add(operation)
-                await db.flush()
-                emit(db, TOPIC_OPERATION_CREATED, {
-                    'operation': str(operation.id),
-                    'debit': str(operation.debit),
-                    'credit': str(operation.credit),
-                    'amount': str(operation.amount),
-                })
+        rows = (await self.session.execute(
+            select(tables.Account.id, tables.Account.currency)
+            .where(tables.Account.id.in_((data.debit, data.credit))))).all()
+        currencies = {row[0]: row[1] for row in rows}
+        for side, account_id in (('debit', data.debit), ('credit', data.credit)):
+            if account_id not in currencies:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                    detail=f'счёт {side} не найден')
+        if currencies[data.debit] == currencies[data.credit]:
+            # одна валюта: суммы сторон обязаны совпадать
+            if data.amount_cr is not None and data.amount_cr != data.amount_db:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                    detail='счета в одной валюте: amount_cr должен '
+                                           'совпадать с amount_db (или не указываться)')
+            amount_cr = data.amount_db
+        else:
+            # кросс-валютная: сумма в валюте кредита обязательна (курс фиксирует
+            # вызывающий; сверка со справочником Rate — на его стороне)
+            if data.amount_cr is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                    detail='кросс-валютная проводка: укажите amount_cr — '
+                                           'сумму в валюте кредит-счёта')
+            amount_cr = data.amount_cr
+        operation = tables.Operation(**data.model_dump(exclude={'amount_cr'}),
+                                     amount_cr=amount_cr, creator=creator)
+        self.session.add(operation)
+        await self.session.flush()
+        emit(self.session, TOPIC_OPERATION_CREATED, {
+            'operation': str(operation.id),
+            'debit': str(operation.debit),
+            'credit': str(operation.credit),
+            'amount_db': str(operation.amount_db),
+            'amount_cr': str(operation.amount_cr),
+        })
+        await self.session.commit()  # проводка и событие — одна транзакция
         return operation
 
     async def balance(self, account_id: uuid.UUID) -> Decimal:
@@ -68,7 +80,7 @@ class OperationService:
         if exists is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='счёт не найден')
         value = (await self.session.execute(
-            select(tables.Balance.value).where(tables.Balance.rate == account_id))
+            select(tables.Balance.value).where(tables.Balance.account == account_id))
         ).scalar_one_or_none()
         return value if value is not None else Decimal(0)
 
@@ -81,16 +93,17 @@ async def _apply_operation(session: AsyncSession, payload: dict) -> None:
     события по пересекающимся счетам не взаимоблокируются. Balance правится
     через versioned_update: история значений остаётся копиями-версиями.
     """
-    amount = Decimal(payload['amount'])
-    deltas = sorted([(uuid.UUID(payload['debit']), -amount),
-                     (uuid.UUID(payload['credit']), amount)])
+    deltas = sorted([(uuid.UUID(payload['debit']), -Decimal(payload['amount_db'])),
+                     (uuid.UUID(payload['credit']), Decimal(payload['amount_cr']))])
     for account_id, delta in deltas:
         row = (await session.execute(
             select(tables.Balance)
-            .where(tables.Balance.rate == account_id)
+            .where(tables.Balance.account == account_id)
             .with_for_update())).scalar_one_or_none()
         if row is None:
-            session.add(tables.Balance(rate=account_id, value=delta))
+            # гонка первичного создания: два консумера могут одновременно не найти
+            # строку — uq_balance_account отвергнет второго, retry outbox дочитает
+            session.add(tables.Balance(account=account_id, value=delta))
         else:
             await versioned_update(session, tables.Balance, row.id,
                                    {'value': row.value + delta})

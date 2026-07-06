@@ -16,9 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..cache import get_cache
 from ..database import db_helper
 from ..logger import logger
+from ..outbox import emit
 from ..settings import settings
 from .. import tables
 from ..keyservice import KeyService, get_key_service
+from .notifications import TOPIC_BREAKGLASS
 
 ESCROW_KEY = 'escrow'
 
@@ -34,9 +36,9 @@ def _fernet(dek: bytes) -> Fernet:
 class BridgeService:
     def __init__(self,
                  session: AsyncSession = Depends(db_helper.scoped_session_dependency),
-                 keys: KeyService | None = None):
+                 keys: KeyService = Depends(get_key_service)):
         self.session = session
-        self.keys = keys if keys is not None else get_key_service()
+        self.keys = keys
 
     async def create_link(self, subject_table: str, subject_id: uuid.UUID, scope: str,
                           groups: dict[str, uuid.UUID] | None = None,
@@ -130,10 +132,21 @@ class BridgeService:
         return pseudonym
 
     async def breakglass_resolve(self, link_id: uuid.UUID, request_id: str) -> uuid.UUID:
-        """Псевдоним через одобренную break-glass заявку (escrow-копия DEK)."""
+        """Псевдоним через одобренную break-glass заявку (escrow-копия DEK).
+
+        Владелец уведомляется всегда: событие в outbox той же транзакцией
+        (консумер — services/notifications.py)."""
         link, access = await self._link_and_access(link_id, ESCROW_KEY)
         dek = self.keys.execute(request_id, access.wrapped_dek)
-        return uuid.UUID(bytes=_fernet(dek).decrypt(link.payload))
+        pseudonym = uuid.UUID(bytes=_fernet(dek).decrypt(link.payload))
+        emit(self.session, TOPIC_BREAKGLASS, {
+            'request_id': request_id,
+            'subject_table': link.table,
+            'subject_id': str(link.objectid),
+            'scope': link.scope,
+        })
+        await self.session.commit()
+        return pseudonym
 
     async def add_recipient(self, link_id: uuid.UUID, key_id: str,
                             recipient: uuid.UUID | None, dek: bytes) -> tables.Access:

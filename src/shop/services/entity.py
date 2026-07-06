@@ -1,13 +1,12 @@
 import uuid
-from datetime import datetime, timezone
 from typing import List
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, and_
+from sqlalchemy import select, and_
 
 from ..database import db_helper
-from ..versioning import versioned_update
+from ..versioning import versioned_expire, versioned_update
 from .. import tables
 from ..models.entity import EntityCreate, EntityUpdate, EntityFilter
 
@@ -16,12 +15,11 @@ class EntityService:
     def __init__(self, session: AsyncSession = Depends(db_helper.scoped_session_dependency)):
         self.session = session
 
-    async def get_all(self) -> List[tables.Entity]:
-        async with self.session as db:
-            async with db.begin():
-                res = await db.execute(select(tables.Entity))
-                entity = res.scalars().all()
-        return list(entity)
+    async def get_all(self, limit: int = 100, offset: int = 0) -> List[tables.Entity]:
+        res = await self.session.execute(
+            select(tables.Entity).order_by(tables.Entity.begins)
+            .limit(limit).offset(offset))
+        return list(res.scalars().all())
 
     async def find(self, flt: EntityFilter) -> List[tables.Entity]:
         conditions = []
@@ -35,17 +33,13 @@ class EntityService:
             conditions.append(tables.Entity.objectid == flt.objectid)
         if not conditions:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Пустой фильтр')
-        async with self.session as db:
-            async with db.begin():
-                res = await db.execute(select(tables.Entity).where(and_(*conditions)))
-                entity = res.scalars().all()
-        return list(entity)
+        res = await self.session.execute(select(tables.Entity).where(and_(*conditions)))
+        return list(res.scalars().all())
 
     async def get_by_id(self, entity_id: uuid.UUID) -> tables.Entity:
-        async with self.session as db:
-            async with db.begin():
-                res = await db.execute(select(tables.Entity).where(tables.Entity.id == entity_id))
-                entity = res.scalar_one_or_none()
+        res = await self.session.execute(
+            select(tables.Entity).where(tables.Entity.id == entity_id))
+        entity = res.scalar_one_or_none()
         if entity is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return entity
@@ -53,34 +47,23 @@ class EntityService:
     async def create(self, entity_data: EntityCreate,
                      creator: uuid.UUID | None = None) -> tables.Entity:
         entity = tables.Entity(**entity_data.model_dump(), creator=creator)
-        async with self.session as db:
-            async with db.begin():
-                db.add(entity)
-                await db.flush()
+        self.session.add(entity)
+        await self.session.commit()
         return entity
 
     async def update(self, entity_id: uuid.UUID, entity_data: EntityUpdate) -> tables.Entity:
         values = entity_data.model_dump(exclude_unset=True)
         if not values:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Нет полей для обновления')
-        async with self.session as db:
-            async with db.begin():
-                entity = await versioned_update(db, tables.Entity, entity_id, values)
-                if entity is None:
-                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        entity = await versioned_update(self.session, tables.Entity, entity_id, values)
+        if entity is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        await self.session.commit()
         return entity
 
     async def expire(self, entity_id: uuid.UUID) -> tables.Entity:
-        async with self.session as db:
-            async with db.begin():
-                query = (
-                    update(tables.Entity)
-                    .where(tables.Entity.id == entity_id)
-                    .values(ends=datetime.now(timezone.utc))
-                    .returning(tables.Entity)
-                )
-                res = await db.execute(query)
-                entity = res.scalar_one_or_none()
-                if entity is None:
-                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        entity = await versioned_expire(self.session, tables.Entity, entity_id)
+        if entity is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        await self.session.commit()
         return entity

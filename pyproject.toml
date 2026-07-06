@@ -22,3 +22,19 @@ dependencies = [
     "uuid6>=2025.0.1",
     "uvicorn>=0.41.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+# один event loop на сессию: синглтоны (Redis-клиент кэша) переживают тесты
+asyncio_default_test_loop_scope = "session"
+asyncio_default_fixture_loop_scope = "session"
+testpaths = ["tests"]
+# сквозные тесты пересоздают схему БД: гонять строго последовательно,
+# нужен живой Postgres (docker compose в Docker-Postgresql) и Redis

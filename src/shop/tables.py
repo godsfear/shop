@@ -5,6 +5,7 @@ import uuid
 import uuid6
 
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, BYTEA, SMALLINT, ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import (DeclarativeBase,
                             ORMExecuteState,
                             Session,
@@ -50,8 +51,12 @@ class Domain(enum.StrEnum):
 def category_code_index(table: str, unique: bool = False) -> Index:
     """Типовой индекс справочной выборки (category, code) по активным записям."""
     prefix = 'uq' if unique else 'ix'
-    return Index(f'{prefix}_{table}_category_code', 'category', 'code',
-                 unique=unique, postgresql_where=ACTIVE)
+    kwargs: dict = {'unique': unique, 'postgresql_where': ACTIVE}
+    if unique:
+        # category nullable: без NULLS NOT DISTINCT дубли при category IS NULL
+        # не ловятся (NULL != NULL)
+        kwargs['postgresql_nulls_not_distinct'] = True
+    return Index(f'{prefix}_{table}_category_code', 'category', 'code', **kwargs)
 
 UUID_TYPE = PG_UUID(as_uuid=True)
 
@@ -272,9 +277,97 @@ def _register_new_objects(session: Session, flush_context, instances) -> None:
                 raise DomainBoundaryError(
                     f"связь между доменами '{d_src}' и '{d_trg}' запрещена — только через мост")
 
-    for obj in new_objs:
-        session.add(ObjectRegistry(id=obj.id, table=obj.__tablename__,
-                                   domain=domains[obj.id]))
+    # реестр пишется немедленно Core-upsert'ом (до плана flush): строки реестра
+    # существуют раньше любых зависимых INSERT'ов независимо от сортировки таблиц,
+    # а DB-триггеры и слушатель не конфликтуют (обе стороны ON CONFLICT-идемпотентны)
+    rows = [{'id': obj.id, 'table': obj.__tablename__, 'domain': str(domains[obj.id])}
+            for obj in new_objs]
+    with session.no_autoflush:
+        session.execute(pg_insert(ObjectRegistry.__table__)
+                        .values(rows).on_conflict_do_nothing(index_elements=['id']))
+
+
+# ---------------------------------------------------------------------------
+# DB-подстраховка инвариантов реестра/доменов: Python-слушатель выше работает
+# только для ORM-пути; триггеры закрывают сырые INSERT'ы (сидинг, psql,
+# Core-запросы). Для ORM-пути триггеры вырождаются в no-op (ON CONFLICT).
+# Создаются вместе со схемой (after_create), поэтому попадают и в create_all
+# тестов, и в alembic baseline (он вызывает create_all).
+# ---------------------------------------------------------------------------
+
+_TRIGGER_FUNCTIONS = [
+    """
+    CREATE OR REPLACE FUNCTION object_register() RETURNS trigger AS $$
+    DECLARE dom text;
+    BEGIN
+        IF NEW.version_of IS NOT NULL THEN
+            RETURN NEW;                        -- копии-версии не регистрируются
+        END IF;
+        IF TG_NARGS > 0 THEN
+            dom := TG_ARGV[0];                 -- якорная таблица: домен константой
+        ELSE
+            SELECT o.domain INTO dom FROM object o
+            WHERE o.id = NEW.objectid;         -- CrossTable: домен наследуется от цели
+        END IF;
+        INSERT INTO object (id, "table", domain)
+        VALUES (NEW.id, TG_TABLE_NAME, dom)
+        ON CONFLICT (id) DO NOTHING;           -- ORM-путь уже зарегистрировал
+        RETURN NEW;
+    END $$ LANGUAGE plpgsql
+    """,
+    """
+    CREATE OR REPLACE FUNCTION relation_domain_guard() RETURNS trigger AS $$
+    DECLARE d_src text; d_trg text;
+    BEGIN
+        SELECT domain INTO d_src FROM object WHERE id = NEW.objectid;
+        SELECT domain INTO d_trg FROM object WHERE id = NEW.related_id;
+        IF d_src IS DISTINCT FROM d_trg THEN
+            RAISE EXCEPTION 'связь между доменами % и % запрещена — только через мост',
+                d_src, d_trg;
+        END IF;
+        RETURN NEW;
+    END $$ LANGUAGE plpgsql
+    """,
+    """
+    CREATE OR REPLACE FUNCTION link_domain_guard() RETURNS trigger AS $$
+    DECLARE dom text;
+    BEGIN
+        SELECT domain INTO dom FROM object WHERE id = NEW.objectid;
+        IF dom IS DISTINCT FROM 'identity' THEN
+            RAISE EXCEPTION 'мост (link) крепится только к identity-объекту, домен цели: %',
+                dom;
+        END IF;
+        RETURN NEW;
+    END $$ LANGUAGE plpgsql
+    """,
+]
+
+
+def trigger_statements() -> list[str]:
+    """DDL триггеров, сгенерированный из metadata (классификация как в реестре)."""
+    stmts = [s.strip() for s in _TRIGGER_FUNCTIONS]
+    for mapper in Base.registry.mappers:
+        cls = mapper.class_
+        if not issubclass(cls, Base):
+            continue  # служебные Root-таблицы (реестр, пул, outbox) не регистрируются
+        t = cls.__tablename__
+        if issubclass(cls, CrossTable):
+            stmts.append(f'CREATE TRIGGER trg_{t}_register BEFORE INSERT ON "{t}" '
+                         f'FOR EACH ROW EXECUTE FUNCTION object_register()')
+        else:
+            stmts.append(f'CREATE TRIGGER trg_{t}_register BEFORE INSERT ON "{t}" '
+                         f"FOR EACH ROW EXECUTE FUNCTION object_register('{cls.__domain__.value}')")
+    stmts.append('CREATE TRIGGER trg_relation_domain_guard BEFORE INSERT ON relation '
+                 'FOR EACH ROW EXECUTE FUNCTION relation_domain_guard()')
+    stmts.append('CREATE TRIGGER trg_link_domain_guard BEFORE INSERT ON link '
+                 'FOR EACH ROW EXECUTE FUNCTION link_domain_guard()')
+    return stmts
+
+
+@event.listens_for(metadata, 'after_create')
+def _create_domain_triggers(target, connection, **kw) -> None:
+    for stmt in trigger_statements():
+        connection.execute(text(stmt))
 
 
 @event.listens_for(Session, "do_orm_execute")
@@ -331,7 +424,6 @@ class User(Base):
     contact: Mapped[dict] = mapped_column(JSONB)
     password_hash: Mapped[str] = mapped_column(String)
     person: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("person.id"), index=True)
-    validated: Mapped[bool] = mapped_column(Boolean, default=False)
     public_key: Mapped[str] = mapped_column(String)
     # роли попадают в JWT (claims: sub + roles); выдача — только админом
     roles: Mapped[list[str]] = mapped_column(ARRAY(String), server_default=text("'{}'"))
@@ -387,6 +479,10 @@ class Property(BaseCategory, CrossTable, DescriptionMixin):
               postgresql_where=ACTIVE
         ),
         Index('ix_property_value', 'value', postgresql_using='gin'),
+        # инвариант FSM: одно активное состояние на объект держит БД,
+        # а не только блокировка в FSMService.trigger
+        Index('uq_property_active_state', 'table', 'objectid', unique=True,
+              postgresql_where=text("ends IS NULL AND code = 'state'")),
     )
 
 
@@ -444,7 +540,11 @@ class Currency(BaseCategory, DescriptionMixin):
         # уникальность — только среди активных: историческая версия валюты
         # с тем же кодом не мешает новой
         category_code_index('currency', unique=True),
-        Index('uq_currency_num', 'category', 'num', unique=True, postgresql_where=ACTIVE),
+        # num IS NULL = "нет ISO-кода" (таких валют много) — в индекс не входят;
+        # category IS NULL = "корень" (значение) — ловится NULLS NOT DISTINCT
+        Index('uq_currency_num', 'category', 'num', unique=True,
+              postgresql_where=text('ends IS NULL AND num IS NOT NULL'),
+              postgresql_nulls_not_distinct=True),
     )
 
 
@@ -453,15 +553,21 @@ class Account(BaseCategory, CrossTable, DescriptionMixin):
 
     __local_table_args__ = (
         Index('uq_account_issuer', 'category', 'code', 'currency', 'table', 'objectid',
-              unique=True, postgresql_where=ACTIVE),
+              unique=True, postgresql_where=ACTIVE, postgresql_nulls_not_distinct=True),
     )
 
 
 class Balance(Base):
     __domain__ = Domain.OPERATIONAL
 
-    rate: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("account.id"), index=True)
+    account: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("account.id"), index=True)
     value: Mapped[float] = mapped_column(Numeric)
+
+    __local_table_args__ = (
+        # одна активная строка баланса на счёт: гонку первичного создания
+        # (двум консумерам нечего блокировать) ловит БД, retry outbox дочитает
+        Index('uq_balance_account', 'account', unique=True, postgresql_where=ACTIVE),
+    )
 
 
 class Message(BaseCategory):
@@ -484,12 +590,30 @@ class Operation(BaseCategory, DescriptionMixin):
     number: Mapped[str] = mapped_column(String)
     debit: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("account.id"))
     credit: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("account.id"))
-    amount: Mapped[float] = mapped_column(Numeric)
+    amount_db: Mapped[float] = mapped_column(Numeric)
+    amount_cr: Mapped[float] = mapped_column(Numeric)
 
     __local_table_args__ = (
         Index('ix_operation', 'category', 'code', 'debit', 'credit', 'begins'),
         Index('ix_operation_db', 'category', 'code', 'debit', 'number', 'begins'),
         Index('ix_operation_cr', 'category', 'code', 'credit', 'number', 'begins'),
+    )
+
+
+class Rate(BaseCategory, DescriptionMixin):
+    """Курс обмена: сколько currency_to за единицу currency_from.
+
+    category/code — источник/тип курса (ЦБ, внутренний, ...). Активный курс
+    пары в рамках источника уникален; история курсов — версии-копии
+    (versioned_update) и закрытые строки, отдельного журнала не нужно.
+    """
+    currency_from: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("currency.id"))
+    currency_to: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("currency.id"))
+    value: Mapped[float] = mapped_column(Numeric)
+
+    __local_table_args__ = (
+        Index('uq_rate_pair', 'category', 'code', 'currency_from', 'currency_to',
+              unique=True, postgresql_where=ACTIVE, postgresql_nulls_not_distinct=True),
     )
 
 

@@ -11,6 +11,7 @@ venv/
 graphify-out/
 certs/
 keyservice/
+Docker-Postgresql/data/
 
 .idea/
 

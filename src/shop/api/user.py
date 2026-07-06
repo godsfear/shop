@@ -1,7 +1,7 @@
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..models.auth import TokenPayload
 from ..models.user import Contact, User, UserUpdate, UserRoles
@@ -20,8 +20,10 @@ def _self_or_admin(user_id: uuid.UUID, payload: TokenPayload) -> None:
 
 @router.get('/all', response_model=List[User])
 async def get_users(service: UserService = Depends(),
-                    payload: TokenPayload = Depends(get_token_payload)):
-    return await service.get_all()
+                    payload: TokenPayload = Depends(get_token_payload),
+                    limit: int = Query(100, ge=1, le=1000),
+                    offset: int = Query(0, ge=0)):
+    return await service.get_all(limit=limit, offset=offset)
 
 
 @router.post('/find', response_model=User)

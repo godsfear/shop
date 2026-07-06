@@ -54,6 +54,25 @@ async def versioned_update(session: AsyncSession, cls: type[T],
     return row
 
 
+async def versioned_expire(session: AsyncSession, cls: type[T],
+                           row_id: uuid.UUID) -> T | None:
+    """Закрывает текущую строку (ends = now) под блокировкой FOR UPDATE.
+
+    Блокировка сериализует закрытие с конкурентными versioned_update —
+    периоды версий остаются непрерывными. Закрытая строка сама является
+    терминальной версией; None — активной строки с таким id нет.
+    Автор закрытия пока не записывается (нет колонки) — при необходимости
+    аудита добавить closed_by. Транзакцией управляет вызывающий.
+    """
+    row = (await session.execute(
+        select(cls).where(cls.id == row_id).with_for_update()
+    )).scalar_one_or_none()
+    if row is None:
+        return None
+    row.ends = datetime.now(timezone.utc)
+    return row
+
+
 async def versions(session: AsyncSession, cls: type[T], row_id: uuid.UUID) -> list[T]:
     """История версий строки: копии от старейшей к новейшей (без текущей)."""
     q = (select(cls)

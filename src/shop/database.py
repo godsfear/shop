@@ -1,16 +1,7 @@
-from typing import Dict, AsyncGenerator, Any
+from typing import AsyncGenerator, Any
 from asyncio import current_task
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker, async_scoped_session
 from .settings import settings
-import uuid
-import datetime
-
-
-def serialize2str(_dict: Dict) -> Dict:
-    for key, value in _dict.items():
-        if isinstance(value, (uuid.UUID, datetime.datetime)):
-            _dict[key] = str(value)
-    return _dict
 
 
 class DatabaseHelper:

@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import HTTPException
 
 from ..models.auth import Challenge, KeyCredentials, Token
-from ..models.user import Contact, UserCreate, User
+from ..models.user import Contact, SignUp, User
 from ..services.user import UserService
 from ..services.auth import get_current_user
 
@@ -20,8 +20,9 @@ def _prop(email: str | None, phone: str | None) -> str:
 
 
 @router.post('/signup/', response_model=Token, status_code=status.HTTP_201_CREATED)
-async def sign_up(user_data: UserCreate, service: UserService = Depends()):
-    return await service.register_new_user(user_data)
+async def sign_up(data: SignUp, service: UserService = Depends()):
+    """Регистрация: персона создаётся внутри signup, отдельный шаг не нужен."""
+    return await service.register_new_user(data)
 
 
 @router.post('/signin/', response_model=Token)

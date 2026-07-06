@@ -1,21 +1,21 @@
 import base64
 import os
 import uuid
-from datetime import datetime, timezone
 from typing import List
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, or_
+from sqlalchemy import select, or_
 
 from shop.cache import get_cache
 from shop.database import db_helper
 from shop.settings import settings
 from shop.tables import User
-from shop.versioning import versioned_update
+from shop.versioning import versioned_expire, versioned_update
 from .auth import AuthService
+from shop import tables
 from shop.models.auth import Challenge, Token
-from shop.models.user import UserCreate, UserUpdate
+from shop.models.user import SignUp, UserCreate, UserUpdate
 
 _auth_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -28,8 +28,9 @@ class UserService:
     def __init__(self, session: AsyncSession = Depends(db_helper.scoped_session_dependency)):
         self.session = session
 
-    async def get_all(self) -> List[User]:
-        res = await self.session.execute(select(User))
+    async def get_all(self, limit: int = 100, offset: int = 0) -> List[User]:
+        res = await self.session.execute(
+            select(User).order_by(User.begins).limit(limit).offset(offset))
         return list(res.scalars().all())
 
     async def get_by_id(self, user_id: uuid.UUID) -> User:
@@ -86,22 +87,26 @@ class UserService:
         return user
 
     async def expire(self, user_id: uuid.UUID) -> User:
-        query = (
-            update(User)
-            .where(User.id == user_id)
-            .values(ends=datetime.now(timezone.utc))
-            .returning(User)
-        )
-        res = await self.session.execute(query)
-        await self.session.commit()
-        user = res.scalar_one_or_none()
+        user = await versioned_expire(self.session, User, user_id)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        await self.session.commit()
         await get_cache().delete(f'user:{user_id}')
         return user
 
-    async def register_new_user(self, user_data: UserCreate) -> Token:
-        user = await self.create(user_data)
+    async def register_new_user(self, signup: SignUp) -> Token:
+        """Регистрация: Person + User создаются одной транзакцией."""
+        person = tables.Person(**signup.person.model_dump())
+        self.session.add(person)
+        await self.session.flush()
+        user = User(
+            person=person.id,
+            contact=signup.contact.model_dump(exclude_none=True),
+            password_hash=AuthService.hash_password(signup.password),
+            public_key=signup.public_key,
+        )
+        self.session.add(user)
+        await self.session.commit()
         return AuthService.create_token(user)
 
     async def authenticate_user(self, prop: str, password: str) -> Token:
