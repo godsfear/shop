@@ -112,6 +112,15 @@ class Base(Root):
     begins: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
     ends: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
+    # копия-версия строки (см. versioning.py): строка с данным id — всегда
+    # текущая версия (ссылки не ломаются), история — копии с version_of -> id;
+    # копии закрыты (ends), скрыты автофильтром и НЕ регистрируются в реестре
+    # noinspection PyMethodParameters
+    @declared_attr
+    def version_of(cls) -> Mapped[uuid6.UUID | None]:
+        return mapped_column(UUID_TYPE, ForeignKey(f'{cls.__name__.lower()}.id'),
+                             nullable=True, index=True)
+
     def __repr__(self) -> str:
         return "<{klass} @{id:x} {attrs}>".format(
             klass=self.__class__.__name__,
@@ -146,6 +155,31 @@ class ObjectRegistry(Root):
     )
 
 
+class Outbox(Root):
+    """Transactional outbox (память проекта: queue-architecture).
+
+    Событие пишется той же транзакцией, что и доменные данные (см. outbox.emit),
+    консумер разбирает по FOR UPDATE SKIP LOCKED — очередь в Postgres,
+    exactly-once в пределах БД. Отравленные события после N попыток
+    помечаются processed + error и не блокируют очередь.
+    """
+    __tablename__ = "outbox"
+
+    id: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, primary_key=True, default=uuid6.uuid7)
+    topic: Mapped[str] = mapped_column(String)
+    payload: Mapped[dict] = mapped_column(JSONB)
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True),
+                                                       server_default=func.now())
+    processed: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True),
+                                                                nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, server_default=text('0'))
+    error: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    __table_args__ = (
+        Index('ix_outbox_pending', 'created', postgresql_where=text('processed IS NULL')),
+    )
+
+
 class DomainBoundaryError(Exception):
     """Попытка связать объекты разных доменов минуя мост псевдонимизации."""
 
@@ -172,8 +206,11 @@ def _register_new_objects(session: Session, flush_context, instances) -> None:
 
     Работает только для ORM-пути (session.add). Сырые Core-insert'ы реестр
     не пополняют — при появлении таких путей записи нужны DB-триггеры.
+    Копии-версии (version_of, см. versioning.py) не регистрируются:
+    объект в реестре один, сколько бы версий у него ни было.
     """
-    new_objs = [o for o in session.new if isinstance(o, Base)]
+    new_objs = [o for o in session.new
+                if isinstance(o, Base) and o.version_of is None]
     if not new_objs:
         return
     for obj in new_objs:
@@ -296,6 +333,8 @@ class User(Base):
     person: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("person.id"), index=True)
     validated: Mapped[bool] = mapped_column(Boolean, default=False)
     public_key: Mapped[str] = mapped_column(String)
+    # роли попадают в JWT (claims: sub + roles); выдача — только админом
+    roles: Mapped[list[str]] = mapped_column(ARRAY(String), server_default=text("'{}'"))
 
     __local_table_args__ = (
         Index('ix_user_contact', 'contact', postgresql_using='gin', postgresql_where=ACTIVE),
@@ -514,13 +553,26 @@ class Pseudonym(Base):
     """Обезличенный якорь операционного домена («пациент №...»).
 
     Никаких идентифицирующих полей. id — uuid4: uuid7 содержит время создания
-    и позволил бы коррелировать псевдоним с персоной; по той же причине для
-    продакшена нужен пул заранее созданных псевдонимов (begins не должен
-    совпадать с моментом регистрации персоны).
+    и позволил бы коррелировать псевдоним с персоной. По той же причине
+    псевдонимы создаются пакетами заранее (см. PseudonymPool): begins псевдонима —
+    это момент пополнения пула, а не момент создания моста.
     """
     __domain__ = Domain.OPERATIONAL
 
     id: Mapped[uuid.UUID] = mapped_column(UUID_TYPE, primary_key=True, default=uuid.uuid4)
+
+
+class PseudonymPool(Root):
+    """Пул свободных псевдонимов.
+
+    Выдача заранее созданного псевдонима разрывает корреляцию «begins псевдонима ≈
+    begins моста». Строка удаляется при выдаче; временных меток у пула нет —
+    дамп БД показывает только КАКИЕ псевдонимы свободны, но не когда занят занятый.
+    """
+    __tablename__ = "pseudonym_pool"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID_TYPE, ForeignKey("pseudonym.id"),
+                                          primary_key=True)
 
 
 class Link(CrossTable):

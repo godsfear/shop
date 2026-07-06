@@ -1,28 +1,25 @@
-from fastapi import Request, Response
 import time
+
+from fastapi import Request, Response
+
 from shop.logger import logger
 
 
 async def middleware_proc(request: Request, call_next):
-    process_time: float = time.time()
+    """Access-лог без содержимого: тела запросов/ответов НЕ читаются и НЕ логируются
+    (пароли, ПДн, мед. данные; см. память проекта — псевдонимизация). Размеры берутся
+    из заголовков, тело ответа не буферизуется — стриминг остаётся стримингом.
+    Query string не логируется тоже: в ней бывают токены и идентификаторы.
+    """
+    start = time.perf_counter()
     response: Response = await call_next(request)
-    request_body: bytes = await request.body()
-    response_body: bytes = b""
-    async for chunk in response.body_iterator:
-        response_body += chunk
-    process_time = time.time() - process_time
-
-    log_dict = {
-        "url": request.url.path,
+    logger.info({
         "method": request.method,
-        "process_time": process_time,
-        "request": request_body.decode(),
-        "response": response_body.decode()
-    }
-    logger.info(log_dict)
-    return Response(
-        content=response_body,
-        status_code=response.status_code,
-        headers=dict(response.headers),
-        media_type=response.media_type
-    )
+        "path": request.url.path,
+        "status": response.status_code,
+        "process_time": round(time.perf_counter() - start, 6),
+        "client": request.client.host if request.client else None,
+        "request_bytes": request.headers.get("content-length"),
+        "response_bytes": response.headers.get("content-length"),
+    })
+    return response

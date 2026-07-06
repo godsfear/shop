@@ -47,7 +47,12 @@ logging_config = {
     "loggers": {
         "root": {
             "level": "INFO", "handlers": ["stdout", "file"]
-        }
+        },
+        # SQL с параметрами (echo) — только в консоль, в файл нельзя:
+        # параметры запросов содержат персональные данные
+        "sqlalchemy.engine": {
+            "handlers": ["stdout"], "propagate": False
+        },
     },
 }
 

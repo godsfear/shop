@@ -3,7 +3,9 @@ from typing import List
 
 from fastapi import APIRouter, Depends, status
 
+from ..models.auth import TokenPayload
 from ..models.entity import Entity, EntityCreate, EntityUpdate, EntityFilter
+from ..services.auth import get_token_payload
 from ..services.entity import EntityService
 
 router = APIRouter(prefix='/entity', tags=['entity'])
@@ -25,16 +27,19 @@ async def get_entity_by_id(entity_id: uuid.UUID, service: EntityService = Depend
 
 
 @router.post('/', response_model=Entity, status_code=status.HTTP_201_CREATED)
-async def create_entity(entity_data: EntityCreate, service: EntityService = Depends()):
-    return await service.create(entity_data)
+async def create_entity(entity_data: EntityCreate, service: EntityService = Depends(),
+                        payload: TokenPayload = Depends(get_token_payload)):
+    return await service.create(entity_data, creator=payload.sub)
 
 
 @router.patch('/{entity_id}', response_model=Entity)
 async def update_entity(entity_id: uuid.UUID, entity_data: EntityUpdate,
-                        service: EntityService = Depends()):
+                        service: EntityService = Depends(),
+                        payload: TokenPayload = Depends(get_token_payload)):
     return await service.update(entity_id, entity_data)
 
 
 @router.delete('/{entity_id}', response_model=Entity)
-async def delete_entity(entity_id: uuid.UUID, service: EntityService = Depends()):
+async def delete_entity(entity_id: uuid.UUID, service: EntityService = Depends(),
+                        payload: TokenPayload = Depends(get_token_payload)):
     return await service.expire(entity_id)

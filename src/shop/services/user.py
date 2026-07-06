@@ -1,3 +1,5 @@
+import base64
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import List
@@ -6,11 +8,20 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, or_
 
+from shop.cache import get_cache
 from shop.database import db_helper
+from shop.settings import settings
 from shop.tables import User
+from shop.versioning import versioned_update
 from .auth import AuthService
-from shop.models.auth import Token
+from shop.models.auth import Challenge, Token
 from shop.models.user import UserCreate, UserUpdate
+
+_auth_exception = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail='Incorrect username or password',
+    headers={'WWW-Authenticate': 'Bearer'},
+)
 
 
 class UserService:
@@ -58,17 +69,20 @@ class UserService:
             values['contact'] = {k: v for k, v in values['contact'].items() if v is not None}
         if not values:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Нет полей для обновления')
-        query = (
-            update(User)
-            .where(User.id == user_id)
-            .values(**values)
-            .returning(User)
-        )
-        res = await self.session.execute(query)
-        await self.session.commit()
-        user = res.scalar_one_or_none()
+        user = await versioned_update(self.session, User, user_id, values)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        await self.session.commit()
+        await get_cache().delete(f'user:{user_id}')
+        return user
+
+    async def set_roles(self, user_id: uuid.UUID, roles: list[str]) -> User:
+        # версионно: история версий = аудит выдачи ролей
+        user = await versioned_update(self.session, User, user_id, {'roles': roles})
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        await self.session.commit()
+        await get_cache().delete(f'user:{user_id}')
         return user
 
     async def expire(self, user_id: uuid.UUID) -> User:
@@ -83,6 +97,7 @@ class UserService:
         user = res.scalar_one_or_none()
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        await get_cache().delete(f'user:{user_id}')
         return user
 
     async def register_new_user(self, user_data: UserCreate) -> Token:
@@ -90,14 +105,46 @@ class UserService:
         return AuthService.create_token(user)
 
     async def authenticate_user(self, prop: str, password: str) -> Token:
-        exception = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Incorrect username or password',
-            headers={'WWW-Authenticate': 'Bearer'},
-        )
         user = await self.get_by_contact(prop)
         if user is None:
-            raise exception from None
+            raise _auth_exception from None
         if not AuthService.verify_password(password, user.password_hash):
-            raise exception from None
+            raise _auth_exception from None
+        return AuthService.create_token(user)
+
+    async def create_challenge(self, prop: str) -> Challenge:
+        """Первый шаг входа по ключу: одноразовый nonce (Redis, TTL).
+
+        Клиент подписывает raw-байты nonce приватным ключом и шлёт подпись
+        в authenticate_by_key. Требует живого Redis.
+        """
+        user = await self.get_by_contact(prop)
+        if user is None or not user.public_key:
+            raise _auth_exception from None
+        nonce = base64.b64encode(os.urandom(32)).decode()
+        await get_cache().set(f'challenge:{user.id}', nonce, settings.challenge_ttl_s)
+        return Challenge(nonce=nonce)
+
+    async def authenticate_by_key(self, prop: str, signature_b64: str) -> Token:
+        """Второй шаг: проверка подписи nonce по User.public_key -> JWT.
+
+        Nonce одноразовый: удаляется до проверки подписи, повтор невозможен.
+        Ключ — единственный корень доверия, JWT — его короткоживущая производная.
+        """
+        user = await self.get_by_contact(prop)
+        if user is None or not user.public_key:
+            raise _auth_exception from None
+        cache = get_cache()
+        ckey = f'challenge:{user.id}'
+        nonce = await cache.get(ckey)
+        await cache.delete(ckey)  # одноразовость — до любых проверок
+        if nonce is None:
+            raise _auth_exception from None  # challenge истёк или не выдавался
+        try:
+            signature = base64.b64decode(signature_b64, validate=True)
+        except Exception:
+            raise _auth_exception from None
+        if not AuthService.verify_signature(user.public_key,
+                                            base64.b64decode(nonce), signature):
+            raise _auth_exception from None
         return AuthService.create_token(user)

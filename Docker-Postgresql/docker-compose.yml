@@ -16,6 +16,14 @@ services:
         networks:
             - backend
 
+    redis:
+        container_name: shop_redis
+        image: redis:7-alpine
+        ports:
+            - "6379:6379"
+        networks:
+            - backend
+
 networks:
     backend:
         name: ${CONTAINER_NETWORK}

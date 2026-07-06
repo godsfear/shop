@@ -3,7 +3,9 @@ from typing import List
 
 from fastapi import APIRouter, Depends, status
 
+from ..models.auth import TokenPayload
 from ..models.currency import Currency, CurrencyCreate, CurrencyUpdate, CurrencyFilter
+from ..services.auth import get_token_payload
 from ..services.currency import CurrencyService
 
 router = APIRouter(prefix='/currency', tags=['currency'])
@@ -20,22 +22,26 @@ async def get_currency_by_id(currency_id: uuid.UUID, service: CurrencyService = 
 
 
 @router.post('/', response_model=Currency, status_code=status.HTTP_201_CREATED)
-async def create_currency(currency_data: CurrencyCreate, service: CurrencyService = Depends()):
-    return await service.create(currency_data)
+async def create_currency(currency_data: CurrencyCreate, service: CurrencyService = Depends(),
+                          payload: TokenPayload = Depends(get_token_payload)):
+    return await service.create(currency_data, creator=payload.sub)
 
 
 @router.patch('/by_code', response_model=Currency)
 async def update_currency_by_code(flt: CurrencyFilter, currency_data: CurrencyUpdate,
-                                  service: CurrencyService = Depends()):
+                                  service: CurrencyService = Depends(),
+                                  payload: TokenPayload = Depends(get_token_payload)):
     return await service.update_by_code(flt, currency_data)
 
 
 @router.patch('/{currency_id}', response_model=Currency)
 async def update_currency(currency_id: uuid.UUID, currency_data: CurrencyUpdate,
-                          service: CurrencyService = Depends()):
+                          service: CurrencyService = Depends(),
+                          payload: TokenPayload = Depends(get_token_payload)):
     return await service.update(currency_id, currency_data)
 
 
 @router.delete('/{currency_id}', response_model=Currency)
-async def delete_currency(currency_id: uuid.UUID, service: CurrencyService = Depends()):
+async def delete_currency(currency_id: uuid.UUID, service: CurrencyService = Depends(),
+                          payload: TokenPayload = Depends(get_token_payload)):
     return await service.expire(currency_id)

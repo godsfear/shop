@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
 
 from ..database import db_helper
+from ..versioning import versioned_update
 from .. import tables
 from ..models.category import CategoryCreate, CategoryUpdate, CategoryFilter
 
@@ -38,8 +39,9 @@ class CategoryService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return category
 
-    async def create(self, category_data: CategoryCreate) -> tables.Category:
-        category = tables.Category(**category_data.model_dump())
+    async def create(self, category_data: CategoryCreate,
+                     creator: uuid.UUID | None = None) -> tables.Category:
+        category = tables.Category(**category_data.model_dump(), creator=creator)
         async with self.session as db:
             async with db.begin():
                 db.add(category)
@@ -52,14 +54,7 @@ class CategoryService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Нет полей для обновления')
         async with self.session as db:
             async with db.begin():
-                query = (
-                    update(tables.Category)
-                    .where(tables.Category.id == category_id)
-                    .values(**values)
-                    .returning(tables.Category)
-                )
-                res = await db.execute(query)
-                category = res.scalar_one_or_none()
+                category = await versioned_update(db, tables.Category, category_id, values)
                 if category is None:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return category

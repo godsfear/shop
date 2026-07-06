@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
 
 from ..database import db_helper
+from ..versioning import versioned_update
 from .. import tables
 from ..models.entity import EntityCreate, EntityUpdate, EntityFilter
 
@@ -49,8 +50,9 @@ class EntityService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return entity
 
-    async def create(self, entity_data: EntityCreate) -> tables.Entity:
-        entity = tables.Entity(**entity_data.model_dump())
+    async def create(self, entity_data: EntityCreate,
+                     creator: uuid.UUID | None = None) -> tables.Entity:
+        entity = tables.Entity(**entity_data.model_dump(), creator=creator)
         async with self.session as db:
             async with db.begin():
                 db.add(entity)
@@ -63,14 +65,7 @@ class EntityService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Нет полей для обновления')
         async with self.session as db:
             async with db.begin():
-                query = (
-                    update(tables.Entity)
-                    .where(tables.Entity.id == entity_id)
-                    .values(**values)
-                    .returning(tables.Entity)
-                )
-                res = await db.execute(query)
-                entity = res.scalar_one_or_none()
+                entity = await versioned_update(db, tables.Entity, entity_id, values)
                 if entity is None:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         return entity

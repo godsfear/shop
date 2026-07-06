@@ -27,5 +27,11 @@ class UserUpdate(BaseModel):
     public_key: str | None = None
 
 
+class UserRoles(BaseModel):
+    """Выдача ролей — отдельная операция, только для администратора."""
+    roles: list[str]
+
+
 class User(UserBase, ReadMixin):
     validated: bool = False
+    roles: list[str] = []
