@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # postgis-образ содержит бинарники PostGIS — CREATE EXTENSION postgis сработает
+      DATABASE_URI: postgresql+asyncpg://shop:secret@localhost:5432/shop
+      REDIS_URI: redis://localhost:6379/0
+      JWT_SECRET: ci-test-secret        # settings.jwt_secret обязателен
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: shop
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: shop
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shop"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      # ловим поломку миграций отдельно от тестов (чистая БД из свежего контейнера)
+      - run: uv run alembic upgrade head
+      - run: uv run pytest -q
