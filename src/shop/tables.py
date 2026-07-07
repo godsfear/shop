@@ -807,3 +807,13 @@ class Access(Base):
         Index('uq_access_link_recipient', 'link', 'recipient_type', 'recipient',
               unique=True, postgresql_where=ACTIVE),
     )
+
+
+# create_all чувствителен к порядку таблиц при взаимных FK, и в некоторых
+# окружениях (CI) сортировка выдаёт неверный порядок (ссылающаяся таблица
+# раньше цели). Делаем порядок неважным: КАЖДЫЙ FK добавляется отдельным
+# ALTER после создания всех таблиц. Имена берутся из naming_convention.
+# Явные use_alter=True выше (creator, version_of, кластер) этим покрыты.
+for _table in metadata.tables.values():
+    for _fk in _table.foreign_key_constraints:
+        _fk.use_alter = True
