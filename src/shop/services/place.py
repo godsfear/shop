@@ -1,7 +1,6 @@
 from typing import List
 
-from fastapi import HTTPException, status
-from sqlalchemy import select, and_, func
+from sqlalchemy import func
 
 from .. import tables
 from ..models.place import PlaceFilter
@@ -19,7 +18,4 @@ class PlaceService(CrudService):
             conditions.append(tables.Place.code == flt.code)
         if flt.name is not None:
             conditions.append(func.lower(tables.Place.name) == flt.name.lower())
-        if not conditions:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Пустой фильтр')
-        res = await self.session.execute(select(tables.Place).where(and_(*conditions)))
-        return list(res.scalars().all())
+        return await self._where(conditions)

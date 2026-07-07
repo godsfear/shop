@@ -109,8 +109,9 @@ class Base(Root):
         args.extend(cls.__dict__.get('__local_table_args__', ()))
         return tuple(args)
 
+    # PK уже обеспечивает уникальность — отдельный unique=True создавал бы
+    # дублирующий индекс (и шумел бы в autogenerate)
     id: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE,
-                                           unique=True,
                                            primary_key=True,
                                            nullable=False,
                                            default=uuid6.uuid7)
@@ -723,7 +724,7 @@ class Consent(CrossTable):
               'table', 'objectid', 'grantee', 'scope',
               unique=True, postgresql_where=ACTIVE),
         CheckConstraint(
-            "status IN ('requested', 'approved', 'denied', 'revoked')",
+            "status IN ('requested', 'approved', 'denied', 'revoked', 'expired')",
             name='status_valid'),
     )
 

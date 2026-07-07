@@ -7,16 +7,20 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from shop.middleware import middleware_proc
 from shop.api import router
 from shop.outbox import outbox_worker
+from shop.services.consent import consent_sweeper
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # обработчики outbox зарегистрированы импортом сервисов (shop.api -> services)
-    worker = asyncio.create_task(outbox_worker())
+    tasks = [asyncio.create_task(outbox_worker()),
+             asyncio.create_task(consent_sweeper())]
     yield
-    worker.cancel()
-    with suppress(asyncio.CancelledError):
-        await worker
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 app = FastAPI(lifespan=lifespan)

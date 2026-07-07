@@ -9,9 +9,11 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
 from shop.models.auth import TokenPayload
+from shop.models.company import CompanyCreate
 from shop.models.consent import ConsentDecision, ConsentRequest
 from shop.models.user import Contact, UserCreate
 from shop.outbox import process_one
+from shop.services.company import CompanyService
 from shop.services.consent import ConsentService
 from shop.services.person import PersonService
 from shop.services.user import UserService
@@ -122,34 +124,70 @@ async def test_main():
         assert e.value.status_code == 403
     print('[ok] после отзыва: 403')
 
-    # --- управляющий компании ---
+    # --- создатель компании автоматически становится её управляющим ---
     async with Sess() as s:
-        company = t.Company(code='acme', country=country_id,
-                            registered=datetime.date(2020, 1, 1))
-        s.add(company); await s.commit()
+        company = await CompanyService(session=s).create(
+            CompanyCreate(code='acme', country=country_id,
+                          registered=datetime.date(2020, 1, 1)), creator=owner.id)
         company_id = company.id
-    # чужак компанией не управляет; админ назначает friend управляющим
     async with Sess() as s:
-        csvc = ConsentService(session=s)
+        # owner (создатель) — управляющий: manage-consent появился сам
+        assert await ConsentService(session=s).check(
+            'company', company_id, owner.id, 'manage')
+    print('[ok] создатель компании авто-получил manage')
+
+    # чужак компанией не управляет; owner (управляющий) назначает friend
+    async with Sess() as s:
         with pytest.raises(HTTPException) as e:
-            await csvc.grant_manage('company', company_id, friend_id, friend_p)
+            await ConsentService(session=s).grant_manage(
+                'company', company_id, friend_id, friend_p)
         assert e.value.status_code == 403
-        await ConsentService(session=s).grant_manage('company', company_id,
-                                                     friend_id, admin_p)
-    # теперь friend — управляющий: одобряет запросы к данным компании
+        await ConsentService(session=s).grant_manage(
+            'company', company_id, friend_id, owner_p)
+    print('[ok] управляющий назначил второго управляющего; чужак — 403')
+
+    # запрос к данным компании; friend (соуправляющий) видит его и одобряет
     async with Sess() as s:
         mgr_cid = (await ConsentService(session=s).request(
             ConsentRequest(subject_table='company', subject_id=company_id,
                            scope='financial', reason='аудит'), owner_p)).id
     async with Sess() as s:
-        # friend (управляющий) видит запрос во incoming и одобряет
         incoming = await ConsentService(session=s).incoming(friend_p)
         assert any(c.id == mgr_cid for c in incoming)
         await ConsentService(session=s).decide(mgr_cid, True, ConsentDecision(), friend_p)
     async with Sess() as s:
         assert await ConsentService(session=s).check(
             'company', company_id, owner.id, 'financial')
-    print('[ok] управляющий компании: назначен админом, одобряет запросы к её данным')
+    print('[ok] соуправляющий одобряет запрос к данным компании')
+
+    # --- автопротухание until: sweep закрывает истёкшие согласия ---
+    async with Sess() as s:
+        exp_cid = (await ConsentService(session=s).request(
+            ConsentRequest(subject_table='company', subject_id=company_id,
+                           scope='contact', reason='временный'), friend_p)).id
+    past = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=1)
+    async with Sess() as s:
+        await ConsentService(session=s).decide(
+            exp_cid, True, ConsentDecision(until=past), owner_p)
+    # доступ уже не действует (проверка until при чтении), но строка ещё approved
+    async with Sess() as s:
+        csvc = ConsentService(session=s)
+        assert not await csvc.check('company', company_id, friend.id, 'contact')
+        closed = await csvc.sweep_expired()
+        assert closed >= 1
+    async with Sess() as s:
+        row = (await s.execute(select(t.Consent).where(t.Consent.id == exp_cid)
+               .execution_options(include_expired=True)
+               .order_by(t.Consent.begins.desc()))).scalars().first()
+        assert row.status == 'expired' and row.ends is not None
+    print('[ok] sweep: истёкшее согласие -> expired + закрыто')
+
+    await drain(Sess)
+    async with Sess() as s:
+        msgs = (await s.execute(select(t.Message).where(
+            t.Message.receiver == friend.id, t.Message.code == 'consent'))).scalars().all()
+        assert any('истёк' in m.content for m in msgs)
+    print('[ok] получатель уведомлён об истечении')
 
     await eng.dispose()
     print('\nТЕСТ CONSENT ПРОЙДЕН')

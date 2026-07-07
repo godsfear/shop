@@ -2,6 +2,7 @@ __all__ = (
     "AuthService",
     "BridgeService",
     "CategoryService",
+    "CompanyService",
     "ConsentService",
     "CountryService",
     "CurrencyService",
@@ -24,6 +25,7 @@ from .place import PlaceService
 from .rate import RateService
 from .translation import TranslationService
 from .category import CategoryService
+from .company import CompanyService
 from .consent import ConsentService
 from .country import CountryService
 from .currency import CurrencyService

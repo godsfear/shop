@@ -70,7 +70,8 @@ async def _notify_consent(session: AsyncSession, payload: dict) -> None:
                 content=(f"Запрошен доступ: контур '{payload['scope']}'."
                          + (f" Причина: {payload['reason']}" if payload.get('reason') else ''))))
         return
-    verdict = {'approved': 'одобрен', 'denied': 'отклонён', 'revoked': 'отозван'}[action]
+    verdict = {'approved': 'одобрен', 'denied': 'отклонён',
+               'revoked': 'отозван', 'expired': 'истёк по сроку'}[action]
     session.add(tables.Message(
         code='consent', receiver=uuid.UUID(payload['grantee']),
         title='Решение по вашему запросу доступа',

@@ -6,6 +6,7 @@
 denied/revoked строки закрываются (ends) — уникальный индекс держит
 только живые requested/approved, повторный запрос после отказа возможен.
 """
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import List
@@ -16,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import db_helper
+from ..logger import logger
 from ..models.auth import TokenPayload
 from ..models.consent import ConsentDecision, ConsentRequest
 from ..outbox import emit
@@ -24,7 +26,8 @@ from ..versioning import versioned_update
 from .. import tables
 from .notifications import TOPIC_CONSENT
 
-REQUESTED, APPROVED, DENIED, REVOKED = 'requested', 'approved', 'denied', 'revoked'
+REQUESTED, APPROVED, DENIED, REVOKED, EXPIRED = (
+    'requested', 'approved', 'denied', 'revoked', 'expired')
 MANAGE = 'manage'
 
 
@@ -100,6 +103,30 @@ class ConsentService:
         await self.session.commit()
         return row
 
+    async def sweep_expired(self, limit: int = 500) -> int:
+        """Закрывает согласия с истёкшим until (фоновый sweep, см. consent_sweeper).
+
+        approved + until <= now -> status 'expired' + ends. Действующий доступ
+        уже блокируется _until_alive() при чтении; sweep убирает протухшие из
+        активного набора и уведомляет получателя. FOR UPDATE SKIP LOCKED —
+        параллельные sweeper'ы не мешают друг другу. Возвращает число закрытых.
+        """
+        now = datetime.now(timezone.utc)
+        rows = (await self.session.execute(
+            select(tables.Consent)
+            .where(tables.Consent.status == APPROVED,
+                   tables.Consent.until.is_not(None),
+                   tables.Consent.until <= now)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )).scalars().all()
+        for row in rows:
+            updated = await versioned_update(self.session, tables.Consent, row.id,
+                                             {'status': EXPIRED, 'ends': now})
+            self._emit(updated, EXPIRED)
+        await self.session.commit()
+        return len(rows)
+
     async def incoming(self, payload: TokenPayload) -> List[tables.Consent]:
         """Ожидающие решения запросы к субъектам, которыми управляет вызывающий."""
         q = select(tables.Consent).where(tables.Consent.status == REQUESTED)
@@ -137,16 +164,30 @@ class ConsentService:
         """Прямое назначение управляющего (без запроса-одобрения).
 
         Может действующий управляющий субъекта, владелец персоны или админ.
-        Сюда же должен встать будущий Company-API: creator компании получает
-        первый manage автоматически при её создании.
+        Бутстрап первого управляющего (creator новой компании) идёт через
+        bootstrap_manage без этой проверки — управляющего ещё нет.
         """
         if not await is_subject_manager(self.session, subject_table, subject_id, payload):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 detail='назначать управляющего может владелец, '
                                        'действующий управляющий или администратор')
+        row = await self.bootstrap_manage(subject_table, subject_id, grantee,
+                                          reason='назначение управляющего')
+        await self.session.commit()
+        return row
+
+    async def bootstrap_manage(self, subject_table: str, subject_id: uuid.UUID,
+                               grantee: uuid.UUID,
+                               reason: str = 'создатель субъекта') -> tables.Consent:
+        """Низкоуровневая выдача manage БЕЗ проверки прав и БЕЗ commit.
+
+        Для бутстрапа первого управляющего в общей транзакции создания
+        субъекта (некому авторизовывать — управляющего ещё нет).
+        Вызывающий обязан сделать commit.
+        """
         row = tables.Consent(table=subject_table, objectid=subject_id,
                              grantee=grantee, scope=MANAGE, status=APPROVED,
-                             reason='назначение управляющего')
+                             reason=reason)
         self.session.add(row)
         try:
             await self.session.flush()
@@ -155,7 +196,6 @@ class ConsentService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                                 detail='у получателя уже есть живой manage-доступ') from None
         self._emit(row, APPROVED)
-        await self.session.commit()
         return row
 
     async def ensure_access(self, subject_table: str, subject_id: uuid.UUID,
@@ -193,3 +233,18 @@ class ConsentService:
             'subject_id': str(row.objectid), 'scope': row.scope,
             'grantee': str(row.grantee), 'reason': row.reason,
         })
+
+
+async def consent_sweeper() -> None:
+    """Фоновый цикл протухания согласий (стартует в lifespan приложения)."""
+    while True:
+        try:
+            async with db_helper.session_factory() as session:
+                closed = await ConsentService(session).sweep_expired()
+            if closed:
+                logger.info('consent: протухло согласий: %s', closed)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 — БД мигнула: подождать и продолжить
+            logger.warning('consent: sweeper: %r', e)
+        await asyncio.sleep(settings.consent_sweep_s)

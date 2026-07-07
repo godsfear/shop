@@ -3,6 +3,7 @@ from .entity import router as entity_router
 from .user import router as user_router
 from .auth import router as auth_router
 from .category import router as category_router
+from .company import router as company_router
 from .currency import router as currency_router
 from .country import router as country_router
 from .bridge import router as bridge_router
@@ -20,6 +21,7 @@ router.include_router(auth_router)
 router.include_router(entity_router)
 router.include_router(user_router)
 router.include_router(category_router)
+router.include_router(company_router)
 router.include_router(currency_router)
 router.include_router(country_router)
 router.include_router(fsm_router)
