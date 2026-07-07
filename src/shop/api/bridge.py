@@ -10,7 +10,9 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..models.auth import TokenPayload
-from ..models.bridge import (AccessOut, BreakglassRequest, GrantRequest,
+from typing import List
+
+from ..models.bridge import (AccessInfo, AccessOut, BreakglassRequest, GrantRequest,
                              LinkCreate, LinkOut, PseudonymOut, ResolveRequest)
 from ..services.auth import get_token_payload
 from ..services.bridge import BridgeService
@@ -58,6 +60,24 @@ async def breakglass_resolve(link_id: uuid.UUID, data: BreakglassRequest,
 async def grant_access(link_id: uuid.UUID, data: GrantRequest,
                        service: BridgeService = Depends(),
                        payload: TokenPayload = Depends(get_token_payload)):
+    """Выдать доступ: только владелец субъекта моста или администратор."""
     access = await service.add_recipient(link_id, data.key_id, data.recipient,
-                                         _b64(data.dek_b64, 'dek_b64'))
+                                         _b64(data.dek_b64, 'dek_b64'),
+                                         recipient_type=data.recipient_type,
+                                         payload=payload)
     return AccessOut(access=access.id)
+
+
+@router.get('/link/{link_id}/access', response_model=List[AccessInfo])
+async def list_access(link_id: uuid.UUID, service: BridgeService = Depends(),
+                      payload: TokenPayload = Depends(get_token_payload)):
+    """Кому выдан доступ по мосту (владелец/админ; без шифртекстов)."""
+    return await service.list_access(link_id, payload)
+
+
+@router.delete('/link/{link_id}/access/{access_id}', response_model=AccessInfo)
+async def revoke_access(link_id: uuid.UUID, access_id: uuid.UUID,
+                        service: BridgeService = Depends(),
+                        payload: TokenPayload = Depends(get_token_payload)):
+    """Отозвать доступ (escrow-копию отозвать нельзя)."""
+    return await service.revoke_access(link_id, access_id, payload)

@@ -364,6 +364,13 @@ def trigger_statements() -> list[str]:
     return stmts
 
 
+@event.listens_for(metadata, 'before_create')
+def _create_extensions(target, connection, **kw) -> None:
+    """Расширения до создания таблиц: GIST(geography) и gin_trgm_ops в индексах."""
+    for ext in ('postgis', 'pg_trgm'):
+        connection.execute(text(f'CREATE EXTENSION IF NOT EXISTS {ext}'))
+
+
 @event.listens_for(metadata, 'after_create')
 def _create_domain_triggers(target, connection, **kw) -> None:
     for stmt in trigger_statements():
@@ -670,7 +677,55 @@ class Language(BaseCategory):
 
 
 class Translation(CrossTable):
-    text: Mapped[dict] = mapped_column(JSONB)
+    """Перевод поля объекта: одна строка = объект × поле × язык.
+
+    Только пользовательский контент (названия товаров/услуг/категорий);
+    системные коды (FSM-состояния, роли) в БД не переводятся — это файлы
+    локалей на слое представления. История правок перевода — версии-копии.
+    """
+    language: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("language.id"))
+    field: Mapped[str] = mapped_column(String)      # что переведено: name | description
+    content: Mapped[str] = mapped_column(String)
+
+    __local_table_args__ = (
+        Index('uq_translation_object_field_lang',
+              'table', 'objectid', 'field', 'language',
+              unique=True, postgresql_where=ACTIVE),
+        # trigram: регистронезависимый поиск подстрокой на любом языке одним индексом
+        Index('ix_translation_content_trgm', 'content',
+              postgresql_using='gin', postgresql_ops={'content': 'gin_trgm_ops'}),
+        Index('ix_translation_lang_field', 'language', 'field', postgresql_where=ACTIVE),
+    )
+
+
+class Consent(CrossTable):
+    """Согласие на доступ к приватным данным субъекта (person | company).
+
+    Consent-first паттерн: доступ к identity-данным — только по запросу
+    у владельца. Workflow: requested -> approved | denied; approved -> revoked
+    (смены статуса версионны — история решений в копиях). scope совпадает
+    с контурами моста (contact/medical/financial) + 'identity' (базовые
+    данные) + 'manage' (право управлять доступами субъекта — «управляющий»).
+    until — срок действия approved (NULL = бессрочно; проверяется при чтении,
+    ends для этого не годится — автофильтр проверяет IS NULL, а не > now).
+    """
+    grantee: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("user.id"), index=True)
+    scope: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, server_default=text("'requested'"))
+    until: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True),
+                                                            nullable=True)
+    reason: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    __local_table_args__ = (
+        # одна активная строка на (субъект, получатель, scope):
+        # повторный запрос при живом согласии/запросе отвергается БД
+        Index('uq_consent_subject_grantee_scope',
+              'table', 'objectid', 'grantee', 'scope',
+              unique=True, postgresql_where=ACTIVE),
+        CheckConstraint(
+            "status IN ('requested', 'approved', 'denied', 'revoked')",
+            name='status_valid'),
+    )
 
 
 class Pseudonym(Base):

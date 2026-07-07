@@ -52,7 +52,7 @@ def _machine_class(config: dict) -> type[FSMMixin]:
         for role in ('guard', 'action'):
             name = spec.get(role)
             if isinstance(name, str) and name not in _handlers:
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                                     detail=f"обработчик '{name}' не зарегистрирован (@fsm_handler)")
     try:
         return type('CategoryFSM', (FSMMixin,), {
@@ -62,7 +62,7 @@ def _machine_class(config: dict) -> type[FSMMixin]:
             **_handlers,
         })
     except (KeyError, ValueError) as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                             detail=f'некорректная конфигурация машины состояний: {e}')
 
 
@@ -97,7 +97,7 @@ class FSMService:
         зарезервированы сигнатурой миксина."""
         context = context or {}
         if reserved := {'event', 'self'} & set(context):
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                                 detail=f'зарезервированные ключи context: {sorted(reserved)}')
         config = await self._config(table, objectid, lock=True)
         row = await self._current_row(table, objectid)

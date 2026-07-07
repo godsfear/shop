@@ -1,6 +1,9 @@
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel
+
+from .base import ReadMixin
 
 
 class LinkCreate(BaseModel):
@@ -30,6 +33,7 @@ class GrantRequest(BaseModel):
     """Грант нового получателя; DEK расшифровывает владелец на клиенте."""
     key_id: str
     recipient: uuid.UUID | None = None
+    recipient_type: Literal['group', 'user'] = 'group'
     dek_b64: str
 
 
@@ -39,3 +43,10 @@ class PseudonymOut(BaseModel):
 
 class AccessOut(BaseModel):
     access: uuid.UUID
+
+
+class AccessInfo(ReadMixin):
+    """Строка круга доступа — без шифртекстов."""
+    recipient_type: str
+    recipient: uuid.UUID | None
+    key_id: str | None

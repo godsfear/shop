@@ -2,6 +2,7 @@ __all__ = (
     "AuthService",
     "BridgeService",
     "CategoryService",
+    "ConsentService",
     "CountryService",
     "CurrencyService",
     "EntityService",
@@ -10,6 +11,7 @@ __all__ = (
     "PersonService",
     "PlaceService",
     "RateService",
+    "TranslationService",
     "UserService",
 )
 
@@ -20,7 +22,9 @@ from .operation import OperationService
 from .person import PersonService
 from .place import PlaceService
 from .rate import RateService
+from .translation import TranslationService
 from .category import CategoryService
+from .consent import ConsentService
 from .country import CountryService
 from .currency import CurrencyService
 from .entity import EntityService

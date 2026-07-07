@@ -1,13 +1,20 @@
 import asyncio, tempfile, datetime
 
+from fastapi import HTTPException
 from sqlalchemy import select, text, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
+from shop.cache import get_cache
 from shop.tables import DomainBoundaryError
 from shop.keyservice import StubKeyService, EMERGENCY
+from shop.models.auth import TokenPayload
+from shop.models.user import Contact, UserCreate
+from shop.outbox import process_one
 from shop.services.bridge import BridgeService
+from shop.services.user import UserService
+from shop.settings import settings
 
 URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
 
@@ -38,6 +45,7 @@ async def test_main():
                           birthdate=datetime.date(1980, 5, 1), birth_place=place.id)
         s.add(person); await s.commit()
         person_id = person.id
+        place_id = place.id
     print('[ok] бутстрап: страна -> место -> персона (циклы FK развязаны)')
 
     # --- пул псевдонимов ---
@@ -166,6 +174,89 @@ async def test_main():
             select(t.Property).execution_options(include_expired=True))).scalars().all()
     assert len(active) == 0 and len(all_rows) == 1
     print('[ok] автофильтр ends: активных 0, с include_expired — 1')
+
+    # === владелец делится доступом: grant / list / revoke / уведомления ===
+    async with Sess() as s:
+        usvc = UserService(session=s)
+        owner = await usvc.create(UserCreate(person=person_id,
+                                             contact=Contact(email='owner@x.com'),
+                                             password='correct-horse'))
+        friend_person = t.Person(name={'last': 'Сидоров'}, sex=True,
+                                 birthdate=datetime.date(1985, 3, 2), birth_place=place_id)
+        s.add(friend_person); await s.flush()
+        friend = await usvc.create(UserCreate(person=friend_person.id,
+                                              contact=Contact(email='friend@x.com'),
+                                              password='correct-horse'))
+    owner_p = TokenPayload(sub=owner.id)
+    friend_p = TokenPayload(sub=friend.id)
+    admin_p = TokenPayload(sub=friend.id, roles=[settings.admin_role])
+
+    # DEK владелец «расшифровывает у себя» — в тесте достаём через группу врачей
+    async with Sess() as s:
+        wrapped = (await s.execute(select(t.Access.wrapped_dek).where(
+            t.Access.link == link_id,
+            t.Access.key_id == 'group:doctors'))).scalar_one()
+    dek = ks.unwrap('group:doctors', wrapped, 'dr-ivanov')
+    friend_key = f'user:{friend.id}'
+    ks.create_key(friend_key)
+    ks.grant(friend_key, str(friend.id))
+
+    async with Sess() as s:
+        bridge = BridgeService(session=s, keys=ks)
+        # чужак выдать грант не может
+        try:
+            await bridge.add_recipient(link_id, friend_key, friend.id, dek,
+                                       recipient_type='user', payload=friend_p)
+            raise AssertionError('чужак выдал грант!')
+        except HTTPException as e:
+            assert e.status_code == 403
+            print(f'[ok] грант чужаком: 403 ({e.detail})')
+        # владелец может
+        access = await bridge.add_recipient(link_id, friend_key, friend.id, dek,
+                                            recipient_type='user', payload=owner_p)
+        # список: escrow + группа + персональный, честные типы
+        infos = await bridge.list_access(link_id, owner_p)
+        assert {a.recipient_type for a in infos} == {'escrow', 'group', 'user'}
+        print('[ok] владелец выдал персональный грант; список доступов честный')
+        # получатель разрешает мост (actor = его sub)
+        resolved = await bridge.resolve(link_id, friend_key, str(friend.id))
+        assert resolved == pseudonym_id
+        print('[ok] получатель гранта разрешил мост')
+        # escrow отозвать нельзя
+        escrow_row = next(a for a in infos if a.recipient_type == 'escrow')
+        try:
+            await bridge.revoke_access(link_id, escrow_row.id, admin_p)
+            raise AssertionError('escrow отозван!')
+        except HTTPException as e:
+            assert e.status_code == 400
+            print('[ok] escrow-копию отозвать нельзя: 400')
+        # отзыв персонального гранта (админом — тоже можно)
+        await bridge.revoke_access(link_id, access.id, admin_p)
+        infos = await bridge.list_access(link_id, owner_p)
+        assert 'user' not in {a.recipient_type for a in infos}
+    # после отзыва (и очистки сессионного кэша) мост недоступен
+    await get_cache().delete(f'bridge:{link_id}:{friend_key}:{friend.id}')
+    async with Sess() as s:
+        bridge = BridgeService(session=s, keys=ks)
+        try:
+            await bridge.resolve(link_id, friend_key, str(friend.id))
+            raise AssertionError('отозванный грант работает!')
+        except HTTPException as e:
+            assert e.status_code == 404
+            print('[ok] после отзыва: 404 (копии DEK больше нет)')
+
+    # уведомления владельцу о гранте и отзыве
+    while True:
+        async with Sess() as s:
+            if not await process_one(s):
+                break
+    async with Sess() as s:
+        msgs = (await s.execute(select(t.Message).where(
+            t.Message.receiver == owner.id,
+            t.Message.code == 'access').order_by(t.Message.begins))).scalars().all()
+        assert len(msgs) == 2
+        assert 'выдан' in msgs[0].content and 'отозван' in msgs[1].content
+    print('[ok] владелец уведомлён о гранте и отзыве через outbox')
 
     await eng.dispose()
     print('\nСКВОЗНОЙ ТЕСТ ПРОЙДЕН')

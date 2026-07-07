@@ -9,23 +9,27 @@ import base64
 import uuid
 
 from cryptography.fernet import Fernet
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..cache import get_cache
 from ..database import db_helper
 from ..logger import logger
+from ..models.auth import TokenPayload
 from ..outbox import emit
 from ..settings import settings
+from ..versioning import versioned_expire
 from .. import tables
 from ..keyservice import KeyService, get_key_service
-from .notifications import TOPIC_BREAKGLASS
+from .consent import is_subject_manager
+from .notifications import TOPIC_ACCESS, TOPIC_BREAKGLASS
 
 ESCROW_KEY = 'escrow'
 
 OWNER = 'owner'
 GROUP = 'group'
+USER = 'user'
 ESCROW = 'escrow'
 
 
@@ -149,23 +153,101 @@ class BridgeService:
         return pseudonym
 
     async def add_recipient(self, link_id: uuid.UUID, key_id: str,
-                            recipient: uuid.UUID | None, dek: bytes) -> tables.Access:
-        """Грант нового получателя. DEK предоставляет владелец
-        (в проде — расшифровав свою копию на клиенте)."""
+                            recipient: uuid.UUID | None, dek: bytes,
+                            recipient_type: str = GROUP,
+                            payload: TokenPayload | None = None) -> tables.Access:
+        """Грант нового получателя (тип: group | user).
+
+        DEK предоставляет владелец (в проде — расшифровав свою копию на
+        клиенте). Управлять кругом доступа может владелец субъекта моста
+        или администратор (payload обязателен на API-пути); владелец
+        уведомляется событием notify.access той же транзакцией.
+        """
+        if recipient_type not in (GROUP, USER, OWNER):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f"недопустимый тип получателя '{recipient_type}'")
+        link = await self._get_link(link_id)
+        await self._ensure_manager(link, payload)
         access = tables.Access(
-            link=link_id, recipient_type=GROUP, recipient=recipient,
+            link=link_id, recipient_type=recipient_type, recipient=recipient,
             key_id=key_id, wrapped_dek=self.keys.wrap(key_id, dek))
         self.session.add(access)
+        emit(self.session, TOPIC_ACCESS, {
+            'action': 'grant', 'subject_table': link.table,
+            'subject_id': str(link.objectid), 'scope': link.scope, 'key_id': key_id,
+        })
         await self.session.commit()
         return access
 
+    async def list_access(self, link_id: uuid.UUID,
+                          payload: TokenPayload) -> list[tables.Access]:
+        """Кому выдан доступ по мосту (активные копии DEK, без шифртекстов)."""
+        link = await self._get_link(link_id)
+        await self._ensure_manager(link, payload)
+        rows = (await self.session.execute(
+            select(tables.Access).where(tables.Access.link == link_id))).scalars().all()
+        return list(rows)
+
+    async def revoke_access(self, link_id: uuid.UUID, access_id: uuid.UUID,
+                            payload: TokenPayload) -> tables.Access:
+        """Отзыв гранта: закрывает копию DEK.
+
+        Escrow-копию отозвать нельзя — break-glass должен работать всегда.
+        Для группового получателя членство дополнительно правится ACL ключа
+        в KeyService. Уже разрешённый мост может жить в сессионном кэше
+        до cache_ttl_bridge_s — известная цена (см. resolve).
+        """
+        link = await self._get_link(link_id)
+        await self._ensure_manager(link, payload)
+        access = (await self.session.execute(
+            select(tables.Access).where(tables.Access.id == access_id,
+                                        tables.Access.link == link_id)
+        )).scalar_one_or_none()
+        if access is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        if access.recipient_type == ESCROW:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail='escrow-копию отозвать нельзя — '
+                                       'break-glass должен работать всегда')
+        await versioned_expire(self.session, tables.Access, access_id)
+        emit(self.session, TOPIC_ACCESS, {
+            'action': 'revoke', 'subject_table': link.table,
+            'subject_id': str(link.objectid), 'scope': link.scope,
+            'key_id': access.key_id,
+        })
+        await self.session.commit()
+        return access
+
+    async def _get_link(self, link_id: uuid.UUID) -> tables.Link:
+        link = (await self.session.execute(
+            select(tables.Link).where(tables.Link.id == link_id))).scalar_one_or_none()
+        if link is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='мост не найден')
+        return link
+
+    async def _ensure_manager(self, link: tables.Link,
+                              payload: TokenPayload | None) -> None:
+        """Кругом доступа управляет владелец субъекта, его управляющий
+        (approved consent scope='manage' — «управляющий» компании или
+        доверенное лицо персоны) или администратор."""
+        if payload is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail='нужна аутентификация')
+        if not await is_subject_manager(self.session, link.table,
+                                        link.objectid, payload):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail='управлять доступами может владелец данных, '
+                                       'управляющий или администратор')
+
     async def _link_and_access(self, link_id: uuid.UUID,
                                key_id: str) -> tuple[tables.Link, tables.Access]:
-        link = (await self.session.execute(
-            select(tables.Link).where(tables.Link.id == link_id))).scalar_one()
+        link = await self._get_link(link_id)
         access = (await self.session.execute(
             select(tables.Access).where(
                 tables.Access.link == link_id,
                 tables.Access.key_id == key_id,
-            ))).scalar_one()
+            ))).scalar_one_or_none()
+        if access is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                detail='доступ не найден (нет копии DEK или отозван)')
         return link, access

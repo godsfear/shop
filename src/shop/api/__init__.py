@@ -6,11 +6,13 @@ from .category import router as category_router
 from .currency import router as currency_router
 from .country import router as country_router
 from .bridge import router as bridge_router
+from .consent import router as consent_router
 from .fsm import router as fsm_router
 from .operation import router as operation_router
 from .person import router as person_router
 from .place import router as place_router
 from .rate import router as rate_router
+from .translation import router as translation_router
 from ..settings import settings
 
 router = APIRouter(prefix=settings.api_prefix, tags=['api'])
@@ -25,4 +27,6 @@ router.include_router(operation_router)
 router.include_router(person_router)
 router.include_router(place_router)
 router.include_router(rate_router)
+router.include_router(translation_router)
 router.include_router(bridge_router)
+router.include_router(consent_router)
