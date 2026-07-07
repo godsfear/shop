@@ -124,10 +124,7 @@ class Base(Root):
     # noinspection PyMethodParameters
     @declared_attr
     def version_of(cls) -> Mapped[uuid6.UUID | None]:
-        # use_alter: самоссылочный FK создаётся отдельным ALTER после таблицы —
-        # инлайн в CREATE TABLE ломается на некоторых версиях SQLAlchemy (CI)
-        return mapped_column(UUID_TYPE,
-                             ForeignKey(f'{cls.__name__.lower()}.id', use_alter=True),
+        return mapped_column(UUID_TYPE, ForeignKey(f'{cls.__name__.lower()}.id'),
                              nullable=True, index=True)
 
     def __repr__(self) -> str:
@@ -403,11 +400,8 @@ def _filter_expired(execute_state: ORMExecuteState) -> None:
 class BaseCategory(Base):
     __abstract__: bool = True
 
-    # nullable: корневые категории не имеют родителя, иначе первую строку не вставить;
-    # use_alter: ребро кластера взаимоссылок (category self + place->category) —
-    # create_all не должен зависеть от порядка (см. creator ниже)
-    category: Mapped[uuid6.UUID | None] = mapped_column(
-        UUID_TYPE, ForeignKey("category.id", use_alter=True), nullable=True)
+    # nullable: корневые категории не имеют родителя, иначе первую строку не вставить
+    category: Mapped[uuid6.UUID | None] = mapped_column(UUID_TYPE, ForeignKey("category.id"), nullable=True)
     code: Mapped[str] = mapped_column(String)
     # обязательность name — правило API (Create-модели), а не хранения;
     # уникальность (category, code) при необходимости объявляется в __table_args__ наследника
@@ -437,9 +431,7 @@ class User(Base):
 
     contact: Mapped[dict] = mapped_column(JSONB)
     password_hash: Mapped[str] = mapped_column(String)
-    # use_alter: ребро кластера user -> person (create_all не зависит от порядка)
-    person: Mapped[uuid6.UUID] = mapped_column(
-        UUID_TYPE, ForeignKey("person.id", use_alter=True), index=True)
+    person: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("person.id"), index=True)
     public_key: Mapped[str] = mapped_column(String)
     # роли попадают в JWT (claims: sub + roles); выдача — только админом
     roles: Mapped[list[str]] = mapped_column(ARRAY(String), server_default=text("'{}'"))
@@ -658,9 +650,7 @@ class Document(BaseCategory, CrossTable, DescriptionMixin):
 
 
 class Place(BaseCategory, DescriptionMixin):
-    # use_alter: ребро кластера place -> country (create_all не зависит от порядка)
-    country: Mapped[uuid6.UUID] = mapped_column(
-        UUID_TYPE, ForeignKey("country.id", use_alter=True), index=True)
+    country: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("country.id"), index=True)
 
     __local_table_args__ = (
         Index('ix_place_name', 'country', 'name', postgresql_where=ACTIVE),
@@ -673,9 +663,7 @@ class Person(Base):
     name: Mapped[dict] = mapped_column(JSONB)
     sex: Mapped[bool] = mapped_column(Boolean)
     birthdate: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    # use_alter: ребро кластера person -> place (create_all не зависит от порядка)
-    birth_place: Mapped[uuid6.UUID] = mapped_column(
-        UUID_TYPE, ForeignKey("place.id", use_alter=True))
+    birth_place: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("place.id"))
     sensitive: Mapped[list[str]] = mapped_column(ARRAY(String),nullable=True)
 
     __local_table_args__ = (
@@ -807,13 +795,3 @@ class Access(Base):
         Index('uq_access_link_recipient', 'link', 'recipient_type', 'recipient',
               unique=True, postgresql_where=ACTIVE),
     )
-
-
-# create_all чувствителен к порядку таблиц при взаимных FK, и в некоторых
-# окружениях (CI) сортировка выдаёт неверный порядок (ссылающаяся таблица
-# раньше цели). Делаем порядок неважным: КАЖДЫЙ FK добавляется отдельным
-# ALTER после создания всех таблиц. Имена берутся из naming_convention.
-# Явные use_alter=True выше (creator, version_of, кластер) этим покрыты.
-for _table in metadata.tables.values():
-    for _fk in _table.foreign_key_constraints:
-        _fk.use_alter = True

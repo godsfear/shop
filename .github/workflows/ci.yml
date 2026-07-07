@@ -31,6 +31,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv sync
+      # postgis-образ тянет tiger-геокодер со схемой tiger, где есть таблица
+      # tiger.place — она в search_path и коллизирует с нашей public.place
+      # (create_all checkfirst видит tiger.place и пропускает создание нашей).
+      # Прячем tiger: наши объекты живут только в public. Прод-образ (свой
+      # Dockerfile) tiger не ставит — это артефакт удобного CI-образа.
+      - run: psql "postgresql://shop:secret@localhost:5432/shop" -c "ALTER DATABASE shop SET search_path TO public"
       # ловим поломку миграций отдельно от тестов (чистая БД из свежего контейнера)
       - run: uv run alembic upgrade head
       - run: uv run pytest -q
