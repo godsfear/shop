@@ -124,7 +124,10 @@ class Base(Root):
     # noinspection PyMethodParameters
     @declared_attr
     def version_of(cls) -> Mapped[uuid6.UUID | None]:
-        return mapped_column(UUID_TYPE, ForeignKey(f'{cls.__name__.lower()}.id'),
+        # use_alter: самоссылочный FK создаётся отдельным ALTER после таблицы —
+        # инлайн в CREATE TABLE ломается на некоторых версиях SQLAlchemy (CI)
+        return mapped_column(UUID_TYPE,
+                             ForeignKey(f'{cls.__name__.lower()}.id', use_alter=True),
                              nullable=True, index=True)
 
     def __repr__(self) -> str:
