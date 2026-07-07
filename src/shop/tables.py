@@ -403,8 +403,11 @@ def _filter_expired(execute_state: ORMExecuteState) -> None:
 class BaseCategory(Base):
     __abstract__: bool = True
 
-    # nullable: корневые категории не имеют родителя, иначе первую строку не вставить
-    category: Mapped[uuid6.UUID | None] = mapped_column(UUID_TYPE, ForeignKey("category.id"), nullable=True)
+    # nullable: корневые категории не имеют родителя, иначе первую строку не вставить;
+    # use_alter: ребро кластера взаимоссылок (category self + place->category) —
+    # create_all не должен зависеть от порядка (см. creator ниже)
+    category: Mapped[uuid6.UUID | None] = mapped_column(
+        UUID_TYPE, ForeignKey("category.id", use_alter=True), nullable=True)
     code: Mapped[str] = mapped_column(String)
     # обязательность name — правило API (Create-модели), а не хранения;
     # уникальность (category, code) при необходимости объявляется в __table_args__ наследника
@@ -434,7 +437,9 @@ class User(Base):
 
     contact: Mapped[dict] = mapped_column(JSONB)
     password_hash: Mapped[str] = mapped_column(String)
-    person: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("person.id"), index=True)
+    # use_alter: ребро кластера user -> person (create_all не зависит от порядка)
+    person: Mapped[uuid6.UUID] = mapped_column(
+        UUID_TYPE, ForeignKey("person.id", use_alter=True), index=True)
     public_key: Mapped[str] = mapped_column(String)
     # роли попадают в JWT (claims: sub + roles); выдача — только админом
     roles: Mapped[list[str]] = mapped_column(ARRAY(String), server_default=text("'{}'"))
@@ -653,7 +658,9 @@ class Document(BaseCategory, CrossTable, DescriptionMixin):
 
 
 class Place(BaseCategory, DescriptionMixin):
-    country: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("country.id"), index=True)
+    # use_alter: ребро кластера place -> country (create_all не зависит от порядка)
+    country: Mapped[uuid6.UUID] = mapped_column(
+        UUID_TYPE, ForeignKey("country.id", use_alter=True), index=True)
 
     __local_table_args__ = (
         Index('ix_place_name', 'country', 'name', postgresql_where=ACTIVE),
@@ -666,7 +673,9 @@ class Person(Base):
     name: Mapped[dict] = mapped_column(JSONB)
     sex: Mapped[bool] = mapped_column(Boolean)
     birthdate: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    birth_place: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("place.id"))
+    # use_alter: ребро кластера person -> place (create_all не зависит от порядка)
+    birth_place: Mapped[uuid6.UUID] = mapped_column(
+        UUID_TYPE, ForeignKey("place.id", use_alter=True))
     sensitive: Mapped[list[str]] = mapped_column(ARRAY(String),nullable=True)
 
     __local_table_args__ = (
