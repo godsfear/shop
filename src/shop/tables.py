@@ -15,10 +15,12 @@ from sqlalchemy.orm import (DeclarativeBase,
                             with_loader_criteria)
 from sqlalchemy.sql import func
 from sqlalchemy import (String,
+                        BigInteger,
                         ForeignKey,
                         ForeignKeyConstraint,
                         DateTime,
                         Date,
+                        Identity,
                         Index,
                         Integer,
                         Numeric,
@@ -659,6 +661,53 @@ class Blob(Root):
     content: Mapped[bytes] = mapped_column(BYTEA)
     created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True),
                                                        server_default=func.now())
+
+
+class Key(Root):
+    """Ключевой сервис (keyservice.DbKeyService): ключ получателя + ACL.
+
+    Материал ключа зашифрован KEK (settings.kek — мастер-ключ из окружения):
+    компрометация БД без KEK ключи не раскрывает. Служебная таблица вне
+    темпоральной модели и реестра; research-роли не грантится (security.py)."""
+    __tablename__ = "key"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)     # key_id: patient:{sub}, escrow, ...
+    material: Mapped[bytes] = mapped_column(BYTEA)                # Enc(KEK, Fernet-ключ)
+    acl: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)  # actors с правом unwrap
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True),
+                                                       server_default=func.now())
+
+
+class Breakglass(Root):
+    """Заявка break-glass (в БД — переживает рестарт и виднa всем воркерам:
+    «правило двух» не работает в памяти одного процесса)."""
+    __tablename__ = "breakglass"
+
+    id: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, primary_key=True, default=uuid.uuid4)
+    kind: Mapped[str] = mapped_column(String)                     # emergency | legal | recovery
+    key_id: Mapped[str] = mapped_column(String, ForeignKey("key.id"))
+    requester: Mapped[str] = mapped_column(String)
+    reason: Mapped[str] = mapped_column(String)
+    reference: Mapped[str | None] = mapped_column(String, nullable=True)
+    approvals: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    status: Mapped[str] = mapped_column(String, default='pending')  # pending | vetoed | executed
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True),
+                                                       server_default=func.now())
+
+
+class KeyAudit(Root):
+    """Append-only аудит ключевого сервиса с хеш-цепочкой (prev -> hash).
+
+    Конкурентные записи сериализуются advisory-локом (см. DbKeyService._audit),
+    иначе два воркера продолжили бы цепочку от одного tip."""
+    __tablename__ = "key_audit"
+
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    ts: Mapped[str] = mapped_column(String)                       # isoformat — входит в hash
+    event: Mapped[str] = mapped_column(String)
+    data: Mapped[dict] = mapped_column(JSONB)
+    prev: Mapped[str] = mapped_column(String(64))
+    hash: Mapped[str] = mapped_column(String(64))
 
 
 class Document(BaseCategory, CrossTable, DescriptionMixin):

@@ -64,10 +64,10 @@ class MedAccessService:
         keys = self.bridge.keys
         for kid in ('escrow', self._patient_key()):  # escrow — общесистемный (break-glass)
             try:
-                keys.create_key(kid)
+                await keys.create_key(kid)
             except KeyServiceError:
                 pass                                # ключ уже существует
-        keys.grant(self._patient_key(), str(self.payload.sub))
+        await keys.grant(self._patient_key(), str(self.payload.sub))
         try:
             await self.bridge.create_link('person', person_id, 'medical',
                                           groups={self._patient_key(): person_id})
@@ -81,7 +81,7 @@ class MedAccessService:
             tables.Consent.scope == MEDICAL, tables.Consent.status == APPROVED,
             _until_alive()))).scalars().all()
         for grantee in grantees:
-            keys.grant(self._patient_key(), str(grantee))
+            await keys.grant(self._patient_key(), str(grantee))
 
     # --- сессия (ТОЛЬКО Слой A: owner). Слой B (врач/близкий) сессию не использует:
     # он stateless — link_id/key_id в каждом запросе (см. _resolve); делегированная

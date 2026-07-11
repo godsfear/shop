@@ -4,7 +4,6 @@
 разворачивает мост, чтение/запись скоупятся на псевдоним, проекция не раскрывает
 objectid (псевдоним), закрытие отзывает доступ."""
 import datetime
-import tempfile
 
 import pytest
 from fastapi import HTTPException
@@ -13,7 +12,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
-from shop.keyservice import StubKeyService
+from shop.keyservice import DbKeyService
 from shop.models.auth import TokenPayload
 from shop.models.medical import MedPropertyIn, MedPropertyOut
 from shop.models.property import PropertyCreate
@@ -55,10 +54,10 @@ async def test_main():
         user_id = user.id
 
     # ключ пациента: MVP-стенд-ин клиентской owner-крипты (сервер-резолвимый ключ)
-    ks = StubKeyService(tempfile.mkdtemp())
-    ks.create_key('escrow')                       # create_link всегда пишет escrow-копию
+    ks = DbKeyService(Sess)
+    await ks.create_key('escrow')                       # create_link всегда пишет escrow-копию
     key_id = f'patient:{user_id}'
-    ks.create_key(key_id); ks.grant(key_id, str(user_id))
+    await ks.create_key(key_id); await ks.grant(key_id, str(user_id))
 
     async with Sess() as s:
         link, pseudonym_id = await BridgeService(session=s, keys=ks).create_link(

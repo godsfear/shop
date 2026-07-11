@@ -68,11 +68,11 @@ class BridgeService:
 
         self.session.add(tables.Access(
             link=link.id, recipient_type=ESCROW, recipient=None,
-            key_id=ESCROW_KEY, wrapped_dek=self.keys.wrap(ESCROW_KEY, dek)))
+            key_id=ESCROW_KEY, wrapped_dek=await self.keys.wrap(ESCROW_KEY, dek)))
         for key_id, group_object in (groups or {}).items():
             self.session.add(tables.Access(
                 link=link.id, recipient_type=GROUP, recipient=group_object,
-                key_id=key_id, wrapped_dek=self.keys.wrap(key_id, dek)))
+                key_id=key_id, wrapped_dek=await self.keys.wrap(key_id, dek)))
         if owner_wrapped is not None:
             self.session.add(tables.Access(
                 link=link.id, recipient_type=OWNER, recipient=None,
@@ -145,7 +145,7 @@ class BridgeService:
         if cached is not None:
             return uuid.UUID(cached)
         link, access = await self._link_and_access(link_id, key_id)
-        dek = self.keys.unwrap(key_id, access.wrapped_dek, actor)
+        dek = await self.keys.unwrap(key_id, access.wrapped_dek, actor)
         pseudonym = uuid.UUID(bytes=_fernet(dek).decrypt(link.payload))
         await cache.set(ckey, str(pseudonym), settings.cache_ttl_bridge_s)
         return pseudonym
@@ -156,7 +156,7 @@ class BridgeService:
         Владелец уведомляется всегда: событие в outbox той же транзакцией
         (консумер — services/notifications.py)."""
         link, access = await self._link_and_access(link_id, ESCROW_KEY)
-        dek = self.keys.execute(request_id, access.wrapped_dek)
+        dek = await self.keys.execute(request_id, access.wrapped_dek)
         pseudonym = uuid.UUID(bytes=_fernet(dek).decrypt(link.payload))
         emit(self.session, TOPIC_BREAKGLASS, {
             'request_id': request_id,
@@ -185,7 +185,7 @@ class BridgeService:
         await self._ensure_manager(link, payload)
         access = tables.Access(
             link=link_id, recipient_type=recipient_type, recipient=recipient,
-            key_id=key_id, wrapped_dek=self.keys.wrap(key_id, dek))
+            key_id=key_id, wrapped_dek=await self.keys.wrap(key_id, dek))
         self.session.add(access)
         emit(self.session, TOPIC_ACCESS, {
             'action': 'grant', 'subject_table': link.table,

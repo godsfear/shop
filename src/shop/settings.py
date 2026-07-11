@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     sql_echo: bool = False
     api_prefix: str = '/api/v1'
     admin_role: str = 'admin'              # роль управления учётными записями/ролями
-    # ключевой сервис (заглушка HSM, см. keyservice.py)
-    keyservice_dir: str = 'keyservice'
+    # ключевой сервис (ключи в PG под KEK, см. keyservice.py)
+    kek: str = 'dev-kek'                   # мастер-ключ шифрования ключей; в проде ОБЯЗАТЕЛЬНО в .env
     breakglass_approvals: int = 2          # «правило двух»
     breakglass_role: str = 'keyholder'     # единственная роль подтверждающих
     veto_window_s: int = 7 * 24 * 3600     # окно вето recovery-заявки

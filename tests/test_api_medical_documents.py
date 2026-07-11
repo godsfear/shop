@@ -2,7 +2,6 @@
 outbox data.extract -> Property(source='ai'). Замыкает ИИ-конвейер на HTTP-слой.
 Форсит заглушку экстрактора (не ходит в Gemini). Требует Redis (сессия)."""
 import datetime
-import tempfile
 
 import pytest
 from fastapi import HTTPException
@@ -11,7 +10,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
-from shop.keyservice import StubKeyService
+from shop.keyservice import DbKeyService
 from shop.medical_seed import seed_medical
 from shop.models.auth import TokenPayload
 from shop.models.medical import EpisodeIn, DataOut
@@ -57,10 +56,10 @@ async def test_main():
             person=person_id, contact=Contact(email='p@x.com'), password='correct-horse'))
         user_id = user.id
 
-    ks = StubKeyService(tempfile.mkdtemp())
-    ks.create_key('escrow')
+    ks = DbKeyService(Sess)
+    await ks.create_key('escrow')
     key_id = f'patient:{user_id}'
-    ks.create_key(key_id); ks.grant(key_id, str(user_id))
+    await ks.create_key(key_id); await ks.grant(key_id, str(user_id))
     async with Sess() as s:
         link, pseudonym_id = await BridgeService(session=s, keys=ks).create_link(
             'person', person_id, 'medical', groups={key_id: person_id})

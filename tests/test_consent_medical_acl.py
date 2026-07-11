@@ -4,7 +4,6 @@
 - согласие одобрено ПОСЛЕ enroll -> грант сразу в decide.
 Требует Redis (кэш моста)."""
 import datetime
-import tempfile
 
 import pytest
 from fastapi import HTTPException
@@ -14,7 +13,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
 from shop.cache import get_cache
-from shop.keyservice import StubKeyService
+from shop.keyservice import DbKeyService
 from shop.models.auth import TokenPayload
 from shop.models.consent import ConsentDecision, ConsentRequest
 from shop.models.user import Contact, UserCreate
@@ -59,7 +58,7 @@ async def test_main():
         _, doc_a = await _mkuser(s, place_id, 'doc-a@x.com')
         _, doc_b = await _mkuser(s, place_id, 'doc-b@x.com')
 
-    ks = StubKeyService(tempfile.mkdtemp())
+    ks = DbKeyService(Sess)
     owner = TokenPayload(sub=owner_uid)
     key_id = f'patient:{owner_uid}'
 

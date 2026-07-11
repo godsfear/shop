@@ -4,7 +4,6 @@
 
 Сессии/Redis не требует — резолв статeless (bridge.resolve мягко деградирует)."""
 import datetime
-import tempfile
 import uuid
 
 import pytest
@@ -14,7 +13,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
-from shop.keyservice import StubKeyService
+from shop.keyservice import DbKeyService
 from shop.models.auth import TokenPayload
 from shop.models.property import PropertyCreate
 from shop.services.bridge import BridgeService
@@ -52,9 +51,9 @@ async def test_main():
     group_key = 'clinic-a'
     doctor = uuid.uuid4()          # actor'ом в KeyService выступает sub токена
     intruder = uuid.uuid4()
-    ks = StubKeyService(tempfile.mkdtemp())
-    ks.create_key('escrow')                     # escrow-копия в create_link
-    ks.create_key(group_key); ks.grant(group_key, str(doctor))
+    ks = DbKeyService(Sess)
+    await ks.create_key('escrow')                     # escrow-копия в create_link
+    await ks.create_key(group_key); await ks.grant(group_key, str(doctor))
 
     async with Sess() as s:
         link, pseudonym_id = await BridgeService(session=s, keys=ks).create_link(

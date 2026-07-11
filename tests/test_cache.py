@@ -1,4 +1,4 @@
-import asyncio, tempfile, datetime
+import asyncio, datetime
 
 from sqlalchemy import text
 from sqlalchemy.pool import NullPool
@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
 from shop.cache import Cache, get_cache
-from shop.keyservice import StubKeyService, PolicyError
+from shop.keyservice import DbKeyService, PolicyError
 from shop.models import CountryCreate, CountryFilter
 from shop.models.user import UserCreate, UserUpdate, Contact
 from shop.models.auth import TokenPayload
@@ -75,18 +75,18 @@ async def test_main():
         print('[ok] update через сервис инвалидировал профиль — свежие данные')
 
     # --- мост: сессионный кэш, ACL не обходится ---
-    ks = StubKeyService(tempfile.mkdtemp())
-    ks.create_key('escrow'); ks.create_key('group:doctors')
-    ks.grant('group:doctors', 'dr-ivanov')
+    ks = DbKeyService(Sess)
+    await ks.create_key('escrow'); await ks.create_key('group:doctors')
+    await ks.grant('group:doctors', 'dr-ivanov')
     async with Sess() as s:
         bridge = BridgeService(session=s, keys=ks)
         link, pseudonym_id = await bridge.create_link(
             'person', person.id, 'medical', groups={'group:doctors': None})
-        n_audit = ks.verify_audit()
+        n_audit = await ks.verify_audit()
         r1 = await bridge.resolve(link.id, 'group:doctors', 'dr-ivanov')  # unwrap + кэш
         r2 = await bridge.resolve(link.id, 'group:doctors', 'dr-ivanov')  # из кэша
         assert r1 == r2 == pseudonym_id
-        assert ks.verify_audit() == n_audit + 1, 'второй resolve пошёл в KeyService'
+        assert await ks.verify_audit() == n_audit + 1, 'второй resolve пошёл в KeyService'
         print('[ok] мост: повторный resolve из кэша, KeyService не тронут')
         try:
             await bridge.resolve(link.id, 'group:doctors', 'dr-chuzhoy')

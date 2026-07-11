@@ -1,4 +1,4 @@
-import asyncio, tempfile, datetime
+import asyncio, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import select, text, func
@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 import shop.tables as t
 from shop.cache import get_cache
 from shop.tables import DomainBoundaryError
-from shop.keyservice import StubKeyService, EMERGENCY
+from shop.keyservice import DbKeyService, EMERGENCY
 from shop.models.auth import TokenPayload
 from shop.models.user import Contact, UserCreate
 from conftest import drain
@@ -31,10 +31,10 @@ async def test_main():
     print('[ok] схема создана (пересоздание public + create_all)')
 
     Sess = async_sessionmaker(eng, expire_on_commit=False)
-    ks = StubKeyService(tempfile.mkdtemp(), approvals_required=2, veto_window_s=1)
-    ks.create_key('escrow')
-    ks.create_key('group:doctors')
-    ks.grant('group:doctors', 'dr-ivanov')
+    ks = DbKeyService(Sess, approvals_required=2, veto_window_s=1)
+    await ks.create_key('escrow')
+    await ks.create_key('group:doctors')
+    await ks.grant('group:doctors', 'dr-ivanov')
 
     # --- бутстрап домена личности: страна -> место -> персона ---
     async with Sess() as s:
@@ -158,11 +158,11 @@ async def test_main():
     # --- break-glass: правило двух ---
     async with Sess() as s:
         bridge = BridgeService(session=s, keys=ks)
-        rid = ks.request_breakglass(EMERGENCY, 'escrow', 'nurse-1', 'пациент без сознания')
-        ks.approve(rid, 'keyholder-1'); ks.approve(rid, 'keyholder-2')
+        rid = await ks.request_breakglass(EMERGENCY, 'escrow', 'nurse-1', 'пациент без сознания')
+        await ks.approve(rid, 'keyholder-1'); await ks.approve(rid, 'keyholder-2')
         resolved = await bridge.breakglass_resolve(link_id, rid)
         assert resolved == pseudonym_id
-        print('[ok] break-glass: escrow-копия DEK раскрыла мост, аудит:', ks.verify_audit(), 'записей')
+        print('[ok] break-glass: escrow-копия DEK раскрыла мост, аудит:', await ks.verify_audit(), 'записей')
 
     # --- автофильтр ends вживую ---
     async with Sess() as s:
@@ -197,10 +197,10 @@ async def test_main():
         wrapped = (await s.execute(select(t.Access.wrapped_dek).where(
             t.Access.link == link_id,
             t.Access.key_id == 'group:doctors'))).scalar_one()
-    dek = ks.unwrap('group:doctors', wrapped, 'dr-ivanov')
+    dek = await ks.unwrap('group:doctors', wrapped, 'dr-ivanov')
     friend_key = f'user:{friend.id}'
-    ks.create_key(friend_key)
-    ks.grant(friend_key, str(friend.id))
+    await ks.create_key(friend_key)
+    await ks.grant(friend_key, str(friend.id))
 
     async with Sess() as s:
         bridge = BridgeService(session=s, keys=ks)

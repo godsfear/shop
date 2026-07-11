@@ -1,6 +1,6 @@
-"""Заглушка внешнего ключевого сервиса (HSM + policy-engine).
+"""Ключевой сервис на Postgres: ключи под KEK, break-glass и аудит в БД.
 
-Контракт, который обязан выполнять боевой сервис (и эмулирует заглушка):
+Контракт (его же обязан выполнять будущий Vault/HSM-бэкенд):
 
 - ключи получателей (группы, escrow) НЕ покидают сервис — наружу только
   wrap/unwrap; у владельца-пациента свой ключ на клиенте, сервис его не видит;
@@ -17,34 +17,41 @@
 - каждое действие, включая отказы, пишется в append-only аудит
   с хеш-цепочкой ДО выполнения самого действия;
 - уведомление владельца о каждой заявке — обязанность вызывающей стороны
-  (очередь/Message), заглушка его не эмулирует.
+  (очередь/Message), сервис его не эмулирует.
 
-ЗАГЛУШКА НЕБЕЗОПАСНА: ключи лежат открытым текстом в keys.json, заявки
-живут в памяти процесса. Годится только для разработки и прогонов сценариев;
-замена — реализация KeyService поверх Vault Transit / облачного KMS / HSM.
+Хранение: таблицы Key / Breakglass / KeyAudit (tables.py) — состояние видно
+всем воркерам и переживает рестарт (в отличие от прежней файловой заглушки).
+Материал ключей зашифрован KEK — мастер-ключом из settings.kek: компрометация
+дампа БД без KEK ключи не раскрывает. Ceiling: KEK в .env; следующий уровень —
+KEK в Vault/KMS, реализация Protocol поверх их API (точка — get_key_service).
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal, Protocol
 
 from cryptography.fernet import Fernet
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from .settings import settings
+from . import tables
 
 Kind = Literal['emergency', 'legal', 'recovery']
 
 EMERGENCY: Kind = 'emergency'
 LEGAL: Kind = 'legal'
 RECOVERY: Kind = 'recovery'
+
+_GENESIS = '0' * 64
 
 
 class KeyServiceError(Exception):
@@ -59,59 +66,37 @@ class AuditError(KeyServiceError):
     """Хеш-цепочка аудита нарушена."""
 
 
-@dataclass
-class BreakGlassRequest:
-    id: str
-    kind: Kind
-    key_id: str
-    requester: str
-    reason: str
-    reference: str | None
-    created: datetime
-    approvals: set[str] = field(default_factory=set)
-    status: str = 'pending'  # pending | vetoed | executed
-
-
 class KeyService(Protocol):
-    """Интерфейс ключевого сервиса — точка замены заглушки на боевой бэкенд."""
+    """Интерфейс ключевого сервиса — точка замены на Vault Transit / KMS / HSM."""
 
-    def create_key(self, key_id: str) -> None: ...
-    def grant(self, key_id: str, actor: str) -> None: ...
-    def revoke(self, key_id: str, actor: str) -> None: ...
-    def wrap(self, key_id: str, plaintext: bytes) -> bytes: ...
-    def unwrap(self, key_id: str, token: bytes, actor: str) -> bytes: ...
-    def request_breakglass(self, kind: Kind, key_id: str, requester: str,
-                           reason: str, reference: str | None = None) -> str: ...
-    def approve(self, request_id: str, approver: str) -> None: ...
-    def veto(self, request_id: str, by: str) -> None: ...
-    def execute(self, request_id: str, token: bytes) -> bytes: ...
-    def verify_audit(self) -> int: ...
+    def new_dek(self) -> bytes: ...
+    async def create_key(self, key_id: str) -> None: ...
+    async def grant(self, key_id: str, actor: str) -> None: ...
+    async def revoke(self, key_id: str, actor: str) -> None: ...
+    async def wrap(self, key_id: str, plaintext: bytes) -> bytes: ...
+    async def unwrap(self, key_id: str, token: bytes, actor: str) -> bytes: ...
+    async def request_breakglass(self, kind: Kind, key_id: str, requester: str,
+                                 reason: str, reference: str | None = None) -> str: ...
+    async def approve(self, request_id: str, approver: str) -> None: ...
+    async def veto(self, request_id: str, by: str) -> None: ...
+    async def execute(self, request_id: str, token: bytes) -> bytes: ...
+    async def verify_audit(self) -> int: ...
 
 
-class StubKeyService:
-    def __init__(self, store_dir: str | Path,
+class DbKeyService:
+    """KeyService поверх Postgres. Каждый метод — одна короткая транзакция
+    в собственной сессии (session_factory), вызывающие сессий не передают."""
+
+    def __init__(self, session_factory: async_sessionmaker,
                  approvals_required: int = 2,
-                 veto_window_s: int = 7 * 24 * 3600):
-        self.dir = Path(store_dir)
-        self.dir.mkdir(parents=True, exist_ok=True)
-        self._keys_path = self.dir / 'keys.json'
-        self._audit_path = self.dir / 'audit.jsonl'
+                 veto_window_s: int = 7 * 24 * 3600,
+                 kek: str | None = None):
+        self._sessions = session_factory
         self.approvals_required = approvals_required
         self.veto_window = timedelta(seconds=veto_window_s)
-        self._requests: dict[str, BreakGlassRequest] = {}
-
-        if self._keys_path.exists():
-            data = json.loads(self._keys_path.read_text('utf-8'))
-        else:
-            data = {'keys': {}, 'acl': {}}
-        self._keys: dict[str, str] = data['keys']
-        self._acl: dict[str, list[str]] = data['acl']
-
-        self._tip = '0' * 64
-        if self._audit_path.exists():
-            lines = self._audit_path.read_text('utf-8').splitlines()
-            if lines:
-                self._tip = json.loads(lines[-1])['hash']
+        raw = (kek if kek is not None else settings.kek).encode()
+        # KEK-строка любой длины -> ключ Fernet (sha256 -> urlsafe base64)
+        self._kek = Fernet(base64.urlsafe_b64encode(hashlib.sha256(raw).digest()))
 
     @staticmethod
     def new_dek() -> bytes:
@@ -121,134 +106,163 @@ class StubKeyService:
     # ------------------------------------------------------------------ #
     #  Ключи и повседневный доступ по ACL
     # ------------------------------------------------------------------ #
-    def create_key(self, key_id: str) -> None:
-        if key_id in self._keys:
-            raise KeyServiceError(f"ключ '{key_id}' уже существует")
-        self._audit('key.create', key_id=key_id)
-        self._keys[key_id] = Fernet.generate_key().decode()
-        self._acl.setdefault(key_id, [])
-        self._save()
+    async def create_key(self, key_id: str) -> None:
+        async with self._sessions() as s:
+            if await s.get(tables.Key, key_id) is not None:
+                raise KeyServiceError(f"ключ '{key_id}' уже существует")
+            await self._audit(s, 'key.create', key_id=key_id)
+            s.add(tables.Key(id=key_id,
+                             material=self._kek.encrypt(Fernet.generate_key())))
+            try:
+                await s.commit()
+            except IntegrityError:  # гонка конкурентного create_key
+                await s.rollback()
+                raise KeyServiceError(f"ключ '{key_id}' уже существует") from None
 
-    def grant(self, key_id: str, actor: str) -> None:
-        self._require_key(key_id)
-        self._audit('key.grant', key_id=key_id, actor=actor)
-        if actor not in self._acl[key_id]:
-            self._acl[key_id].append(actor)
-            self._save()
+    async def grant(self, key_id: str, actor: str) -> None:
+        async with self._sessions() as s:
+            key = await self._key(s, key_id, lock=True)
+            await self._audit(s, 'key.grant', key_id=key_id, actor=actor)
+            if actor not in key.acl:
+                key.acl = key.acl + [actor]
+            await s.commit()
 
-    def revoke(self, key_id: str, actor: str) -> None:
-        self._require_key(key_id)
-        self._audit('key.revoke', key_id=key_id, actor=actor)
-        if actor in self._acl[key_id]:
-            self._acl[key_id].remove(actor)
-            self._save()
+    async def revoke(self, key_id: str, actor: str) -> None:
+        async with self._sessions() as s:
+            key = await self._key(s, key_id, lock=True)
+            await self._audit(s, 'key.revoke', key_id=key_id, actor=actor)
+            if actor in key.acl:
+                key.acl = [a for a in key.acl if a != actor]
+            await s.commit()
 
-    def wrap(self, key_id: str, plaintext: bytes) -> bytes:
-        self._require_key(key_id)
-        self._audit('key.wrap', key_id=key_id)
-        return Fernet(self._keys[key_id].encode()).encrypt(plaintext)
+    async def wrap(self, key_id: str, plaintext: bytes) -> bytes:
+        async with self._sessions() as s:
+            key = await self._key(s, key_id)
+            await self._audit(s, 'key.wrap', key_id=key_id)
+            await s.commit()
+            return Fernet(self._kek.decrypt(key.material)).encrypt(plaintext)
 
-    def unwrap(self, key_id: str, token: bytes, actor: str) -> bytes:
-        self._require_key(key_id)
-        if actor not in self._acl.get(key_id, ()):
-            self._audit('key.unwrap.denied', key_id=key_id, actor=actor)
-            raise PolicyError(f"'{actor}' не имеет прямого доступа к ключу '{key_id}'")
-        self._audit('key.unwrap', key_id=key_id, actor=actor)
-        return Fernet(self._keys[key_id].encode()).decrypt(token)
+    async def unwrap(self, key_id: str, token: bytes, actor: str) -> bytes:
+        async with self._sessions() as s:
+            key = await self._key(s, key_id)
+            if actor not in key.acl:
+                await self._audit(s, 'key.unwrap.denied', key_id=key_id, actor=actor)
+                await s.commit()  # отказ фиксируется в аудите ДО исключения
+                raise PolicyError(f"'{actor}' не имеет прямого доступа к ключу '{key_id}'")
+            await self._audit(s, 'key.unwrap', key_id=key_id, actor=actor)
+            await s.commit()
+            return Fernet(self._kek.decrypt(key.material)).decrypt(token)
 
     # ------------------------------------------------------------------ #
     #  Break-glass
     # ------------------------------------------------------------------ #
-    def request_breakglass(self, kind: Kind, key_id: str, requester: str,
-                           reason: str, reference: str | None = None) -> str:
-        self._require_key(key_id)
-        if kind not in (EMERGENCY, LEGAL, RECOVERY):
-            raise KeyServiceError(f"неизвестный вид заявки '{kind}'")
-        if kind == LEGAL and not reference:
-            self._audit('breakglass.request.denied', kind=kind, key_id=key_id,
-                        requester=requester, why='нет реквизитов основания')
-            raise PolicyError('для legal-заявки обязательны реквизиты основания (reference)')
-        req = BreakGlassRequest(
-            id=str(uuid.uuid4()), kind=kind, key_id=key_id, requester=requester,
-            reason=reason, reference=reference, created=datetime.now(timezone.utc),
-        )
-        self._requests[req.id] = req
-        self._audit('breakglass.request', request_id=req.id, kind=kind, key_id=key_id,
-                    requester=requester, reason=reason, reference=reference)
-        return req.id
+    async def request_breakglass(self, kind: Kind, key_id: str, requester: str,
+                                 reason: str, reference: str | None = None) -> str:
+        async with self._sessions() as s:
+            await self._key(s, key_id)
+            if kind not in (EMERGENCY, LEGAL, RECOVERY):
+                raise KeyServiceError(f"неизвестный вид заявки '{kind}'")
+            if kind == LEGAL and not reference:
+                await self._audit(s, 'breakglass.request.denied', kind=kind, key_id=key_id,
+                                  requester=requester, why='нет реквизитов основания')
+                await s.commit()
+                raise PolicyError('для legal-заявки обязательны реквизиты основания (reference)')
+            req = tables.Breakglass(kind=kind, key_id=key_id, requester=requester,
+                                    reason=reason, reference=reference)
+            s.add(req)
+            await s.flush()
+            await self._audit(s, 'breakglass.request', request_id=str(req.id), kind=kind,
+                              key_id=key_id, requester=requester, reason=reason,
+                              reference=reference)
+            await s.commit()
+            return str(req.id)
 
-    def approve(self, request_id: str, approver: str) -> None:
-        req = self._get(request_id)
-        if req.kind == RECOVERY:
-            self._audit('breakglass.approve.denied', request_id=request_id,
-                        approver=approver, why='recovery исполняется после окна вето')
-            raise PolicyError('recovery-заявка не подтверждается — она исполняется после окна вето')
-        if approver == req.requester:
-            self._audit('breakglass.approve.denied', request_id=request_id,
-                        approver=approver, why='инициатор не может подтверждать')
-            raise PolicyError('инициатор заявки не может её подтверждать')
-        req.approvals.add(approver)
-        self._audit('breakglass.approve', request_id=request_id,
-                    approver=approver, total=len(req.approvals))
+    async def approve(self, request_id: str, approver: str) -> None:
+        async with self._sessions() as s:
+            req = await self._request(s, request_id, lock=True)
+            if req.kind == RECOVERY:
+                await self._audit(s, 'breakglass.approve.denied', request_id=request_id,
+                                  approver=approver, why='recovery исполняется после окна вето')
+                await s.commit()
+                raise PolicyError('recovery-заявка не подтверждается — она исполняется после окна вето')
+            if approver == req.requester:
+                await self._audit(s, 'breakglass.approve.denied', request_id=request_id,
+                                  approver=approver, why='инициатор не может подтверждать')
+                await s.commit()
+                raise PolicyError('инициатор заявки не может её подтверждать')
+            if approver not in req.approvals:
+                req.approvals = req.approvals + [approver]
+            await self._audit(s, 'breakglass.approve', request_id=request_id,
+                              approver=approver, total=len(req.approvals))
+            await s.commit()
 
-    def veto(self, request_id: str, by: str) -> None:
-        req = self._get(request_id)
-        if req.status != 'pending':
-            raise PolicyError(f"заявка в статусе '{req.status}', вето невозможно")
-        self._audit('breakglass.veto', request_id=request_id, by=by)
-        req.status = 'vetoed'
+    async def veto(self, request_id: str, by: str) -> None:
+        async with self._sessions() as s:
+            req = await self._request(s, request_id, lock=True)
+            if req.status != 'pending':
+                raise PolicyError(f"заявка в статусе '{req.status}', вето невозможно")
+            await self._audit(s, 'breakglass.veto', request_id=request_id, by=by)
+            req.status = 'vetoed'
+            await s.commit()
 
-    def execute(self, request_id: str, token: bytes) -> bytes:
-        req = self._get(request_id)
-        if req.status != 'pending':
-            self._audit('breakglass.execute.denied', request_id=request_id,
-                        why=f'статус {req.status}')
-            raise PolicyError(f"заявка в статусе '{req.status}'")
-        if req.kind in (EMERGENCY, LEGAL):
-            if len(req.approvals) < self.approvals_required:
-                self._audit('breakglass.execute.denied', request_id=request_id,
-                            why=f'подтверждений {len(req.approvals)}/{self.approvals_required}')
-                raise PolicyError(
-                    f'нужно {self.approvals_required} подтверждений, есть {len(req.approvals)}')
-        else:  # RECOVERY
-            deadline = req.created + self.veto_window
-            if datetime.now(timezone.utc) < deadline:
-                self._audit('breakglass.execute.denied', request_id=request_id,
-                            why='окно вето не истекло')
-                raise PolicyError(f'окно вето открыто до {deadline.isoformat()}')
-        self._audit('breakglass.execute', request_id=request_id,
-                    kind=req.kind, key_id=req.key_id)
-        req.status = 'executed'  # одноразовость: одна заявка — один unwrap
-        return Fernet(self._keys[req.key_id].encode()).decrypt(token)
+    async def execute(self, request_id: str, token: bytes) -> bytes:
+        async with self._sessions() as s:
+            req = await self._request(s, request_id, lock=True)
+            if req.status != 'pending':
+                await self._audit(s, 'breakglass.execute.denied', request_id=request_id,
+                                  why=f'статус {req.status}')
+                await s.commit()
+                raise PolicyError(f"заявка в статусе '{req.status}'")
+            if req.kind in (EMERGENCY, LEGAL):
+                if len(req.approvals) < self.approvals_required:
+                    await self._audit(s, 'breakglass.execute.denied', request_id=request_id,
+                                      why=f'подтверждений {len(req.approvals)}/{self.approvals_required}')
+                    await s.commit()
+                    raise PolicyError(
+                        f'нужно {self.approvals_required} подтверждений, есть {len(req.approvals)}')
+            else:  # RECOVERY
+                deadline = req.created + self.veto_window
+                if datetime.now(timezone.utc) < deadline:
+                    await self._audit(s, 'breakglass.execute.denied', request_id=request_id,
+                                      why='окно вето не истекло')
+                    await s.commit()
+                    raise PolicyError(f'окно вето открыто до {deadline.isoformat()}')
+            key = await self._key(s, req.key_id)
+            await self._audit(s, 'breakglass.execute', request_id=request_id,
+                              kind=req.kind, key_id=req.key_id)
+            req.status = 'executed'  # одноразовость: одна заявка — один unwrap
+            await s.commit()
+            return Fernet(self._kek.decrypt(key.material)).decrypt(token)
 
     # ------------------------------------------------------------------ #
     #  Аудит: append-only с хеш-цепочкой
     # ------------------------------------------------------------------ #
-    def verify_audit(self) -> int:
+    async def verify_audit(self) -> int:
         """Проверяет цепочку, возвращает число записей; AuditError при разрыве."""
-        prev = '0' * 64
-        count = 0
-        if not self._audit_path.exists():
-            return 0
-        for line in self._audit_path.read_text('utf-8').splitlines():
-            entry = json.loads(line)
-            if entry['prev'] != prev or entry['hash'] != self._entry_hash(entry):
+        async with self._sessions() as s:
+            rows = (await s.execute(
+                select(tables.KeyAudit).order_by(tables.KeyAudit.seq))).scalars().all()
+        prev = _GENESIS
+        for count, row in enumerate(rows):
+            entry = {'ts': row.ts, 'event': row.event, 'data': row.data, 'prev': row.prev}
+            if row.prev != prev or row.hash != self._entry_hash(entry):
                 raise AuditError(f'цепочка аудита нарушена на записи {count}')
-            prev = entry['hash']
-            count += 1
-        return count
+            prev = row.hash
+        return len(rows)
 
-    def _audit(self, event: str, **data) -> None:
-        entry = {
-            'ts': datetime.now(timezone.utc).isoformat(),
-            'event': event,
-            'data': data,
-            'prev': self._tip,
-        }
-        entry['hash'] = self._entry_hash(entry)
-        with self._audit_path.open('a', encoding='utf-8') as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
-        self._tip = entry['hash']
+    async def _audit(self, s: AsyncSession, event: str, **data) -> None:
+        """Запись в цепочку в транзакции вызывающего (фиксируется его commit'ом).
+
+        Advisory-лок до конца транзакции сериализует конкурентные append'ы —
+        иначе два воркера прочитали бы один tip и раздвоили цепочку."""
+        await s.execute(text("SELECT pg_advisory_xact_lock(hashtext('key_audit'))"))
+        tip = (await s.execute(select(tables.KeyAudit.hash)
+                               .order_by(tables.KeyAudit.seq.desc())
+                               .limit(1))).scalar_one_or_none() or _GENESIS
+        entry = {'ts': datetime.now(timezone.utc).isoformat(),
+                 'event': event, 'data': data, 'prev': tip}
+        s.add(tables.KeyAudit(ts=entry['ts'], event=event, data=data,
+                              prev=tip, hash=self._entry_hash(entry)))
 
     @staticmethod
     def _entry_hash(entry: dict) -> str:
@@ -261,26 +275,38 @@ class StubKeyService:
     # ------------------------------------------------------------------ #
     #  Внутреннее
     # ------------------------------------------------------------------ #
-    def _save(self) -> None:
-        self._keys_path.write_text(
-            json.dumps({'keys': self._keys, 'acl': self._acl}, indent=1), 'utf-8')
-
-    def _require_key(self, key_id: str) -> None:
-        if key_id not in self._keys:
+    @staticmethod
+    async def _key(s: AsyncSession, key_id: str, lock: bool = False) -> tables.Key:
+        q = select(tables.Key).where(tables.Key.id == key_id)
+        if lock:
+            q = q.with_for_update()
+        key = (await s.execute(q)).scalar_one_or_none()
+        if key is None:
             raise KeyServiceError(f"ключ '{key_id}' не существует")
+        return key
 
-    def _get(self, request_id: str) -> BreakGlassRequest:
-        req = self._requests.get(request_id)
+    @staticmethod
+    async def _request(s: AsyncSession, request_id: str,
+                       lock: bool = False) -> tables.Breakglass:
+        try:
+            rid = uuid.UUID(request_id)
+        except ValueError:
+            raise KeyServiceError(f"заявка '{request_id}' не найдена") from None
+        q = select(tables.Breakglass).where(tables.Breakglass.id == rid)
+        if lock:
+            q = q.with_for_update()
+        req = (await s.execute(q)).scalar_one_or_none()
         if req is None:
             raise KeyServiceError(f"заявка '{request_id}' не найдена")
         return req
 
 
 @lru_cache
-def get_key_service() -> StubKeyService:
-    """Точка получения сервиса; при замене на боевой бэкенд меняется только она."""
-    return StubKeyService(
-        store_dir=settings.keyservice_dir,
+def get_key_service() -> DbKeyService:
+    """Точка получения сервиса; при замене на Vault/KMS меняется только она."""
+    from .database import db_helper  # локально: разрыв цикла keyservice <- database
+    return DbKeyService(
+        db_helper.session_factory,
         approvals_required=settings.breakglass_approvals,
         veto_window_s=settings.veto_window_s,
     )

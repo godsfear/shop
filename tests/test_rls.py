@@ -1,4 +1,4 @@
-import asyncio, tempfile, datetime
+import asyncio, datetime
 
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
 from shop.security import apply_rls
-from shop.keyservice import StubKeyService
+from shop.keyservice import DbKeyService
 from shop.services.bridge import BridgeService
 
 APP_URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
@@ -36,8 +36,8 @@ async def test_main():
 
     # данные в обоих доменах: персона + мост + свойства там и там
     Sess = async_sessionmaker(eng, expire_on_commit=False)
-    ks = StubKeyService(tempfile.mkdtemp())
-    ks.create_key('escrow')
+    ks = DbKeyService(Sess)
+    await ks.create_key('escrow')
     async with Sess() as s:
         country = t.Country(iso2='ru', iso3='rus', name='Russia')
         s.add(country); await s.flush()

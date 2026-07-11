@@ -2,7 +2,6 @@
 (owner авто-дискавери по JWT) -> скоуп псевдонима. Идемпотентность enroll.
 Требует Redis (сессия)."""
 import datetime
-import tempfile
 
 import pytest
 from fastapi import HTTPException
@@ -11,7 +10,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
-from shop.keyservice import StubKeyService
+from shop.keyservice import DbKeyService
 from shop.models.auth import TokenPayload
 from shop.models.medical import MedPropertyIn
 from shop.models.user import UserCreate, Contact
@@ -50,7 +49,7 @@ async def test_main():
             person=person_id, contact=Contact(email='p@x.com'), password='correct-horse'))
         user_id = user.id
 
-    ks = StubKeyService(tempfile.mkdtemp())          # ключи выпускает сам enroll
+    ks = DbKeyService(Sess)          # ключи выпускает сам enroll
     payload = TokenPayload(sub=user_id)
 
     # --- до enroll: сессию открыть нельзя (моста нет) -> 409 ---

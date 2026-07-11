@@ -1,7 +1,6 @@
 """DB-подстраховка: триггеры реестра/доменов ловят сырые INSERT'ы,
 уникальность активного FSM-состояния держит БД, break-glass уведомляет владельца."""
 import datetime
-import tempfile
 
 import pytest
 from sqlalchemy import text, select, func
@@ -10,7 +9,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
-from shop.keyservice import StubKeyService, EMERGENCY
+from shop.keyservice import DbKeyService, EMERGENCY
 from shop.models.user import UserCreate, Contact
 from conftest import drain
 from shop.services.bridge import BridgeService
@@ -111,8 +110,8 @@ async def test_main():
     print('[ok] второе активное состояние: uq_property_active_state отверг')
 
     # --- break-glass уведомляет владельца через outbox ---
-    ks = StubKeyService(tempfile.mkdtemp(), approvals_required=2)
-    ks.create_key('escrow')
+    ks = DbKeyService(Sess, approvals_required=2)
+    await ks.create_key('escrow')
     async with Sess() as s:
         person = t.Person(name={'last': 'Иванов'}, sex=True,
                           birthdate=datetime.date(1980, 5, 1), birth_place=place_id)
@@ -123,8 +122,8 @@ async def test_main():
         bridge = BridgeService(session=s, keys=ks)
         link, pseudonym_id = await bridge.create_link('person', person.id, 'medical')
 
-        rid = ks.request_breakglass(EMERGENCY, 'escrow', 'nurse-1', 'без сознания')
-        ks.approve(rid, 'kh-1'); ks.approve(rid, 'kh-2')
+        rid = await ks.request_breakglass(EMERGENCY, 'escrow', 'nurse-1', 'без сознания')
+        await ks.approve(rid, 'kh-1'); await ks.approve(rid, 'kh-2')
         resolved = await bridge.breakglass_resolve(link.id, rid)
         assert resolved == pseudonym_id
 

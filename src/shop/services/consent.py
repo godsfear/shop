@@ -251,9 +251,9 @@ class ConsentService:
             return  # у персоны нет учётки — резолвить мост некому и нечем
         try:
             if action == APPROVED:
-                self.keys.grant(f'patient:{owner}', str(row.grantee))
+                await self.keys.grant(f'patient:{owner}', str(row.grantee))
             else:
-                self.keys.revoke(f'patient:{owner}', str(row.grantee))
+                await self.keys.revoke(f'patient:{owner}', str(row.grantee))
         except KeyServiceError:
             pass  # ключа ещё нет: пациент не enrolled — доступ появится после enroll
 
