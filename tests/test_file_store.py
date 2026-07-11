@@ -31,6 +31,7 @@ async def test_main():
     # --- put + roundtrip ---
     async with Sess() as s:
         ref = await FileStore(session=s).put(blob)
+        await s.commit()
     assert ref['algorithm'] == 'sha256' and ref['size'] == len(blob)
     async with Sess() as s:
         got = await FileStore(session=s).get(ref['hash'])
@@ -40,6 +41,7 @@ async def test_main():
     # --- дедуп: те же байты -> один блоб ---
     async with Sess() as s:
         ref2 = await FileStore(session=s).put(blob)
+        await s.commit()
     assert ref2['hash'] == ref['hash']
     async with Sess() as s:
         n = (await s.execute(select(func.count()).select_from(t.Blob))).scalar_one()

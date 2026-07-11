@@ -12,7 +12,7 @@ import uuid
 from typing import Callable
 
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from ..database import db_helper
 from ..medical_seed import medical_concepts
@@ -55,11 +55,16 @@ class MedicalService:
 
         cat_id = await medical_concepts(self.session)  # {code: id} под корнем 'medical'
 
+        required = cfg.get('required', ())
+        have = await self._have(
+            [cat_id[r['category']] for r in required if r['category'] in cat_id],
+            episode_id, pseudonym_id) if required else set()
         gaps = []
-        for req in cfg.get('required', ()):
+        for req in required:
             tbl, oid = ('entity', episode_id) if req.get('scope') == 'episode' \
                 else ('pseudonym', pseudonym_id)
-            if not await self._has_data(cat_id.get(req['category']), tbl, oid):
+            cid = cat_id.get(req['category'])
+            if cid is None or (tbl, oid, cid) not in have:
                 gaps.append(req['category'])
 
         # красные флаги — медицинская тревога: любой недостающий кусок конфигурации
@@ -79,13 +84,16 @@ class MedicalService:
             alerts = [name for name in flags if _redflags[name](symptoms)]
         return {'gaps': gaps, 'alerts': alerts}
 
-    async def _has_data(self, category_id, table: str, objectid: uuid.UUID) -> bool:
-        """Есть ли активный Property или Relation этого концепта на носителе."""
-        if category_id is None:
-            return False
+    async def _have(self, category_ids: list, episode_id: uuid.UUID,
+                    pseudonym_id: uuid.UUID) -> set[tuple]:
+        """{(table, objectid, category)} с активными Property/Relation — все
+        секции полноты двумя запросами вместо пары запросов на каждую (N+1)."""
+        have: set[tuple] = set()
         for cls in (tables.Property, tables.Relation):
-            q = select(cls).where(cls.category == category_id,
-                                   cls.table == table, cls.objectid == objectid).limit(1)
-            if (await self.session.execute(q)).scalars().first() is not None:
-                return True
-        return False
+            rows = (await self.session.execute(
+                select(cls.table, cls.objectid, cls.category).distinct().where(
+                    cls.category.in_(category_ids),
+                    or_(and_(cls.table == 'entity', cls.objectid == episode_id),
+                        and_(cls.table == 'pseudonym', cls.objectid == pseudonym_id))))).all()
+            have |= {tuple(r) for r in rows}
+        return have

@@ -55,98 +55,74 @@ async def close_session(svc: MedAccessService = Depends()):
 @router.get('/properties', response_model=List[MedPropertyOut])
 async def my_properties(svc: MedAccessService = Depends(),
                         category: uuid.UUID | None = Query(None),
-                        code: str | None = Query(None),
-                        link_id: uuid.UUID | None = Query(None),
-                        key_id: str | None = Query(None)):
-    return await svc.properties(category, code, link_id, key_id)
+                        code: str | None = Query(None)):
+    return await svc.properties(category, code)
 
 
 @router.post('/properties', response_model=MedPropertyOut,
              status_code=status.HTTP_201_CREATED)
-async def add_my_property(body: MedPropertyIn, svc: MedAccessService = Depends(),
-                          link_id: uuid.UUID | None = Query(None),
-                          key_id: str | None = Query(None)):
-    return await svc.add_property(body, link_id, key_id)
+async def add_my_property(body: MedPropertyIn, svc: MedAccessService = Depends()):
+    return await svc.add_property(body)
 
 
 # --- эпизоды (болезнь/травма) на псевдониме; доступ к {id} — за gate-проверкой ---
 @router.get('/episodes', response_model=List[EpisodeOut])
-async def my_episodes(svc: MedAccessService = Depends(),
-                      link_id: uuid.UUID | None = Query(None),
-                      key_id: str | None = Query(None)):
-    return await svc.episodes(link_id, key_id)
+async def my_episodes(svc: MedAccessService = Depends()):
+    return await svc.episodes()
 
 
 @router.post('/episodes', response_model=EpisodeOut, status_code=status.HTTP_201_CREATED)
-async def open_episode(body: EpisodeIn, svc: MedAccessService = Depends(),
-                       link_id: uuid.UUID | None = Query(None),
-                       key_id: str | None = Query(None)):
-    return await svc.open_episode(body, link_id, key_id)
+async def open_episode(body: EpisodeIn, svc: MedAccessService = Depends()):
+    return await svc.open_episode(body)
 
 
 @router.get('/episodes/{episode_id}/properties', response_model=List[MedPropertyOut])
 async def episode_properties(episode_id: uuid.UUID, svc: MedAccessService = Depends(),
                              category: uuid.UUID | None = Query(None),
-                             code: str | None = Query(None),
-                             link_id: uuid.UUID | None = Query(None),
-                             key_id: str | None = Query(None)):
-    return await svc.episode_properties(episode_id, category, code, link_id, key_id)
+                             code: str | None = Query(None)):
+    return await svc.episode_properties(episode_id, category, code)
 
 
 @router.post('/episodes/{episode_id}/properties', response_model=MedPropertyOut,
              status_code=status.HTTP_201_CREATED)
 async def add_episode_property(episode_id: uuid.UUID, body: MedPropertyIn,
-                               svc: MedAccessService = Depends(),
-                               link_id: uuid.UUID | None = Query(None),
-                               key_id: str | None = Query(None)):
-    return await svc.add_episode_property(episode_id, body, link_id, key_id)
+                               svc: MedAccessService = Depends()):
+    return await svc.add_episode_property(episode_id, body)
 
 
 @router.get('/episodes/{episode_id}/state')
-async def episode_state(episode_id: uuid.UUID, svc: MedAccessService = Depends(),
-                        link_id: uuid.UUID | None = Query(None),
-                        key_id: str | None = Query(None)):
-    return await svc.episode_state(episode_id, link_id, key_id)
+async def episode_state(episode_id: uuid.UUID, svc: MedAccessService = Depends()):
+    return await svc.episode_state(episode_id)
 
 
 @router.post('/episodes/{episode_id}/transition')
 async def episode_transition(episode_id: uuid.UUID, body: Transition,
-                             svc: MedAccessService = Depends(),
-                             link_id: uuid.UUID | None = Query(None),
-                             key_id: str | None = Query(None)):
-    return await svc.transition(episode_id, body.event, link_id, key_id)
+                             svc: MedAccessService = Depends()):
+    return await svc.transition(episode_id, body.event)
 
 
 # --- интервью: сбор анамнеза по протоколу (см. services/interview.py) ---
 @router.post('/episodes/{episode_id}/interview')
-async def interview_open(episode_id: uuid.UUID, svc: MedAccessService = Depends(),
-                         link_id: uuid.UUID | None = Query(None),
-                         key_id: str | None = Query(None)):
+async def interview_open(episode_id: uuid.UUID, svc: MedAccessService = Depends()):
     """Открыть интервью эпизода (идемпотентно) — возвращает состояние и вопрос."""
-    return await svc.interview_open(episode_id, link_id, key_id)
+    return await svc.interview_open(episode_id)
 
 
 @router.get('/episodes/{episode_id}/interview')
-async def interview_state(episode_id: uuid.UUID, svc: MedAccessService = Depends(),
-                          link_id: uuid.UUID | None = Query(None),
-                          key_id: str | None = Query(None)):
-    return await svc.interview_state(episode_id, link_id, key_id)
+async def interview_state(episode_id: uuid.UUID, svc: MedAccessService = Depends()):
+    return await svc.interview_state(episode_id)
 
 
 @router.post('/episodes/{episode_id}/interview/answer')
 async def interview_answer(episode_id: uuid.UUID, body: dict,
-                           svc: MedAccessService = Depends(),
-                           link_id: uuid.UUID | None = Query(None),
-                           key_id: str | None = Query(None)):
+                           svc: MedAccessService = Depends()):
     """Ответ на текущий вопрос; сервер сам двигает автомат и возвращает следующий."""
-    return await svc.interview_answer(episode_id, body, link_id, key_id)
+    return await svc.interview_answer(episode_id, body)
 
 
 @router.get('/episodes/{episode_id}/assess')
-async def episode_assess(episode_id: uuid.UUID, svc: MedAccessService = Depends(),
-                         link_id: uuid.UUID | None = Query(None),
-                         key_id: str | None = Query(None)):
-    return await svc.assess(episode_id, link_id, key_id)
+async def episode_assess(episode_id: uuid.UUID, svc: MedAccessService = Depends()):
+    return await svc.assess(episode_id)
 
 
 # --- документы/анализы: загрузка (-> блоб + метаданные + ИИ-разбор), список ---
@@ -157,17 +133,13 @@ async def upload_document(file: UploadFile,
                           code: str = Form(...),
                           category: uuid.UUID | None = Form(None),
                           episode_id: uuid.UUID | None = Query(None),
-                          svc: MedAccessService = Depends(),
-                          link_id: uuid.UUID | None = Query(None),
-                          key_id: str | None = Query(None)):
+                          svc: MedAccessService = Depends()):
     content = await file.read()
     return await svc.upload_document(content, name, code, category,
-                                     file.content_type or '', episode_id, link_id, key_id)
+                                     file.content_type or '', episode_id)
 
 
 @router.get('/documents', response_model=List[DataOut])
 async def my_documents(svc: MedAccessService = Depends(),
-                       episode_id: uuid.UUID | None = Query(None),
-                       link_id: uuid.UUID | None = Query(None),
-                       key_id: str | None = Query(None)):
-    return await svc.documents(episode_id, link_id, key_id)
+                       episode_id: uuid.UUID | None = Query(None)):
+    return await svc.documents(episode_id)

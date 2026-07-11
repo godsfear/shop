@@ -12,7 +12,9 @@ Redis (medsession:{sub}, TTL) — запросы авторизуются сес
 """
 import uuid
 
-from fastapi import Depends, HTTPException, status
+from typing import Annotated
+
+from fastapi import Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -49,10 +51,16 @@ class MedAccessService:
 
     def __init__(self, session=Depends(db_helper.scoped_session_dependency),
                  bridge: BridgeService = Depends(),
-                 payload: TokenPayload = Depends(get_token_payload)):
+                 payload: TokenPayload = Depends(get_token_payload),
+                 link_id: Annotated[uuid.UUID | None, Query()] = None,
+                 key_id: Annotated[str | None, Query()] = None):
         self.session = session
         self.bridge = bridge
         self.payload = payload
+        # Слой B (врач/близкий): link_id/key_id — query-параметры КАЖДОГО запроса,
+        # резолвятся в _resolve; продевать их через сигнатуры методов не нужно
+        self.link_id = link_id
+        self.key_id = key_id
 
     # --- онбординг: выпуск моста пациента (MVP-стенд-ин, KeyService — заглушка) ---
     async def enroll(self) -> None:
@@ -159,50 +167,43 @@ class MedAccessService:
     def _key(self) -> str:
         return f'{_SESSION_NS}:{self.payload.sub}'
 
-    async def _resolve(self, link_id: uuid.UUID | None,
-                       key_id: str | None) -> uuid.UUID:
+    async def _resolve(self) -> uuid.UUID:
         """Псевдоним: по (link_id, key_id) — разворот моста (Слой B, врач/близкий,
         без сессии), иначе из открытой owner-сессии (Слой A). ACL держит KeyService."""
-        if link_id is None:
+        if self.link_id is None:
             return await self._session_pseudonym()
-        if key_id is None:
+        if self.key_id is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                                 detail='при доступе по link_id нужен key_id')
         try:
-            return await self.bridge.resolve(link_id, key_id, str(self.payload.sub))
+            return await self.bridge.resolve(self.link_id, self.key_id, str(self.payload.sub))
         except PolicyError:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 detail='нет доступа к этому мосту (ACL ключа)')
 
     # --- данные: скоуп — псевдоним (сессии или моста) ---
     async def properties(self, category: uuid.UUID | None = None,
-                         code: str | None = None,
-                         link_id: uuid.UUID | None = None,
-                         key_id: str | None = None) -> list[tables.Property]:
-        pseudonym = await self._resolve(link_id, key_id)
+                         code: str | None = None) -> list[tables.Property]:
+        pseudonym = await self._resolve()
         return await PropertyService(session=self.session).find(PropertyFilter(
             table='pseudonym', objectid=pseudonym, category=category, code=code))
 
-    async def add_property(self, data: MedPropertyIn,
-                           link_id: uuid.UUID | None = None,
-                           key_id: str | None = None) -> tables.Property:
-        pseudonym = await self._resolve(link_id, key_id)
+    async def add_property(self, data: MedPropertyIn) -> tables.Property:
+        pseudonym = await self._resolve()
         return await PropertyService(session=self.session).create(
             PropertyCreate(category=data.category, code=data.code, name=data.name,
                            table='pseudonym', objectid=pseudonym, value=data.value),
             creator=self.payload.sub)
 
     # --- эпизоды (болезнь/травма): Entity на псевдониме ---
-    async def episodes(self, link_id: uuid.UUID | None = None,
-                       key_id: str | None = None) -> list[tables.Entity]:
-        pseudonym = await self._resolve(link_id, key_id)
+    async def episodes(self) -> list[tables.Entity]:
+        pseudonym = await self._resolve()
         return list((await self.session.execute(select(tables.Entity).where(
             tables.Entity.table == 'pseudonym',
             tables.Entity.objectid == pseudonym))).scalars().all())
 
-    async def open_episode(self, data: EpisodeIn, link_id: uuid.UUID | None = None,
-                           key_id: str | None = None) -> tables.Entity:
-        pseudonym = await self._resolve(link_id, key_id)
+    async def open_episode(self, data: EpisodeIn) -> tables.Entity:
+        pseudonym = await self._resolve()
         # только эпизодный концепт (illness/injury — категория с FSM): иначе /state
         # и /transition дадут 400, а /assess отрапортует «полно» по пустому конфигу
         category = await self.session.get(tables.Category, data.category)
@@ -214,87 +215,71 @@ class MedAccessService:
                          table='pseudonym', objectid=pseudonym),
             creator=self.payload.sub)
 
-    async def _gate_episode(self, episode_id: uuid.UUID, link_id: uuid.UUID | None,
-                            key_id: str | None) -> uuid.UUID:
+    async def _gate_episode(self, episode_id: uuid.UUID) -> uuid.UUID:
         """Ворота эпизод-скоупа: эпизод обязан висеть на псевдониме вызывающего.
         Чужой/несуществующий -> 404 (не 403: не раскрываем существование чужого)."""
-        pseudonym = await self._resolve(link_id, key_id)
+        pseudonym = await self._resolve()
         ep = await self.session.get(tables.Entity, episode_id)
         if ep is None or ep.table != 'pseudonym' or ep.objectid != pseudonym:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='эпизод не найден')
         return pseudonym
 
     async def episode_properties(self, episode_id: uuid.UUID,
-                                 category: uuid.UUID | None = None, code: str | None = None,
-                                 link_id: uuid.UUID | None = None,
-                                 key_id: str | None = None) -> list[tables.Property]:
-        await self._gate_episode(episode_id, link_id, key_id)
+                                 category: uuid.UUID | None = None, code: str | None = None) -> list[tables.Property]:
+        await self._gate_episode(episode_id)
         return await PropertyService(session=self.session).find(PropertyFilter(
             table='entity', objectid=episode_id, category=category, code=code))
 
-    async def add_episode_property(self, episode_id: uuid.UUID, data: MedPropertyIn,
-                                   link_id: uuid.UUID | None = None,
-                                   key_id: str | None = None) -> tables.Property:
-        await self._gate_episode(episode_id, link_id, key_id)
+    async def add_episode_property(self, episode_id: uuid.UUID, data: MedPropertyIn) -> tables.Property:
+        await self._gate_episode(episode_id)
         return await PropertyService(session=self.session).create(
             PropertyCreate(category=data.category, code=data.code, name=data.name,
                            table='entity', objectid=episode_id, value=data.value),
             creator=self.payload.sub)
 
-    async def episode_state(self, episode_id: uuid.UUID, link_id: uuid.UUID | None = None,
-                            key_id: str | None = None) -> dict:
-        await self._gate_episode(episode_id, link_id, key_id)
+    async def episode_state(self, episode_id: uuid.UUID) -> dict:
+        await self._gate_episode(episode_id)
         return await FSMService(session=self.session).state('entity', episode_id)
 
-    async def transition(self, episode_id: uuid.UUID, event: str,
-                         link_id: uuid.UUID | None = None,
-                         key_id: str | None = None) -> dict:
-        await self._gate_episode(episode_id, link_id, key_id)
+    async def transition(self, episode_id: uuid.UUID, event: str) -> dict:
+        await self._gate_episode(episode_id)
         return await FSMService(session=self.session).trigger(
             'entity', episode_id, event, creator=self.payload.sub)
 
-    async def assess(self, episode_id: uuid.UUID, link_id: uuid.UUID | None = None,
-                     key_id: str | None = None) -> dict:
-        pseudonym = await self._gate_episode(episode_id, link_id, key_id)
+    async def assess(self, episode_id: uuid.UUID) -> dict:
+        pseudonym = await self._gate_episode(episode_id)
         return await MedicalService(session=self.session).assess(pseudonym, episode_id)
 
     # --- интервью (сбор анамнеза по протоколу) — за теми же воротами эпизода ---
-    async def interview_open(self, episode_id: uuid.UUID, link_id: uuid.UUID | None = None,
-                             key_id: str | None = None) -> dict:
-        pseudonym = await self._gate_episode(episode_id, link_id, key_id)
+    async def interview_open(self, episode_id: uuid.UUID) -> dict:
+        pseudonym = await self._gate_episode(episode_id)
         return await InterviewService(session=self.session).open(
             episode_id, pseudonym, creator=self.payload.sub)
 
-    async def interview_state(self, episode_id: uuid.UUID, link_id: uuid.UUID | None = None,
-                              key_id: str | None = None) -> dict:
-        pseudonym = await self._gate_episode(episode_id, link_id, key_id)
+    async def interview_state(self, episode_id: uuid.UUID) -> dict:
+        pseudonym = await self._gate_episode(episode_id)
         return await InterviewService(session=self.session).state(episode_id, pseudonym)
 
-    async def interview_answer(self, episode_id: uuid.UUID, body: dict,
-                               link_id: uuid.UUID | None = None,
-                               key_id: str | None = None) -> dict:
-        pseudonym = await self._gate_episode(episode_id, link_id, key_id)
+    async def interview_answer(self, episode_id: uuid.UUID, body: dict) -> dict:
+        pseudonym = await self._gate_episode(episode_id)
         return await InterviewService(session=self.session).answer(
             episode_id, pseudonym, body, creator=self.payload.sub)
 
     # --- документы/анализы: блоб (FileStore) + метаданные Data + очередь на ИИ-разбор ---
-    async def _scope(self, episode_id: uuid.UUID | None,
-                     link_id: uuid.UUID | None, key_id: str | None) -> tuple[str, uuid.UUID]:
+    async def _scope(self, episode_id: uuid.UUID | None) -> tuple[str, uuid.UUID]:
         """Носитель документа: эпизод (за воротами) либо сам псевдоним."""
         if episode_id is not None:
-            await self._gate_episode(episode_id, link_id, key_id)
+            await self._gate_episode(episode_id)
             return 'entity', episode_id
-        return 'pseudonym', await self._resolve(link_id, key_id)
+        return 'pseudonym', await self._resolve()
 
     async def upload_document(self, content: bytes, name: str, code: str,
                               category: uuid.UUID | None = None, media_type: str = '',
-                              episode_id: uuid.UUID | None = None,
-                              link_id: uuid.UUID | None = None,
-                              key_id: str | None = None) -> tables.Data:
-        """Кладёт файл: блоб в FileStore + Data(метаданные, hash) на носителе +
-        событие data.extract (ИИ-разбор). Блоб коммитится первым (put), поэтому к
-        моменту разбора он уже существует; метаданные и событие — одной транзакцией."""
-        table, objectid = await self._scope(episode_id, link_id, key_id)
+                              episode_id: uuid.UUID | None = None) -> tables.Data:
+        """Кладёт файл: блоб (FileStore) + Data(метаданные, hash) + событие
+        data.extract (ИИ-разбор) — всё одной транзакцией: консумер увидит
+        событие только вместе с блобом."""
+        table, objectid = await self._scope(episode_id)
         ref = await FileStore(session=self.session).put(content)
         data = tables.Data(category=category, code=code, name=name,
                            table=table, objectid=objectid,
@@ -305,9 +290,7 @@ class MedAccessService:
         await self.session.commit()
         return data
 
-    async def documents(self, episode_id: uuid.UUID | None = None,
-                        link_id: uuid.UUID | None = None,
-                        key_id: str | None = None) -> list[tables.Data]:
-        table, objectid = await self._scope(episode_id, link_id, key_id)
+    async def documents(self, episode_id: uuid.UUID | None = None) -> list[tables.Data]:
+        table, objectid = await self._scope(episode_id)
         return list((await self.session.execute(select(tables.Data).where(
             tables.Data.table == table, tables.Data.objectid == objectid))).scalars().all())

@@ -25,8 +25,9 @@ from shop.services.user import UserService
 URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
 
 
-def _svc(s, ks, payload):
-    return MedAccessService(session=s, bridge=BridgeService(session=s, keys=ks), payload=payload)
+def _svc(s, ks, payload, link_id=None, key_id=None):
+    return MedAccessService(session=s, bridge=BridgeService(session=s, keys=ks),
+                            payload=payload, link_id=link_id, key_id=key_id)
 
 
 async def _mkuser(s, place_id, email):
@@ -80,8 +81,7 @@ async def test_main():
     assert len(grants) == 1 and grants[0]['key_id'] == key_id, grants
     link_id = grants[0]['link_id']
     async with Sess() as s:
-        props = await _svc(s, ks, TokenPayload(sub=doc_a)).properties(
-            link_id=link_id, key_id=key_id)
+        props = await _svc(s, ks, TokenPayload(sub=doc_a), link_id, key_id).properties()
     assert props == [], props
     print('[ok] enroll догрантил согласие A: врач резолвит мост (re-sync)')
 
@@ -94,8 +94,7 @@ async def test_main():
         await ConsentService(session=s, keys=ks).decide(
             c_b.id, True, ConsentDecision(until=None), owner)
     async with Sess() as s:
-        props = await _svc(s, ks, TokenPayload(sub=doc_b)).properties(
-            link_id=link_id, key_id=key_id)
+        props = await _svc(s, ks, TokenPayload(sub=doc_b), link_id, key_id).properties()
     assert props == [], props
     print('[ok] approve после enroll: врач B получил доступ сразу')
 
@@ -105,14 +104,12 @@ async def test_main():
     await get_cache().delete(f'bridge:{link_id}:{key_id}:{doc_a}')
     async with Sess() as s:
         with pytest.raises(HTTPException) as ei:
-            await _svc(s, ks, TokenPayload(sub=doc_a)).properties(
-                link_id=link_id, key_id=key_id)
+            await _svc(s, ks, TokenPayload(sub=doc_a), link_id, key_id).properties()
         assert ei.value.status_code == 403
     print('[ok] revoke согласия A -> 403 (ACL закрыт); врач B не задет')
 
     async with Sess() as s:
-        props = await _svc(s, ks, TokenPayload(sub=doc_b)).properties(
-            link_id=link_id, key_id=key_id)
+        props = await _svc(s, ks, TokenPayload(sub=doc_b), link_id, key_id).properties()
     assert props == [], props
 
     await eng.dispose()

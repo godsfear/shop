@@ -12,6 +12,7 @@ outbox-топик 'data.extract', payload {hash, table, objectid, media_type}. �
 """
 import json
 import uuid
+from functools import lru_cache
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,11 +65,17 @@ async def extract(content: bytes, media_type: str) -> list[dict]:
     return _stub(content, media_type)
 
 
-async def _extract_gemini(content: bytes, media_type: str) -> list[dict]:
+@lru_cache
+def _gemini_client(api_key: str):
+    """Клиент на процесс: без кэша каждый документ платил бы новый TLS-handshake."""
     from google import genai                       # ленивый импорт: без ключа не нужен
+    return genai.Client(api_key=api_key)
+
+
+async def _extract_gemini(content: bytes, media_type: str) -> list[dict]:
     from google.genai import types
 
-    client = genai.Client(api_key=settings.google_api_key)
+    client = _gemini_client(settings.google_api_key)
     resp = await client.aio.models.generate_content(
         model=settings.gemini_model,
         contents=[_PROMPT, types.Part.from_bytes(

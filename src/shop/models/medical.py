@@ -24,17 +24,22 @@ class MedPropertyIn(BaseModel):
     _code_not_reserved = field_validator('code')(forbid_state_code)
 
 
-class MedPropertyOut(BaseModel):
-    """Проекция Property БЕЗ objectid/table — псевдоним скрыт из поверхности API."""
+class _MedOut(BaseModel):
+    """Общая проекция мед-ответов: БЕЗ objectid/table — псевдоним (носитель
+    медданных) не попадает в поверхность API. Инвариант держится здесь одним
+    местом, а не дисциплиной каждой конкретной модели."""
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     category: uuid.UUID | None = None
     code: str
     name: str | None = None
-    value: dict
     begins: datetime.datetime
     ends: datetime.datetime | None = None
+
+
+class MedPropertyOut(_MedOut):
+    value: dict
 
 
 class EpisodeIn(BaseModel):
@@ -44,16 +49,8 @@ class EpisodeIn(BaseModel):
     name: str | None = None
 
 
-class EpisodeOut(BaseModel):
-    """Проекция эпизода БЕЗ objectid/table — эпизод висит на псевдониме, его прячем."""
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    category: uuid.UUID | None = None
-    code: str
-    name: str | None = None
-    begins: datetime.datetime
-    ends: datetime.datetime | None = None
+class EpisodeOut(_MedOut):
+    pass
 
 
 class Transition(BaseModel):
@@ -61,16 +58,7 @@ class Transition(BaseModel):
     event: str
 
 
-class DataOut(BaseModel):
-    """Проекция Data (метаданные документа/анализа) БЕЗ objectid/table.
-    hash — контент-адрес блоба в FileStore (не псевдоним, отдавать можно)."""
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    category: uuid.UUID | None = None
-    code: str
-    name: str | None = None
+class DataOut(_MedOut):
+    """hash — контент-адрес блоба в FileStore (не псевдоним, отдавать можно)."""
     hash: str
     algorithm: str
-    begins: datetime.datetime
-    ends: datetime.datetime | None = None

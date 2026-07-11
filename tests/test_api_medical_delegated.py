@@ -23,8 +23,9 @@ from shop.services.property import PropertyService
 URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
 
 
-def _svc(s, ks, payload):
-    return MedAccessService(session=s, bridge=BridgeService(session=s, keys=ks), payload=payload)
+def _svc(s, ks, payload, link_id=None, key_id=None):
+    return MedAccessService(session=s, bridge=BridgeService(session=s, keys=ks),
+                            payload=payload, link_id=link_id, key_id=key_id)
 
 
 async def test_main():
@@ -66,23 +67,21 @@ async def test_main():
 
     # --- врач (грант группы) резолвит по мосту, без сессии ---
     async with Sess() as s:
-        props = await _svc(s, ks, TokenPayload(sub=doctor)).properties(
-            link_id=link_id, key_id=group_key)
+        props = await _svc(s, ks, TokenPayload(sub=doctor), link_id, group_key).properties()
     assert len(props) == 1 and props[0].code == 'diagnosis', props
     print('[ok] врач видит данные по мосту (link_id+ключ), без сессии')
 
     # --- чужой actor (нет в ACL ключа) -> 403 ---
     async with Sess() as s:
         with pytest.raises(HTTPException) as ei:
-            await _svc(s, ks, TokenPayload(sub=intruder)).properties(
-                link_id=link_id, key_id=group_key)
+            await _svc(s, ks, TokenPayload(sub=intruder), link_id, group_key).properties()
         assert ei.value.status_code == 403
     print('[ok] чужой actor -> 403 (ACL ключа)')
 
     # --- link_id без key_id -> 400 ---
     async with Sess() as s:
         with pytest.raises(HTTPException) as ei:
-            await _svc(s, ks, TokenPayload(sub=doctor)).properties(link_id=link_id)
+            await _svc(s, ks, TokenPayload(sub=doctor), link_id).properties()
         assert ei.value.status_code == 400
     print('[ok] link_id без key_id -> 400')
 

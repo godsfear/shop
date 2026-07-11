@@ -40,6 +40,7 @@ async def test_main():
     blob = b'%PDF fake lab report ' + b'z' * 300
     async with Sess() as s:
         ref = await FileStore(session=s).put(blob)
+        await s.commit()                     # put не коммитит — транзакция за вызывающим
 
     # прикрепить документ (Data) + поставить в очередь на разбор — одна транзакция
     async with Sess() as s:
