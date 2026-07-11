@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     pseudonym_pool_target: int = 100       # целевой размер пула (фоновый добор)
     pseudonym_pool_check_s: float = 300.0  # период фоновой проверки/добора пула
     research_password: str = 'research'    # dev-заглушка; в проде задать в .env
+    app_db_password: str = 'app'           # runtime-роль приложения; в проде задать в .env
     # ИИ-разбор документов (services/extract.py); нет ключа -> детерминированная заглушка
     google_api_key: str | None = None      # Gemini; задаётся в .env, в код не пишется
     gemini_model: str = 'gemini-2.5-flash'

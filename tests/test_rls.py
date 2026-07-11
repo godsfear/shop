@@ -10,22 +10,23 @@ from shop.security import apply_rls
 from shop.keyservice import DbKeyService
 from shop.services.bridge import BridgeService
 
-APP_URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
+OWNER_URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
+APP_URI = 'postgresql+asyncpg://app:app@localhost:5432/shop'
 RESEARCH_URI = 'postgresql+asyncpg://research:research@localhost:5432/shop'
 
 
-async def denied(conn, sql, label):
+async def denied(conn, sql, label, why='permission denied|must be owner'):
     try:
         await conn.execute(text(sql))
         raise AssertionError(f'ДОСТУП НЕ ЗАКРЫТ: {label}')
     except ProgrammingError as e:
-        assert 'permission denied' in str(e), e
+        assert any(w in str(e) for w in why.split('|')), e
         await conn.rollback()  # транзакция после отказа мертва
-        print(f'  [ok] {label}: permission denied')
+        print(f'  [ok] {label}: отказ БД')
 
 
 async def test_main():
-    eng = create_async_engine(APP_URI, poolclass=NullPool)
+    eng = create_async_engine(OWNER_URI, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.execute(text('DROP SCHEMA public CASCADE'))
         await conn.execute(text('CREATE SCHEMA public'))
@@ -54,11 +55,28 @@ async def test_main():
                          value={'icd10': 'J06.9'}))                # operational-строка
         await s.commit()
 
-    # приложение (владелец) видит всё
+    # владелец под FORCE RLS работает через явную политику owner_all (сид/миграции)
     async with eng.connect() as conn:
         n = (await conn.execute(text('SELECT count(*) FROM property'))).scalar_one()
         assert n == 2
-    print('[ok] приложение (владелец схемы) видит обе строки property — RLS его не трогает')
+    print('[ok] владелец видит обе строки property (политика owner_all при FORCE RLS)')
+
+    # runtime-роль app: полный DML через app_all, но никакого DDL
+    a_eng = create_async_engine(APP_URI, poolclass=NullPool)
+    async with a_eng.connect() as conn:
+        n = (await conn.execute(text('SELECT count(*) FROM property'))).scalar_one()
+        assert n == 2, 'app_all: приложение видит строки обоих доменов'
+        await conn.execute(text('SELECT count(*) FROM link'))     # мост приложению доступен
+        await conn.execute(text(
+            "INSERT INTO property (id, code, \"table\", objectid, value) "
+            "SELECT gen_random_uuid(), 'note', 'person', p.id, '{}' FROM person p"))
+        await conn.commit()
+        print('  [ok] app: читает оба домена, пишет (identity-строка через триггер реестра)')
+        await denied(conn, 'DROP TABLE property', 'DDL (DROP TABLE) под app')
+        await denied(conn, 'ALTER TABLE property DISABLE ROW LEVEL SECURITY',
+                     'снятие RLS под app')
+        await denied(conn, 'CREATE ROLE hacker', 'создание ролей под app')
+    print('[ok] app: не-владелец — схему не снести, RLS не отключить, ролей не завести')
 
     # исследователь
     r_eng = create_async_engine(RESEARCH_URI, poolclass=NullPool)
