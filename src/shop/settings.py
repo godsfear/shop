@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     outbox_max_attempts: int = 5           # попыток до пометки события мёртвым
     outbox_backoff_s: float = 5.0          # задержка ретрая × номер попытки (тесты ставят 0)
     consent_sweep_s: float = 3600.0        # период фонового протухания согласий (until)
+    # фоновые воркеры в web-процессе; false на репликах многопроцессного прода
+    # (тогда воркеры — одним процессом: python -m shop.worker)
+    run_workers: bool = True
     # периметр HTTP
     auth_rate_limit: int = 10              # попыток /auth/* с одного IP за окно
     auth_rate_window_s: int = 60           # окно rate limit (сек)

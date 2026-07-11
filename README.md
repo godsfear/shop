@@ -19,6 +19,16 @@ uv run python -m shop              # сервер (uvicorn с reload)
 приложения (в проде `DATABASE_URI` указывает на `app`, пароль `APP_DB_PASSWORD`);
 `research` — статистика под RLS по доменам.
 
+## Прод
+
+- Образ: `docker build -t shop .` — web-контейнер; воркеры (outbox, sweeper,
+  пул псевдонимов) отдельным контейнером того же образа:
+  `uv run python -m shop.worker`, web-реплики при этом с `RUN_WORKERS=false`.
+- Соединения: `DATABASE_URI` через PgBouncer (порт 6432 в compose), пул
+  session-режима — приложение остаётся на NullPool.
+- Обязательные секреты окружения: `JWT_SECRET`, `KEK`, `APP_DB_PASSWORD`,
+  `RESEARCH_PASSWORD`, `GOOGLE_API_KEY` (опционален — без него ИИ-заглушка).
+
 ## Тесты
 
 ```

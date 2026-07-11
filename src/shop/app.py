@@ -18,10 +18,11 @@ from shop.settings import settings
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # обработчики outbox зарегистрированы импортом сервисов (shop.api -> services)
+    # обработчики outbox зарегистрированы импортом сервисов (shop.api -> services);
+    # RUN_WORKERS=false на репликах — воркеры отдельным процессом (shop.worker)
     tasks = [asyncio.create_task(outbox_worker()),
              asyncio.create_task(consent_sweeper()),
-             asyncio.create_task(pseudonym_pool_topper())]
+             asyncio.create_task(pseudonym_pool_topper())] if settings.run_workers else []
     yield
     for task in tasks:
         task.cancel()

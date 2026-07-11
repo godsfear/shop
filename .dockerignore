@@ -1,0 +1,16 @@
+.git
+.env
+*.env
+.venv
+venv
+web
+tests
+Docker-Postgresql
+keyservice
+graphify-out
+certs
+src/shop/logs
+__pycache__
+*.pyc
+.idea
+.claude
