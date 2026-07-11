@@ -10,6 +10,7 @@ import uuid
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import text
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
@@ -28,7 +29,7 @@ def _svc(s, ks, payload):
 
 
 async def test_main():
-    eng = create_async_engine(URI)
+    eng = create_async_engine(URI, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.execute(text('DROP SCHEMA public CASCADE'))
         await conn.execute(text('CREATE SCHEMA public'))

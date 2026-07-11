@@ -6,6 +6,7 @@ import tempfile
 import pytest
 from sqlalchemy import text, select, func
 from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
@@ -19,7 +20,7 @@ URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
 
 
 async def test_main():
-    eng = create_async_engine(URI)
+    eng = create_async_engine(URI, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.execute(text('DROP SCHEMA public CASCADE'))
         await conn.execute(text('CREATE SCHEMA public'))
@@ -60,7 +61,7 @@ async def test_main():
     async with eng.begin() as conn:
         psid = (await conn.execute(text(
             'INSERT INTO pseudonym (id) VALUES (gen_random_uuid()) RETURNING id'))).scalar_one()
-    with pytest.raises(DBAPIError, match='запрещена'):
+    with pytest.raises(DBAPIError, match='identity'):
         async with eng.begin() as conn:
             await conn.execute(text(
                 "INSERT INTO relation (id, code, \"table\", objectid, related_table, related_id) "
@@ -68,13 +69,23 @@ async def test_main():
                 {'p': pid, 'ps': psid})
     print('[ok] сырая Relation identity<->operational: отвергнута триггером')
 
-    # --- operational<->reference теперь РАЗРЕШЕНО (справочник публичен) ---
+    # --- operational<->reference РАЗРЕШЕНО (справочник публичен) ---
     async with eng.begin() as conn:
         await conn.execute(text(
             "INSERT INTO relation (id, code, \"table\", objectid, related_table, related_id) "
             "VALUES (gen_random_uuid(), 'lives_in', 'pseudonym', :ps, 'place', :pl)"),
             {'ps': psid, 'pl': place_id})
     print('[ok] сырая Relation operational->reference: разрешена')
+
+    # --- identity<->reference ЗАПРЕЩЕНО: person->справочник читался бы как
+    # «кто чем болеет/лечится» в обход моста ---
+    with pytest.raises(DBAPIError, match='identity'):
+        async with eng.begin() as conn:
+            await conn.execute(text(
+                "INSERT INTO relation (id, code, \"table\", objectid, related_table, related_id) "
+                "VALUES (gen_random_uuid(), 'born_in', 'person', :p, 'place', :pl)"),
+                {'p': pid, 'pl': place_id})
+    print('[ok] сырая Relation identity->reference: отвергнута триггером')
 
     # --- сырой мост к не-identity: триггер отвергает ---
     with pytest.raises(DBAPIError, match='identity'):

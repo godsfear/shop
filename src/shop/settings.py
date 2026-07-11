@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # transactional outbox (см. outbox.py)
     outbox_poll_s: float = 1.0             # пауза воркера при пустой очереди
     outbox_max_attempts: int = 5           # попыток до пометки события мёртвым
+    outbox_backoff_s: float = 5.0          # задержка ретрая × номер попытки (тесты ставят 0)
     consent_sweep_s: float = 3600.0        # период фонового протухания согласий (until)
 
 

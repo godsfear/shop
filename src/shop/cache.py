@@ -36,11 +36,15 @@ class Cache:
             self._warn()
             return None
 
-    async def set(self, key: str, value: str, ttl_s: int) -> None:
+    async def set(self, key: str, value: str, ttl_s: int) -> bool:
+        """False — Redis недоступен: кэш-вызывающие игнорируют, а те, для кого
+        Redis авторитетен (мед-сессия), обязаны проверить и не рапортовать успех."""
         try:
             await self._redis.set(key, value, ex=ttl_s)
+            return True
         except RedisError:
             self._warn()
+            return False
 
     async def delete(self, *keys: str) -> None:
         try:

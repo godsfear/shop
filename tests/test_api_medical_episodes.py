@@ -6,7 +6,9 @@ import tempfile
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy import text
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
@@ -27,7 +29,7 @@ def _svc(s, ks, payload):
 
 
 async def test_main():
-    eng = create_async_engine(URI)
+    eng = create_async_engine(URI, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.execute(text('DROP SCHEMA public CASCADE'))
         await conn.execute(text('CREATE SCHEMA public'))
@@ -63,7 +65,7 @@ async def test_main():
 
     payload = TokenPayload(sub=user_id)
     async with Sess() as s:
-        await _svc(s, ks, payload).open_session(link_id, key_id)
+        await _svc(s, ks, payload).open_session()
 
     # --- открыть эпизод + список (проекция прячет objectid) ---
     async with Sess() as s:
@@ -116,6 +118,19 @@ async def test_main():
             await _svc(s, ks, payload).episode_properties(foreign_eid)
         assert ei.value.status_code == 404
     print('[ok] ВОРОТА: чужой episode_id -> 404 (граница псевдонима держит)')
+
+    # --- эпизод только из эпизодного концепта (у symptom нет value.fsm) -> 400 ---
+    async with Sess() as s:
+        with pytest.raises(HTTPException) as ei:
+            await _svc(s, ks, payload).open_episode(
+                EpisodeIn(category=ids['symptom'], code='bad', name='не эпизод'))
+        assert ei.value.status_code == 400
+    print('[ok] open_episode с неэпизодной категорией -> 400')
+
+    # --- код state зарезервирован FSM: подделка состояния отбита моделью ---
+    with pytest.raises(ValidationError):
+        MedPropertyIn(code='state', value={'state': 'recovered'})
+    print('[ok] MedPropertyIn(code=state) -> ValidationError (в обход FSM нельзя)')
 
     await eng.dispose()
     print('\nТЕСТ ЭПИЗОД-СКОУПА ПРОЙДЕН')

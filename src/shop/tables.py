@@ -180,6 +180,9 @@ class Outbox(Root):
                                                                 nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, server_default=text('0'))
     error: Mapped[str | None] = mapped_column(String, nullable=True)
+    # backoff после сбоя: событие не выбирается раньше этого времени (см. outbox.py)
+    next_attempt: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True),
+                                                                   nullable=True)
 
     __table_args__ = (
         Index('ix_outbox_pending', 'created', postgresql_where=text('processed IS NULL')),
@@ -268,17 +271,18 @@ def _register_new_objects(session: Session, flush_context, instances) -> None:
                 f"мост (Link) крепится только к identity-объекту, "
                 f"цель '{o.table}' — домен '{domains[o.id]}'")
 
-    # граница приватности: запрещена ТОЛЬКО прямая связь identity<->operational
-    # (её путь — мост). reference (справочники) публичен, ссылки на него из
-    # любого домена безопасны: пациент(operational)->лекарство(reference) и т.п.
+    # граница приватности: identity связывается ТОЛЬКО с identity — личность не
+    # должна коррелировать ни с операционными данными, ни со справочниками
+    # (person->код диагноза из reference читался бы как «кто чем болеет» в обход
+    # моста). operational<->reference свободно: пациент(псевдоним)->лекарство и т.п.
     for o in cross:
         if isinstance(o, Relation):
             d_src, d_trg = domains.get(o.objectid), domains.get(o.related_id)
             if d_trg is None:
                 raise DomainBoundaryError(f'цель связи не найдена в реестре: {o.related_id}')
-            if {d_src, d_trg} == {Domain.IDENTITY, Domain.OPERATIONAL}:
+            if Domain.IDENTITY in (d_src, d_trg) and d_src != d_trg:
                 raise DomainBoundaryError(
-                    "прямая связь identity<->operational запрещена — только через мост")
+                    "identity связывается только с identity — иначе только через мост")
 
     # реестр пишется немедленно Core-upsert'ом (до плана flush): строки реестра
     # существуют раньше любых зависимых INSERT'ов независимо от сортировки таблиц,
@@ -324,10 +328,9 @@ _TRIGGER_FUNCTIONS = [
     BEGIN
         SELECT domain INTO d_src FROM object WHERE id = NEW.objectid;
         SELECT domain INTO d_trg FROM object WHERE id = NEW.related_id;
-        -- запрещена только прямая identity<->operational; reference свободен
-        IF (d_src='identity' AND d_trg='operational')
-           OR (d_src='operational' AND d_trg='identity') THEN
-            RAISE EXCEPTION 'прямая связь identity<->operational запрещена — только через мост';
+        -- identity связывается только с identity (XOR: ровно одна сторона identity)
+        IF (d_src = 'identity') <> (d_trg = 'identity') THEN
+            RAISE EXCEPTION 'identity связывается только с identity — иначе только через мост';
         END IF;
         RETURN NEW;
     END $$ LANGUAGE plpgsql

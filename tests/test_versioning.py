@@ -2,6 +2,7 @@ import asyncio, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import text, select, func
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
@@ -15,7 +16,7 @@ URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
 
 
 async def test_main():
-    eng = create_async_engine(URI)
+    eng = create_async_engine(URI, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.execute(text('DROP SCHEMA public CASCADE'))
         await conn.execute(text('CREATE SCHEMA public'))

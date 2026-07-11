@@ -5,6 +5,9 @@ from sqlalchemy import select, func
 
 from shop import tables
 from shop.outbox import process_one
+from shop.settings import settings
+
+settings.outbox_backoff_s = 0  # тестам не ждать backoff ретраев (drain — тесный цикл)
 
 
 async def drain(Sess) -> None:

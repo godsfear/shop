@@ -9,6 +9,7 @@ import tempfile
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import text
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
@@ -30,7 +31,7 @@ def _svc(s, ks, payload):
 
 
 async def test_main():
-    eng = create_async_engine(URI)
+    eng = create_async_engine(URI, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.execute(text('DROP SCHEMA public CASCADE'))
         await conn.execute(text('CREATE SCHEMA public'))
@@ -78,9 +79,9 @@ async def test_main():
         assert ei.value.status_code == 401
     print('[ok] без сессии — 401')
 
-    # --- открыть сессию: разворот моста -> псевдоним в Redis ---
+    # --- открыть сессию: owner-автодискавери моста по JWT -> псевдоним в Redis ---
     async with Sess() as s:
-        ttl = await _svc(s, ks, payload).open_session(link_id, key_id)
+        ttl = await _svc(s, ks, payload).open_session()
     assert ttl > 0
 
     # --- читать свои данные (скоуп сессии) + проекция скрывает псевдоним ---

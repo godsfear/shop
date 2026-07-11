@@ -3,6 +3,7 @@ import asyncio, tempfile, datetime
 from fastapi import HTTPException
 from sqlalchemy import select, text, func
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
@@ -20,7 +21,7 @@ URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
 
 
 async def test_main():
-    eng = create_async_engine(URI)
+    eng = create_async_engine(URI, poolclass=NullPool)
     async with eng.begin() as conn:
         # полное пересоздание: drop_all не переживает дрейф схемы между запусками
         await conn.execute(text('DROP SCHEMA public CASCADE'))

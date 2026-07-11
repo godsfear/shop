@@ -14,10 +14,12 @@ import uuid
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from ..cache import get_cache
 from ..database import db_helper
 from ..keyservice import KeyServiceError, PolicyError
+from ..medical_seed import medical_concepts
 from ..models.auth import TokenPayload
 from ..models.entity import EntityCreate
 from ..models.medical import EpisodeIn, MedPropertyIn
@@ -65,23 +67,35 @@ class MedAccessService:
             except KeyServiceError:
                 pass                                # ключ уже существует
         keys.grant(self._patient_key(), str(self.payload.sub))
-        await self.bridge.create_link('person', person_id, 'medical',
-                                      groups={self._patient_key(): person_id})
+        try:
+            await self.bridge.create_link('person', person_id, 'medical',
+                                          groups={self._patient_key(): person_id})
+        except IntegrityError:
+            # конкурентный enroll уже выпустил мост (uq_link_subject_scope) — идемпотентно
+            await self.session.rollback()
 
-    # --- сессия (Слой A: owner) ---
-    async def open_session(self, link_id: uuid.UUID | None = None,
-                           key_id: str | None = None) -> int:
-        """Разворачивает мост -> псевдоним в Redis-сессию; возвращает TTL (сек).
-        Без link_id (owner) — авто-дискавери своего медицинского моста по JWT."""
-        if link_id is None:
-            person_id = await self._person_id()
-            link = await self._owner_link(person_id)
-            if link is None:
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                    detail='медицинский мост не выпущен — сначала /me/enroll')
-            link_id, key_id = link.id, self._patient_key()
-        pseudonym = await self.bridge.resolve(link_id, key_id, str(self.payload.sub))
-        await get_cache().set(self._key(), str(pseudonym), settings.medsession_ttl_s)
+    # --- сессия (ТОЛЬКО Слой A: owner). Слой B (врач/близкий) сессию не использует:
+    # он stateless — link_id/key_id в каждом запросе (см. _resolve); делегированная
+    # сессия перезаписала бы owner-псевдоним под тем же ключом medsession:{sub},
+    # и запросы «моей» карты писали бы в чужую.
+    async def open_session(self) -> int:
+        """Авто-дискавери своего моста по JWT -> псевдоним в Redis-сессию; TTL (сек)."""
+        person_id = await self._person_id()
+        link = await self._owner_link(person_id)
+        if link is None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail='медицинский мост не выпущен — сначала /me/enroll')
+        try:
+            pseudonym = await self.bridge.resolve(link.id, self._patient_key(),
+                                                  str(self.payload.sub))
+        except (PolicyError, KeyServiceError):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail='нет доступа к своему мосту (ключ пациента)')
+        # Redis здесь — хранилище сессии, а не кэш: молчаливый no-op означал бы
+        # 200 «сессия открыта» и сплошные 401 на каждом следующем запросе
+        if not await get_cache().set(self._key(), str(pseudonym), settings.medsession_ttl_s):
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                                detail='хранилище сессий недоступно — повторите позже')
         return settings.medsession_ttl_s
 
     def _patient_key(self) -> str:
@@ -103,15 +117,7 @@ class MedAccessService:
     async def concepts(self) -> dict[str, uuid.UUID]:
         """{code: Category.id} медицинских концептов (illness/symptom/...) — фронту для
         создания эпизодов/симптомов. Reference-данные (из seed_medical под корнем 'medical')."""
-        root = (await self.session.execute(select(tables.Category.id).where(
-            tables.Category.category.is_(None),
-            tables.Category.code == 'medical'))).scalar_one_or_none()
-        if root is None:
-            return {}
-        rows = (await self.session.execute(select(
-            tables.Category.code, tables.Category.id).where(
-            tables.Category.category == root))).all()
-        return {code: cid for code, cid in rows}
+        return await medical_concepts(self.session)
 
     async def close_session(self) -> None:
         await get_cache().delete(self._key())
@@ -170,6 +176,12 @@ class MedAccessService:
     async def open_episode(self, data: EpisodeIn, link_id: uuid.UUID | None = None,
                            key_id: str | None = None) -> tables.Entity:
         pseudonym = await self._resolve(link_id, key_id)
+        # только эпизодный концепт (illness/injury — категория с FSM): иначе /state
+        # и /transition дадут 400, а /assess отрапортует «полно» по пустому конфигу
+        category = await self.session.get(tables.Category, data.category)
+        if category is None or not (category.value or {}).get('fsm'):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail='категория не является эпизодным концептом (нет value.fsm)')
         return await EntityService(session=self.session).create(
             EntityCreate(category=data.category, code=data.code, name=data.name,
                          table='pseudonym', objectid=pseudonym),

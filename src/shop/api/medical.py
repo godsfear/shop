@@ -5,7 +5,7 @@
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
 
 from ..models.medical import (SessionOpen, MedPropertyIn, MedPropertyOut,
                                EpisodeIn, EpisodeOut, Transition, DataOut)
@@ -23,11 +23,13 @@ async def enroll(svc: MedAccessService = Depends()):
 @router.post('/session')
 async def open_session(svc: MedAccessService = Depends(),
                        body: SessionOpen | None = None):
-    """Открыть сессию доступа к медданным. Без тела — owner (свой мост по JWT);
-    с link_id/key_id — делегированный доступ (врач/близкий)."""
-    link_id = body.link_id if body else None
-    key_id = body.key_id if body else None
-    return {'expires_in': await svc.open_session(link_id, key_id)}
+    """Открыть owner-сессию (свой мост по JWT). Делегированный доступ (Слой B)
+    сессию НЕ использует — link_id/key_id передаются в каждом запросе."""
+    if body is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail='делегированный доступ не использует сессию — '
+                                   'передавайте link_id/key_id в каждом запросе')
+    return {'expires_in': await svc.open_session()}
 
 
 @router.get('/concepts')

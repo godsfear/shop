@@ -16,9 +16,11 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..logger import logger
+from ..medical_seed import medical_concepts
 from ..outbox import emit, outbox_handler
 from ..settings import settings
 from .files import FileStore
+from .fsm import STATE_CODE
 from .. import tables
 
 TOPIC_DATA_EXTRACT = 'data.extract'
@@ -74,8 +76,7 @@ async def _extract_gemini(content: bytes, media_type: str) -> list[dict]:
         config=types.GenerateContentConfig(
             response_mime_type='application/json', response_schema=_SCHEMA))
     findings = json.loads(resp.text).get('findings', [])
-    # category=None: концепт (symptom/... -> Category.id) маппится позже; kind несём в value.
-    # ponytail: маппинг kind->category в handler, когда понадобится классификация в БД.
+    # category резолвится в handler (_extract_data): kind -> концепт под корнем 'medical'
     return [{
         'category': None,
         'code': f['code'],
@@ -108,8 +109,15 @@ async def _extract_data(session: AsyncSession, payload: dict) -> None:
     content = await FileStore(session=session).get(payload['hash'])
     if content is None:
         return  # блоб не найден (удалён/не долит) — ретрай не поможет, пропускаем
-    for f in await extract(content, payload.get('media_type', '')):
+    findings = await extract(content, payload.get('media_type', ''))
+    # kind (symptom/medication/...) -> Category.id: находки участвуют в полноте (assess)
+    concepts = await medical_concepts(session) if findings else {}
+    for f in findings:
+        if f['code'] == STATE_CODE:
+            continue  # 'state' зарезервирован FSM — находка ИИ не может менять состояние
+        kind = (f.get('value') or {}).get('kind')
         session.add(tables.Property(
             table=payload['table'], objectid=uuid.UUID(payload['objectid']),
-            category=f.get('category'), code=f['code'], value=f['value']))
+            category=f.get('category') or concepts.get(kind),
+            code=f['code'], value=f['value']))
     # commit — за process_one (вместе с пометкой события)

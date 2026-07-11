@@ -1,5 +1,6 @@
 """ИИ-консумер (заглушка): документ через outbox 'data.extract' -> Property(source='ai')."""
 from sqlalchemy import text, select
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
@@ -18,7 +19,7 @@ async def test_main():
     # держим детерминированную заглушку: тест не должен ходить в Gemini (сеть/квота),
     # даже если GOOGLE_API_KEY задан в .env
     settings.google_api_key = None
-    eng = create_async_engine(URI)
+    eng = create_async_engine(URI, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.execute(text('DROP SCHEMA public CASCADE'))
         await conn.execute(text('CREATE SCHEMA public'))

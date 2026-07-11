@@ -113,6 +113,19 @@ async def _get_category(db: AsyncSession, parent: uuid.UUID | None, code: str):
     return (await db.execute(q)).scalar_one_or_none()
 
 
+async def medical_concepts(db: AsyncSession) -> dict[str, uuid.UUID]:
+    """{code: Category.id} концептов — детей корня 'medical'.
+
+    Единственная точка резолва кода в концепт (assess, ИИ-консумер, /me/concepts):
+    привязка к корню исключает коллизию с тёзками-кодами из других деревьев."""
+    root = await _get_category(db, None, "medical")
+    if root is None:
+        return {}
+    rows = (await db.execute(select(tables.Category.code, tables.Category.id)
+                             .where(tables.Category.category == root.id))).all()
+    return dict(rows)
+
+
 async def seed_medical(db: AsyncSession) -> dict[str, uuid.UUID]:
     """Создаёт (идемпотентно) медицинское дерево. Возвращает {code: category_id}."""
     root = await _get_category(db, None, "medical")

@@ -2,6 +2,7 @@ import asyncio, tempfile, datetime
 
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
@@ -24,7 +25,7 @@ async def denied(conn, sql, label):
 
 
 async def test_main():
-    eng = create_async_engine(APP_URI)
+    eng = create_async_engine(APP_URI, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.execute(text('DROP SCHEMA public CASCADE'))
         await conn.execute(text('CREATE SCHEMA public'))
@@ -60,7 +61,7 @@ async def test_main():
     print('[ok] приложение (владелец схемы) видит обе строки property — RLS его не трогает')
 
     # исследователь
-    r_eng = create_async_engine(RESEARCH_URI)
+    r_eng = create_async_engine(RESEARCH_URI, poolclass=NullPool)
     async with r_eng.connect() as conn:
         await denied(conn, 'SELECT * FROM person', 'таблица person')
         await denied(conn, 'SELECT * FROM "user"', 'таблица user')

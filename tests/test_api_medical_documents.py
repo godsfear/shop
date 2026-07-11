@@ -7,6 +7,7 @@ import tempfile
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import text, select, func
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
@@ -31,7 +32,7 @@ def _svc(s, ks, payload):
 
 async def test_main():
     settings.google_api_key = None                # держим заглушку: без сети/Gemini
-    eng = create_async_engine(URI)
+    eng = create_async_engine(URI, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.execute(text('DROP SCHEMA public CASCADE'))
         await conn.execute(text('CREATE SCHEMA public'))
@@ -67,7 +68,7 @@ async def test_main():
 
     payload = TokenPayload(sub=user_id)
     async with Sess() as s:
-        await _svc(s, ks, payload).open_session(link_id, key_id)
+        await _svc(s, ks, payload).open_session()
     async with Sess() as s:
         ep = await _svc(s, ks, payload).open_episode(
             EpisodeIn(category=ids['illness'], code='ep-1', name='ОРВИ'))

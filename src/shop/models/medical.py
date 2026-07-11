@@ -3,7 +3,9 @@
 import datetime
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from .property import forbid_state_code
 
 
 class SessionOpen(BaseModel):
@@ -18,6 +20,8 @@ class MedPropertyIn(BaseModel):
     code: str
     name: str | None = None
     value: dict
+
+    _code_not_reserved = field_validator('code')(forbid_state_code)
 
 
 class MedPropertyOut(BaseModel):

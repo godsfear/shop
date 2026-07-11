@@ -15,6 +15,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 
 from ..database import db_helper
+from ..medical_seed import medical_concepts
 from .. import tables
 
 _redflags: dict[str, Callable] = {}
@@ -52,13 +53,7 @@ class MedicalService:
             if episode.category else None
         cfg = (category.value or {}) if category else {}
 
-        # резолв кодов концептов -> id: секции + symptom (для флагов)
-        codes = {r['category'] for r in cfg.get('required', ())} | {'symptom'}
-        cat_id = dict((await self.session.execute(select(
-            tables.Category.code, tables.Category.id)
-            .where(tables.Category.code.in_(codes)))).all())
-        # ponytail: коды концептов уникальны (сид под единственным корнем medical);
-        # появятся тёзки в других деревьях — резолвить с привязкой к корню
+        cat_id = await medical_concepts(self.session)  # {code: id} под корнем 'medical'
 
         gaps = []
         for req in cfg.get('required', ()):
@@ -67,12 +62,21 @@ class MedicalService:
             if not await self._has_data(cat_id.get(req['category']), tbl, oid):
                 gaps.append(req['category'])
 
-        symptoms = (await self.session.execute(select(tables.Property).where(
-            tables.Property.table == 'entity',
-            tables.Property.objectid == episode_id,
-            tables.Property.category == cat_id.get('symptom')))).scalars().all()
-        alerts = [name for name in cfg.get('red_flags', ())
-                  if name in _redflags and _redflags[name](symptoms)]
+        # красные флаги — медицинская тревога: любой недостающий кусок конфигурации
+        # это ошибка развёртывания, отказывать надо громко, а не молча без alerts
+        alerts = []
+        if flags := cfg.get('red_flags', ()):
+            if missing := [n for n in flags if n not in _redflags]:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                    detail=f'красный флаг без обработчика (@redflag_handler): {missing}')
+            if (symptom_id := cat_id.get('symptom')) is None:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                    detail="концепт 'symptom' не найден — прогоните medical_seed")
+            symptoms = (await self.session.execute(select(tables.Property).where(
+                tables.Property.table == 'entity',
+                tables.Property.objectid == episode_id,
+                tables.Property.category == symptom_id))).scalars().all()
+            alerts = [name for name in flags if _redflags[name](symptoms)]
         return {'gaps': gaps, 'alerts': alerts}
 
     async def _has_data(self, category_id, table: str, objectid: uuid.UUID) -> bool:

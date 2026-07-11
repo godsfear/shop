@@ -17,10 +17,10 @@
 отдельный потребитель, когда появятся внешние подписчики.
 """
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database import db_helper
@@ -48,7 +48,11 @@ async def process_one(session: AsyncSession) -> bool:
     """Обрабатывает одно ожидающее событие; False — очередь пуста."""
     row = (await session.execute(
         select(tables.Outbox)
-        .where(tables.Outbox.processed.is_(None))
+        .where(tables.Outbox.processed.is_(None),
+               # backoff: транзиентный сбой не должен сжигать attempts мгновенно —
+               # упавшее событие невидимо до next_attempt, очередь идёт дальше
+               or_(tables.Outbox.next_attempt.is_(None),
+                   tables.Outbox.next_attempt <= datetime.now(timezone.utc)))
         .order_by(tables.Outbox.created)
         .limit(1)
         .with_for_update(skip_locked=True)
@@ -91,7 +95,10 @@ async def _register_failure(session: AsyncSession, row_id, attempts_before: int,
                # успешно обработать событие — не воскрешать его
                tables.Outbox.processed.is_(None))
         .values(attempts=attempts, error=error,
-                processed=now if dead else None))
+                processed=now if dead else None,
+                # ponytail: линейный backoff (5с, 10с, ...); экспонента — если понадобится
+                next_attempt=None if dead else
+                    now + timedelta(seconds=settings.outbox_backoff_s * attempts)))
     await session.commit()
 
 
