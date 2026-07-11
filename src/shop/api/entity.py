@@ -5,10 +5,13 @@ from fastapi import APIRouter, Depends, Query, status
 
 from ..models.auth import TokenPayload
 from ..models.entity import Entity, EntityCreate, EntityUpdate, EntityFilter
-from ..services.auth import get_token_payload
+from ..services.auth import get_token_payload, require_admin
 from ..services.entity import EntityService
 
-router = APIRouter(prefix='/entity', tags=['entity'])
+# generic-CRUD по Entity — админ-инструмент: среди строк есть операционные
+# данные (эпизоды на псевдонимах); прикладной путь пациента — /me/*
+router = APIRouter(prefix='/entity', tags=['entity'],
+                   dependencies=[Depends(require_admin)])
 
 
 @router.get('/all', response_model=List[Entity])

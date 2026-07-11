@@ -26,6 +26,7 @@ from ..models.medical import EpisodeIn, MedPropertyIn
 from ..models.property import PropertyCreate, PropertyFilter
 from ..services.auth import get_token_payload
 from ..services.bridge import BridgeService
+from ..services.consent import APPROVED, MEDICAL, _until_alive
 from ..services.entity import EntityService
 from ..services.extract import request_extract
 from ..services.files import FileStore
@@ -73,6 +74,14 @@ class MedAccessService:
         except IntegrityError:
             # конкурентный enroll уже выпустил мост (uq_link_subject_scope) — идемпотентно
             await self.session.rollback()
+        # re-sync: медицинские согласия, одобренные ДО enroll (ключа ещё не было),
+        # догрантиваются здесь — connect-точка Consent -> KeyService (см. consent.py)
+        grantees = (await self.session.execute(select(tables.Consent.grantee).where(
+            tables.Consent.table == 'person', tables.Consent.objectid == person_id,
+            tables.Consent.scope == MEDICAL, tables.Consent.status == APPROVED,
+            _until_alive()))).scalars().all()
+        for grantee in grantees:
+            keys.grant(self._patient_key(), str(grantee))
 
     # --- сессия (ТОЛЬКО Слой A: owner). Слой B (врач/близкий) сессию не использует:
     # он stateless — link_id/key_id в каждом запросе (см. _resolve); делегированная
@@ -118,6 +127,23 @@ class MedAccessService:
         """{code: Category.id} медицинских концептов (illness/symptom/...) — фронту для
         создания эпизодов/симптомов. Reference-данные (из seed_medical под корнем 'medical')."""
         return await medical_concepts(self.session)
+
+    async def grants(self) -> list[dict]:
+        """Слой B, дискавери: чужие медкарты, доступные мне по одобренным согласиям.
+        [{link_id, key_id}] — эти параметры передаются в каждом запросе /me/*."""
+        consents = (await self.session.execute(select(tables.Consent).where(
+            tables.Consent.grantee == self.payload.sub,
+            tables.Consent.scope == MEDICAL,
+            tables.Consent.status == APPROVED,
+            _until_alive()))).scalars().all()
+        out = []
+        for c in consents:
+            owner = (await self.session.execute(select(tables.User.id).where(
+                tables.User.person == c.objectid))).scalars().first()
+            link = await self._owner_link(c.objectid)
+            if owner is not None and link is not None:
+                out.append({'link_id': link.id, 'key_id': f'patient:{owner}'})
+        return out
 
     async def close_session(self) -> None:
         await get_cache().delete(self._key())

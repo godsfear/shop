@@ -46,6 +46,18 @@ class Cache:
             self._warn()
             return False
 
+    async def hit(self, key: str, limit: int, window_s: int) -> bool:
+        """Скользящий счётчик попыток (rate limit): False — лимит исчерпан.
+        Redis недоступен — пропускаем: отказ кэша не должен превращаться в отказ входа."""
+        try:
+            n = await self._redis.incr(f'rl:{key}')
+            if n == 1:
+                await self._redis.expire(f'rl:{key}', window_s)
+            return n <= limit
+        except RedisError:
+            self._warn()
+            return True
+
     async def delete(self, *keys: str) -> None:
         try:
             if keys:

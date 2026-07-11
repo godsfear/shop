@@ -99,6 +99,10 @@ def require_roles(*required: str):
     return checker
 
 
+# запись справочников и generic-CRUD по операционным данным — только админ
+require_admin = require_roles(settings.admin_role)
+
+
 async def get_current_user(
         payload: TokenPayload = Depends(get_token_payload),
         session: AsyncSession = Depends(db_helper.scoped_session_dependency),

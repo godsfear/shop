@@ -13,6 +13,10 @@ async def middleware_proc(request: Request, call_next):
     """
     start = time.perf_counter()
     response: Response = await call_next(request)
+    # безопасные заголовки; HSTS — на TLS-терминаторе (nginx/traefik), не здесь
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'no-referrer')
     logger.info({
         "method": request.method,
         "path": request.url.path,

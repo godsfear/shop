@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import db_helper
+from ..keyservice import KeyService, KeyServiceError, get_key_service
 from ..logger import logger
 from ..models.auth import TokenPayload
 from ..models.consent import ConsentDecision, ConsentRequest
@@ -29,6 +30,7 @@ from .notifications import TOPIC_CONSENT
 REQUESTED, APPROVED, DENIED, REVOKED, EXPIRED = (
     'requested', 'approved', 'denied', 'revoked', 'expired')
 MANAGE = 'manage'
+MEDICAL = 'medical'
 
 
 def _until_alive():
@@ -57,8 +59,10 @@ async def is_subject_manager(session: AsyncSession, subject_table: str,
 
 
 class ConsentService:
-    def __init__(self, session: AsyncSession = Depends(db_helper.scoped_session_dependency)):
+    def __init__(self, session: AsyncSession = Depends(db_helper.scoped_session_dependency),
+                 keys: KeyService = Depends(get_key_service)):
         self.session = session
+        self.keys = keys
 
     async def request(self, data: ConsentRequest, payload: TokenPayload) -> tables.Consent:
         """Запрос доступа: grantee = запрашивающий; владельцу уходит уведомление."""
@@ -92,6 +96,8 @@ class ConsentService:
             values = {'status': DENIED, 'ends': datetime.now(timezone.utc)}
         row = await versioned_update(self.session, tables.Consent, row.id, values)
         self._emit(row, APPROVED if approve else DENIED)
+        if approve:
+            await self._sync_medical_acl(row, APPROVED)
         await self.session.commit()
         return row
 
@@ -100,6 +106,7 @@ class ConsentService:
         row = await versioned_update(self.session, tables.Consent, row.id,
                                      {'status': REVOKED, 'ends': datetime.now(timezone.utc)})
         self._emit(row, REVOKED)
+        await self._sync_medical_acl(row, REVOKED)
         await self.session.commit()
         return row
 
@@ -124,6 +131,7 @@ class ConsentService:
             updated = await versioned_update(self.session, tables.Consent, row.id,
                                              {'status': EXPIRED, 'ends': now})
             self._emit(updated, EXPIRED)
+            await self._sync_medical_acl(updated, EXPIRED)
         await self.session.commit()
         return len(rows)
 
@@ -227,6 +235,28 @@ class ConsentService:
                                 detail=f"ожидался статус '{expected}', сейчас '{row.status}'")
         return row
 
+    async def _sync_medical_acl(self, row: tables.Consent, action: str) -> None:
+        """Consent -> криптодоступ: одобрение медицинского согласия открывает ACL
+        ключа пациента в KeyService, отзыв/протухание — закрывает. Без этой связки
+        согласие и криптографический доступ (bridge.resolve) жили бы параллельно.
+
+        Грант на существующий групповой ключ patient:{owner} — DEK не трогаем.
+        Если пациент ещё не прошёл /me/enroll (ключа нет), грант доделает enroll
+        (см. medaccess: re-sync одобренных согласий)."""
+        if row.scope != MEDICAL or row.table != 'person':
+            return
+        owner = (await self.session.execute(select(tables.User.id).where(
+            tables.User.person == row.objectid))).scalars().first()
+        if owner is None:
+            return  # у персоны нет учётки — резолвить мост некому и нечем
+        try:
+            if action == APPROVED:
+                self.keys.grant(f'patient:{owner}', str(row.grantee))
+            else:
+                self.keys.revoke(f'patient:{owner}', str(row.grantee))
+        except KeyServiceError:
+            pass  # ключа ещё нет: пациент не enrolled — доступ появится после enroll
+
     def _emit(self, row: tables.Consent, action: str) -> None:
         emit(self.session, TOPIC_CONSENT, {
             'action': action, 'subject_table': row.table,
@@ -240,7 +270,8 @@ async def consent_sweeper() -> None:
     while True:
         try:
             async with db_helper.session_factory() as session:
-                closed = await ConsentService(session).sweep_expired()
+                # keys явно: вне DI FastAPI дефолт Depends(...) — заглушка-сентинел
+                closed = await ConsentService(session, keys=get_key_service()).sweep_expired()
             if closed:
                 logger.info('consent: протухло согласий: %s', closed)
         except asyncio.CancelledError:

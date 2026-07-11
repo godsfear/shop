@@ -5,10 +5,12 @@ from fastapi import APIRouter, Depends, status
 
 from ..models.auth import TokenPayload
 from ..models.operation import Balance, Operation, OperationCreate
-from ..services.auth import get_token_payload
+from ..services.auth import get_token_payload, require_admin
 from ..services.operation import OperationService
 
-router = APIRouter(prefix='/operation', tags=['operation'])
+# финансовые операции: owner-скоупа ещё нет — до его появления только админ
+router = APIRouter(prefix='/operation', tags=['operation'],
+                   dependencies=[Depends(require_admin)])
 
 
 @router.post('/', response_model=Operation, status_code=status.HTTP_201_CREATED)

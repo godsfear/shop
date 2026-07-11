@@ -32,6 +32,13 @@ async def open_session(svc: MedAccessService = Depends(),
     return {'expires_in': await svc.open_session()}
 
 
+@router.get('/grants')
+async def my_grants(svc: MedAccessService = Depends()):
+    """Чужие медкарты, доступные мне по одобренным согласиям (Слой B):
+    [{link_id, key_id}] — передавать в запросах /me/* как query-параметры."""
+    return await svc.grants()
+
+
 @router.get('/concepts')
 async def concepts(svc: MedAccessService = Depends()):
     """{code: category_id} медицинских концептов — для форм создания."""

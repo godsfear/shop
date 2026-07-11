@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 
 from ..models.auth import TokenPayload
 from ..models.translation import SearchHit, Translation, TranslationSearch, TranslationSet
-from ..services.auth import get_token_payload
+from ..services.auth import require_admin
 from ..services.translation import TranslationService
 
 router = APIRouter(prefix='/translation', tags=['translation'])
@@ -29,5 +29,5 @@ async def get_translations(table: str, objectid: uuid.UUID,
 @router.put('/{table}/{objectid}', response_model=List[Translation])
 async def set_translations(table: str, objectid: uuid.UUID, items: List[TranslationSet],
                            service: TranslationService = Depends(),
-                           payload: TokenPayload = Depends(get_token_payload)):
+                           payload: TokenPayload = Depends(require_admin)):
     return await service.set_translations(table, objectid, items)

@@ -18,9 +18,11 @@ def _self_or_admin(user_id: uuid.UUID, payload: TokenPayload) -> None:
                             detail='можно менять только свою учётную запись')
 
 
+# каталог и поиск пользователей — только админ: любой залогиненный не должен
+# перечислять чужие учётки (email/phone enumeration)
 @router.get('/all', response_model=List[User])
 async def get_users(service: UserService = Depends(),
-                    payload: TokenPayload = Depends(get_token_payload),
+                    payload: TokenPayload = Depends(require_roles(settings.admin_role)),
                     limit: int = Query(100, ge=1, le=1000),
                     offset: int = Query(0, ge=0)):
     return await service.get_all(limit=limit, offset=offset)
@@ -28,7 +30,7 @@ async def get_users(service: UserService = Depends(),
 
 @router.post('/find', response_model=User)
 async def find_user_by_contact(contact: Contact, service: UserService = Depends(),
-                               payload: TokenPayload = Depends(get_token_payload)):
+                               payload: TokenPayload = Depends(require_roles(settings.admin_role))):
     prop = contact.email or contact.phone
     if not prop:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Нужен email или phone')
@@ -41,6 +43,7 @@ async def find_user_by_contact(contact: Contact, service: UserService = Depends(
 @router.get('/{user_id}', response_model=User)
 async def get_user_by_id(user_id: uuid.UUID, service: UserService = Depends(),
                          payload: TokenPayload = Depends(get_token_payload)):
+    _self_or_admin(user_id, payload)
     return await service.get_by_id(user_id)
 
 

@@ -4,10 +4,13 @@ from fastapi import APIRouter, Body, Depends
 
 from ..models.auth import TokenPayload
 from ..models.fsm import FSMState
-from ..services.auth import get_token_payload
+from ..services.auth import get_token_payload, require_admin
 from ..services.fsm import FSMService
 
-router = APIRouter(prefix='/fsm', tags=['fsm'])
+# generic FSM по любому (table, objectid) — админ-инструмент;
+# переходы эпизодов пациента идут через /me/episodes/{id}/transition
+router = APIRouter(prefix='/fsm', tags=['fsm'],
+                   dependencies=[Depends(require_admin)])
 
 
 @router.get('/{table}/{objectid}', response_model=FSMState)

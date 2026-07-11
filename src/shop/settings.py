@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     outbox_max_attempts: int = 5           # попыток до пометки события мёртвым
     outbox_backoff_s: float = 5.0          # задержка ретрая × номер попытки (тесты ставят 0)
     consent_sweep_s: float = 3600.0        # период фонового протухания согласий (until)
+    # периметр HTTP
+    auth_rate_limit: int = 10              # попыток /auth/* с одного IP за окно
+    auth_rate_window_s: int = 60           # окно rate limit (сек)
+    cors_origins: list[str] = []           # CORS_ORIGINS='["https://app.example.com"]'
 
 
 settings = Settings()
