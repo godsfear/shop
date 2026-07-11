@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
-  episodeState, transition, assess, episodeProperties, addEpisodeProperty,
-  listDocuments, uploadDocument, concepts,
-  type FsmState, type Assess, type MedProperty, type Doc, type Concepts,
+  getEpisode, renameEpisode, episodeHistory, episodeState, transition, assess,
+  episodeProperties, addEpisodeProperty, listDocuments, uploadDocument, concepts,
+  type Episode as Ep, type FsmState, type Assess, type MedProperty, type Doc,
+  type Concepts, type StateLog,
 } from '../api'
 import { EVENTS, SECTIONS, STATES, t } from '../ui'
 
@@ -24,12 +25,16 @@ function Timeline({ fsm }: { fsm: FsmState }) {
 
 export default function Episode() {
   const { id = '' } = useParams()
+  const [ep, setEp] = useState<Ep | null>(null)
   const [cs, setCs] = useState<Concepts>({})
   const [fsm, setFsm] = useState<FsmState | null>(null)
   const [symptoms, setSymptoms] = useState<MedProperty[]>([])
   const [docs, setDocs] = useState<Doc[]>([])
+  const [log, setLog] = useState<StateLog[]>([])
   const [a, setA] = useState<Assess | null>(null)
   const [err, setErr] = useState('')
+  const [renaming, setRenaming] = useState(false)
+  const [newName, setNewName] = useState('')
 
   // форма симптома
   const [symCode, setSymCode] = useState('')
@@ -40,9 +45,11 @@ export default function Episode() {
 
   const reload = async () => {
     try {
+      setEp(await getEpisode(id))
       setFsm(await episodeState(id))
       setSymptoms(await episodeProperties(id, cs['symptom']))
       setDocs(await listDocuments(id))
+      setLog(await episodeHistory(id))
       setA(await assess(id))
     } catch (e) { setErr((e as Error).message) }
   }
@@ -52,8 +59,19 @@ export default function Episode() {
 
   const fire = async (event: string) => {
     setErr('')
-    try { setFsm(await transition(id, event)); setA(await assess(id)) }
-    catch (e) { setErr((e as Error).message) }
+    try {
+      setFsm(await transition(id, event))
+      setA(await assess(id))
+      setLog(await episodeHistory(id))
+    } catch (e) { setErr((e as Error).message) }
+  }
+
+  const rename = async () => {
+    setErr('')
+    try {
+      setEp(await renameEpisode(id, newName.trim()))
+      setRenaming(false)
+    } catch (e) { setErr((e as Error).message) }
   }
 
   const addSymptom = async (e: FormEvent) => {
@@ -83,8 +101,22 @@ export default function Episode() {
 
   return (
     <div>
-      <p><Link to="/">← эпизоды</Link></p>
-      <h2>Эпизод</h2>
+      <p><Link to="/">← сегодня</Link></p>
+      {renaming ? (
+        <div className="inline">
+          <input value={newName} autoFocus placeholder="диагноз / название"
+                 onChange={(e) => setNewName(e.target.value)} />
+          <button onClick={rename} disabled={!newName.trim()}>Сохранить</button>
+          <button className="ghost" onClick={() => setRenaming(false)}>Отмена</button>
+        </div>
+      ) : (
+        <h2>{ep?.name || ep?.code || 'Эпизод'}{' '}
+          <button className="ghost small"
+                  onClick={() => { setNewName(ep?.name ?? ''); setRenaming(true) }}>
+            переименовать
+          </button>
+        </h2>
+      )}
       {err && <p className="error">{err}</p>}
 
       <section>
@@ -95,6 +127,20 @@ export default function Episode() {
           ))}
           {fsm && fsm.available.length === 0 && <span className="muted">маршрут завершён</span>}
         </div>
+        {log.length > 0 && (
+          <details className="log">
+            <summary>Журнал ({log.length})</summary>
+            <ul className="rows">
+              {log.map((r, i) => (
+                <li key={i} className="row-link">
+                  <span>{t(STATES, r.state)}</span>
+                  {r.event && <span className="muted">← {t(EVENTS, r.event).toLowerCase()}</span>}
+                  <span className="muted">{new Date(r.begins).toLocaleString()}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
       </section>
 
       <section>

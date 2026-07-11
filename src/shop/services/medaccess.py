@@ -23,7 +23,7 @@ from ..database import db_helper
 from ..keyservice import KeyServiceError, PolicyError
 from ..medical_seed import medical_concepts
 from ..models.auth import TokenPayload
-from ..models.entity import EntityCreate
+from ..models.entity import EntityCreate, EntityUpdate
 from ..models.medical import EpisodeIn, MedPropertyIn
 from ..models.property import PropertyCreate, PropertyFilter
 from ..services.auth import get_token_payload
@@ -236,6 +236,23 @@ class MedAccessService:
             PropertyCreate(category=data.category, code=data.code, name=data.name,
                            table='entity', objectid=episode_id, value=data.value),
             creator=self.payload.sub)
+
+    async def episode(self, episode_id: uuid.UUID) -> tables.Entity:
+        await self._gate_episode(episode_id)
+        return await self.session.get(tables.Entity, episode_id)
+
+    async def rename_episode(self, episode_id: uuid.UUID, name: str) -> tables.Entity:
+        """Название даёт диагноз, не создание: эпизод открывается жалобой."""
+        await self._gate_episode(episode_id)
+        return await EntityService(session=self.session).update(
+            episode_id, EntityUpdate(name=name))
+
+    async def episode_history(self, episode_id: uuid.UUID) -> list[dict]:
+        """Журнал переходов: закрытые строки состояния (темпоральная модель)."""
+        await self._gate_episode(episode_id)
+        rows = await FSMService(session=self.session).history('entity', episode_id)
+        return [{'state': r.value.get('state'), 'event': r.value.get('event'),
+                 'begins': r.begins, 'ends': r.ends} for r in rows]
 
     async def episode_state(self, episode_id: uuid.UUID) -> dict:
         await self._gate_episode(episode_id)

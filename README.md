@@ -34,3 +34,7 @@ uv run python -m shop              # сервер (uvicorn с reload)
 ```
 uv run pytest
 ```
+
+Тесты и `scripts/bootstrap_dev.py` пересоздают схему — остановите dev-сервер
+(его outbox-воркер держит транзакции и блокирует `DROP SCHEMA`), а после
+прогона верните сид: `uv run python scripts/bootstrap_dev.py`.

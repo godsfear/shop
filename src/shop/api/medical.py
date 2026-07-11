@@ -8,7 +8,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
 
 from ..models.medical import (SessionOpen, MedPropertyIn, MedPropertyOut,
-                               EpisodeIn, EpisodeOut, Transition, DataOut)
+                               EpisodeIn, EpisodeOut, EpisodeRename, Transition, DataOut)
 from ..services.medaccess import MedAccessService
 
 router = APIRouter(prefix='/me', tags=['medical'])
@@ -74,6 +74,24 @@ async def my_episodes(svc: MedAccessService = Depends()):
 @router.post('/episodes', response_model=EpisodeOut, status_code=status.HTTP_201_CREATED)
 async def open_episode(body: EpisodeIn, svc: MedAccessService = Depends()):
     return await svc.open_episode(body)
+
+
+@router.get('/episodes/{episode_id}', response_model=EpisodeOut)
+async def get_episode(episode_id: uuid.UUID, svc: MedAccessService = Depends()):
+    return await svc.episode(episode_id)
+
+
+@router.patch('/episodes/{episode_id}', response_model=EpisodeOut)
+async def rename_episode(episode_id: uuid.UUID, body: EpisodeRename,
+                         svc: MedAccessService = Depends()):
+    """Назвать эпизод (после диагноза — при открытии имени ещё нет)."""
+    return await svc.rename_episode(episode_id, body.name)
+
+
+@router.get('/episodes/{episode_id}/history')
+async def episode_history(episode_id: uuid.UUID, svc: MedAccessService = Depends()):
+    """Журнал переходов состояния (кто когда перевёл — из темпоральной модели)."""
+    return await svc.episode_history(episode_id)
 
 
 @router.get('/episodes/{episode_id}/properties', response_model=List[MedPropertyOut])

@@ -98,6 +98,15 @@ async def test_main():
     assert st['state'] == 'diagnosis', st
     print('[ok] FSM-переход anamnesis->diagnosis через /me')
 
+    # --- имя после диагноза + журнал переходов ---
+    async with Sess() as s:
+        renamed = await _svc(s, ks, payload).rename_episode(eid, 'ОРВИ (подтверждён)')
+    assert renamed.name == 'ОРВИ (подтверждён)'
+    async with Sess() as s:
+        log = await _svc(s, ks, payload).episode_history(eid)
+    assert len(log) == 1 and log[0]['state'] == 'diagnosis' and log[0]['event'] == 'diagnose', log
+    print('[ok] переименование после диагноза + журнал переходов')
+
     # --- assess (Фаза 3): красный флаг acs + пустые пациентские секции ---
     async with Sess() as s:
         r = await _svc(s, ks, payload).assess(eid)

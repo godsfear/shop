@@ -53,6 +53,11 @@ class EpisodeOut(_MedOut):
     pass
 
 
+class EpisodeRename(BaseModel):
+    """Название эпизода появляется ПОСЛЕ диагноза — при создании его ещё нет."""
+    name: str
+
+
 class Transition(BaseModel):
     """FSM-переход эпизода: событие (diagnose|treat|recover|remit|relapse)."""
     event: str

@@ -111,6 +111,13 @@ h2, h3 { margin: 8px 0; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
   padding: 10px 12px; }
 
+/* журнал/история — нативный details */
+details.log { margin-top: 10px; }
+details.log summary { cursor: pointer; color: var(--muted); font-size: 13.5px;
+  padding: 6px 0; }
+details.log summary:hover { color: var(--accent); }
+button.small { padding: 3px 10px; font-size: 12.5px; vertical-align: middle; }
+
 .muted { color: var(--muted); font-size: 13.5px; }
 .error { color: var(--danger); }
 .alert { background: var(--danger-soft); color: var(--danger);

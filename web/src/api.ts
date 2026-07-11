@@ -61,8 +61,8 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   return (ct.includes('application/json') ? await res.json() : await res.text()) as T
 }
 
-const json = (body: unknown): RequestInit => ({
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+const json = (body: unknown, method = 'POST'): RequestInit => ({
+  method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 })
 
 // --- аутентификация ---
@@ -90,9 +90,15 @@ export const concepts = () => req<Concepts>('/me/concepts')
 export const listGrants = () => req<Grant[]>('/me/grants')
 
 // --- эпизоды ---
+export interface StateLog { state: string; event: string | null; begins: string; ends: string | null }
 export const listEpisodes = () => req<Episode[]>('/me/episodes')
+export const getEpisode = (id: string) => req<Episode>(`/me/episodes/${id}`)
 export const createEpisode = (category: string, code: string, name: string) =>
   req<Episode>('/me/episodes', json({ category, code, name }))
+// название появляется после диагноза — при создании эпизода его ещё нет
+export const renameEpisode = (id: string, name: string) =>
+  req<Episode>(`/me/episodes/${id}`, json({ name }, 'PATCH'))
+export const episodeHistory = (id: string) => req<StateLog[]>(`/me/episodes/${id}/history`)
 export const episodeState = (id: string) => req<FsmState>(`/me/episodes/${id}/state`)
 export const transition = (id: string, event: string) =>
   req<FsmState>(`/me/episodes/${id}/transition`, json({ event }))
