@@ -57,6 +57,8 @@ CONCEPTS = {
             {"category": "medication", "scope": "patient"},
             {"category": "allergy",    "scope": "patient"},
             {"category": "heredity",   "scope": "patient"},
+            {"category": "surgery",    "scope": "patient"},
+            {"category": "social",     "scope": "patient"},
         ],
         "red_flags": ["acs"],   # обработчик — код (@redflag_handler), см. services/medical.py
     }),
@@ -76,10 +78,35 @@ CONCEPTS = {
         ],
         "red_flags": [],
     }),
-    # секции обзора систем (ROS) — детей-справочников пока не заводим
+    "surgery":  ("Операции/госпитализации", {}),
+    "social":   ("Социальный анамнез", {}),
     "system": ("Система организма", {}),
     "document": ("Документ", {}),
     "analysis": ("Анализ", {}),   # статус один (результат) — FSM не нужен
+    # процесс сбора анамнеза (anamnez.md): интервью — Entity на эпизоде со своей FSM;
+    # очередь симптомов/прогресс — Property(code='progress'), см. services/interview.py
+    "interview": ("Опрос (анамнез)", {
+        "fsm": {
+            "states": ["complaint", "symptom", "ros", "history",
+                       "completeness", "summary", "confirmed", "emergency"],
+            "initial": "complaint",
+            "transitions": [
+                {"event": "begin_symptoms",  "source": "complaint",    "dest": "symptom"},
+                {"event": "to_ros",          "source": "symptom",      "dest": "ros"},
+                {"event": "back_to_symptoms", "source": "ros",         "dest": "symptom"},
+                {"event": "to_history",      "source": "ros",          "dest": "history"},
+                {"event": "to_completeness", "source": "history",      "dest": "completeness"},
+                {"event": "to_summary",      "source": "completeness", "dest": "summary"},
+                # возврат «да, ещё...»: ROS/анамнез уже пройдены — из цикла сразу к резюме
+                {"event": "to_summary",      "source": "symptom",      "dest": "summary"},
+                {"event": "more_symptoms",   "source": "summary",      "dest": "symptom"},
+                {"event": "confirm",         "source": "summary",      "dest": "confirmed"},
+                # красный флаг прерывает опрос; resume — после оказания помощи
+                {"event": "red_flag",        "source": "symptom",      "dest": "emergency"},
+                {"event": "resume",          "source": "emergency",    "dest": "symptom"},
+            ],
+        },
+    }),
 }
 
 # малый стартовый справочник: вид-концепт -> [(code, name), ...]
@@ -99,9 +126,13 @@ DICTIONARY = {
     "allergy": [
         ("penicillin", "Пенициллин"), ("pollen", "Пыльца"), ("nuts", "Орехи"),
     ],
+    # обзор систем (ROS) — все 9 систем эталона, порядок = порядок обхода
     "system": [
-        ("cardio", "Сердечно-сосудистая"), ("resp", "Дыхательная"),
-        ("gi", "ЖКТ"), ("neuro", "Нервная"), ("skin", "Кожа"),
+        ("neuro", "Нервная"), ("cardio", "Сердечно-сосудистая"),
+        ("resp", "Дыхательная"), ("gi", "ЖКТ"),
+        ("gu", "Мочеполовая"), ("endo", "Эндокринная"),
+        ("msk", "Опорно-двигательная"), ("skin", "Кожа"),
+        ("psych", "Психическая"),
     ],
 }
 

@@ -90,11 +90,12 @@ class FSMService:
 
     async def trigger(self, table: str, objectid: uuid.UUID, event: str,
                       creator: uuid.UUID | None = None,
-                      context: dict | None = None) -> dict:
+                      context: dict | None = None, commit: bool = True) -> dict:
         """Переход: закрывает активную строку состояния и пишет новую.
         Строка объекта блокируется — конкурентные переходы сериализуются.
         context передаётся guard'ам/action'ам; ключи 'event' и 'self'
-        зарезервированы сигнатурой миксина."""
+        зарезервированы сигнатурой миксина. commit=False — фиксация за
+        вызывающим (переход атомарен с его данными, см. interview)."""
         context = context or {}
         if reserved := {'event', 'self'} & set(context):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -114,7 +115,8 @@ class FSMService:
         self.session.add(tables.Property(
             table=table, objectid=objectid, code=STATE_CODE,
             value={'state': new_state, 'event': event}, creator=creator))
-        await self.session.commit()
+        if commit:
+            await self.session.commit()
         return {'state': new_state, 'available': machine.available_events()}
 
     async def history(self, table: str, objectid: uuid.UUID) -> list[tables.Property]:

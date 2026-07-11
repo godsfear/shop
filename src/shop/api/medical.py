@@ -117,6 +117,31 @@ async def episode_transition(episode_id: uuid.UUID, body: Transition,
     return await svc.transition(episode_id, body.event, link_id, key_id)
 
 
+# --- интервью: сбор анамнеза по протоколу (см. services/interview.py) ---
+@router.post('/episodes/{episode_id}/interview')
+async def interview_open(episode_id: uuid.UUID, svc: MedAccessService = Depends(),
+                         link_id: uuid.UUID | None = Query(None),
+                         key_id: str | None = Query(None)):
+    """Открыть интервью эпизода (идемпотентно) — возвращает состояние и вопрос."""
+    return await svc.interview_open(episode_id, link_id, key_id)
+
+
+@router.get('/episodes/{episode_id}/interview')
+async def interview_state(episode_id: uuid.UUID, svc: MedAccessService = Depends(),
+                          link_id: uuid.UUID | None = Query(None),
+                          key_id: str | None = Query(None)):
+    return await svc.interview_state(episode_id, link_id, key_id)
+
+
+@router.post('/episodes/{episode_id}/interview/answer')
+async def interview_answer(episode_id: uuid.UUID, body: dict,
+                           svc: MedAccessService = Depends(),
+                           link_id: uuid.UUID | None = Query(None),
+                           key_id: str | None = Query(None)):
+    """Ответ на текущий вопрос; сервер сам двигает автомат и возвращает следующий."""
+    return await svc.interview_answer(episode_id, body, link_id, key_id)
+
+
 @router.get('/episodes/{episode_id}/assess')
 async def episode_assess(episode_id: uuid.UUID, svc: MedAccessService = Depends(),
                          link_id: uuid.UUID | None = Query(None),

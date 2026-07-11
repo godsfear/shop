@@ -31,6 +31,7 @@ from ..services.entity import EntityService
 from ..services.extract import request_extract
 from ..services.files import FileStore
 from ..services.fsm import FSMService
+from ..services.interview import InterviewService
 from ..services.medical import MedicalService
 from ..services.property import PropertyService
 from ..settings import settings
@@ -256,6 +257,25 @@ class MedAccessService:
                      key_id: str | None = None) -> dict:
         pseudonym = await self._gate_episode(episode_id, link_id, key_id)
         return await MedicalService(session=self.session).assess(pseudonym, episode_id)
+
+    # --- интервью (сбор анамнеза по протоколу) — за теми же воротами эпизода ---
+    async def interview_open(self, episode_id: uuid.UUID, link_id: uuid.UUID | None = None,
+                             key_id: str | None = None) -> dict:
+        pseudonym = await self._gate_episode(episode_id, link_id, key_id)
+        return await InterviewService(session=self.session).open(
+            episode_id, pseudonym, creator=self.payload.sub)
+
+    async def interview_state(self, episode_id: uuid.UUID, link_id: uuid.UUID | None = None,
+                              key_id: str | None = None) -> dict:
+        pseudonym = await self._gate_episode(episode_id, link_id, key_id)
+        return await InterviewService(session=self.session).state(episode_id, pseudonym)
+
+    async def interview_answer(self, episode_id: uuid.UUID, body: dict,
+                               link_id: uuid.UUID | None = None,
+                               key_id: str | None = None) -> dict:
+        pseudonym = await self._gate_episode(episode_id, link_id, key_id)
+        return await InterviewService(session=self.session).answer(
+            episode_id, pseudonym, body, creator=self.payload.sub)
 
     # --- документы/анализы: блоб (FileStore) + метаданные Data + очередь на ИИ-разбор ---
     async def _scope(self, episode_id: uuid.UUID | None,
