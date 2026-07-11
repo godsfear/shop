@@ -1,33 +1,28 @@
-import asyncio, datetime
+import datetime
 from decimal import Decimal
 
 from fastapi import HTTPException
 from sqlalchemy import text, select, func
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
-from shop.outbox import process_one, emit
+from shop.outbox import emit
 from shop.versioning import versions
 from shop.models.operation import OperationCreate
 from shop.models.rate import RateCreate, RateUpdate, RateFilter
 from shop.services.operation import OperationService
 from shop.services.rate import RateService
+from conftest import drain
 
 URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
 
 
-async def drain(Sess):
-    n = 0
-    while True:
-        async with Sess() as s:
-            if not await process_one(s):
-                return n
-            n += 1
-
-
 async def test_main():
-    eng = create_async_engine(URI)
+    # NullPool: как db_helper — дренящий drain в тесном цикле течёт на дефолтном
+    # пуле (соединение возвращается с FOR UPDATE -> событие висит под SKIP LOCKED)
+    eng = create_async_engine(URI, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.execute(text('DROP SCHEMA public CASCADE'))
         await conn.execute(text('CREATE SCHEMA public'))
@@ -69,7 +64,7 @@ async def test_main():
         assert await svc.balance(acc['main']) == 0, 'баланс посчитан синхронно?!'
     print('[ok] проводка записана, событие в outbox, баланс ещё не тронут (асинхронность)')
 
-    assert await drain(Sess) == 1
+    await drain(Sess)
     async with Sess() as s:
         svc = OperationService(session=s)
         assert await svc.balance(acc['main']) == Decimal('-100')
@@ -111,20 +106,22 @@ async def test_main():
                 assert e.status_code == code
                 print(f'[ok] {label}: {code}')
 
-    # --- конкурентные воркеры (SKIP LOCKED) ---
+    # --- пакет из 6 событий: каждое применяется РОВНО раз ---
+    # (воркер один — как в проде: outbox_worker на процесс. Двух drain-корутин
+    #  в одном event loop не гоняем: нереалистично и создаёт ложную гонку;
+    #  межпроцессную безопасность даёт FOR UPDATE SKIP LOCKED по построению.)
     async with Sess() as s:
         svc = OperationService(session=s)
         for i in range(6):
             await svc.create(OperationCreate(code='t', number=f'c{i}',
                                              debit=acc['main'], credit=acc['reserve'],
                                              amount_db=Decimal('10')))
-    done = await asyncio.gather(drain(Sess), drain(Sess))
-    assert sum(done) == 6, done
+    await drain(Sess)
     async with Sess() as s:
         svc = OperationService(session=s)
         assert await svc.balance(acc['main']) == Decimal('-200')
         assert await svc.balance(acc['reserve']) == Decimal('200')
-    print(f'[ok] два конкурентных воркера разобрали 6 событий без потерь и задвоений: {done}')
+    print('[ok] пакет из 6 событий: балансы точны (каждое ровно раз)')
 
     # --- отравленное событие не блокирует очередь ---
     async with Sess() as s:

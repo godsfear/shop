@@ -11,7 +11,7 @@ from shop.tables import DomainBoundaryError
 from shop.keyservice import StubKeyService, EMERGENCY
 from shop.models.auth import TokenPayload
 from shop.models.user import Contact, UserCreate
-from shop.outbox import process_one
+from conftest import drain
 from shop.services.bridge import BridgeService
 from shop.services.user import UserService
 from shop.settings import settings
@@ -246,10 +246,7 @@ async def test_main():
             print('[ok] после отзыва: 404 (копии DEK больше нет)')
 
     # уведомления владельцу о гранте и отзыве
-    while True:
-        async with Sess() as s:
-            if not await process_one(s):
-                break
+    await drain(Sess)
     async with Sess() as s:
         msgs = (await s.execute(select(t.Message).where(
             t.Message.receiver == owner.id,

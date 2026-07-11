@@ -14,5 +14,7 @@ keyservice/
 Docker-Postgresql/data/
 
 .idea/
+.claude/
 
 *.log
+src/shop/logs/

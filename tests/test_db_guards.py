@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 import shop.tables as t
 from shop.keyservice import StubKeyService, EMERGENCY
 from shop.models.user import UserCreate, Contact
-from shop.outbox import process_one
+from conftest import drain
 from shop.services.bridge import BridgeService
 from shop.services.user import UserService
 
@@ -66,7 +66,15 @@ async def test_main():
                 "INSERT INTO relation (id, code, \"table\", objectid, related_table, related_id) "
                 "VALUES (gen_random_uuid(), 'is', 'person', :p, 'pseudonym', :ps)"),
                 {'p': pid, 'ps': psid})
-    print('[ok] сырая Relation через границу доменов: отвергнута триггером')
+    print('[ok] сырая Relation identity<->operational: отвергнута триггером')
+
+    # --- operational<->reference теперь РАЗРЕШЕНО (справочник публичен) ---
+    async with eng.begin() as conn:
+        await conn.execute(text(
+            "INSERT INTO relation (id, code, \"table\", objectid, related_table, related_id) "
+            "VALUES (gen_random_uuid(), 'lives_in', 'pseudonym', :ps, 'place', :pl)"),
+            {'ps': psid, 'pl': place_id})
+    print('[ok] сырая Relation operational->reference: разрешена')
 
     # --- сырой мост к не-identity: триггер отвергает ---
     with pytest.raises(DBAPIError, match='identity'):
@@ -109,10 +117,7 @@ async def test_main():
         resolved = await bridge.breakglass_resolve(link.id, rid)
         assert resolved == pseudonym_id
 
-    while True:  # разобрать outbox (событие уведомления + возможные хвосты)
-        async with Sess() as s:
-            if not await process_one(s):
-                break
+    await drain(Sess)  # разобрать outbox (уведомление break-glass)
     async with Sess() as s:
         msg = (await s.execute(select(t.Message).where(
             t.Message.receiver == user.id))).scalars().one()

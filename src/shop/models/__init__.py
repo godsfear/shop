@@ -8,6 +8,7 @@ __all__ = (
     "Contact", "SignUp", "User", "UserBase", "UserCreate", "UserUpdate", "UserRoles",
     "Person", "PersonBase", "PersonCreate", "PersonUpdate",
     "Place", "PlaceBase", "PlaceCreate", "PlaceUpdate", "PlaceFilter",
+    "Property", "PropertyBase", "PropertyCreate", "PropertyUpdate", "PropertyFilter",
     "Rate", "RateBase", "RateCreate", "RateUpdate", "RateFilter",
 )
 
@@ -19,5 +20,6 @@ from .currency import Currency, CurrencyBase, CurrencyCreate, CurrencyUpdate, Cu
 from .entity import Entity, EntityBase, EntityCreate, EntityUpdate, EntityFilter
 from .person import Person, PersonBase, PersonCreate, PersonUpdate
 from .place import Place, PlaceBase, PlaceCreate, PlaceUpdate, PlaceFilter
+from .property import Property, PropertyBase, PropertyCreate, PropertyUpdate, PropertyFilter
 from .rate import Rate, RateBase, RateCreate, RateUpdate, RateFilter
 from .user import Contact, SignUp, User, UserBase, UserCreate, UserUpdate, UserRoles

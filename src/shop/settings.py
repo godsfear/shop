@@ -28,12 +28,18 @@ class Settings(BaseSettings):
     breakglass_role: str = 'keyholder'     # единственная роль подтверждающих
     veto_window_s: int = 7 * 24 * 3600     # окно вето recovery-заявки
     pseudonym_pool_batch: int = 100        # размер партии пополнения пула псевдонимов
+    pseudonym_pool_target: int = 100       # целевой размер пула (фоновый добор)
+    pseudonym_pool_check_s: float = 300.0  # период фоновой проверки/добора пула
     research_password: str = 'research'    # dev-заглушка; в проде задать в .env
+    # ИИ-разбор документов (services/extract.py); нет ключа -> детерминированная заглушка
+    google_api_key: str | None = None      # Gemini; задаётся в .env, в код не пишется
+    gemini_model: str = 'gemini-2.5-flash'
     # Redis-кэш (см. cache.py); недоступность Redis не роняет приложение
     redis_uri: str = 'redis://localhost:6379/0'
     cache_ttl_user_s: int = 300            # профиль пользователя
     cache_ttl_ref_s: int = 3600            # справочники (версионируемое пространство)
     cache_ttl_bridge_s: int = 300          # сессия разрешённого моста
+    medsession_ttl_s: int = 3600           # сессия доступа к медданным (псевдоним в Redis)
     # transactional outbox (см. outbox.py)
     outbox_poll_s: float = 1.0             # пауза воркера при пустой очереди
     outbox_max_attempts: int = 5           # попыток до пометки события мёртвым

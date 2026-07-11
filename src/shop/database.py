@@ -1,14 +1,22 @@
 from typing import AsyncGenerator, Any
 from asyncio import current_task
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker, async_scoped_session
 from .settings import settings
 
 
 class DatabaseHelper:
     def __init__(self, url: str, echo: bool = False):
+        # ponytail: NullPool — свежее соединение на сессию. Дефолтный async-пул
+        # при частом открытии/закрытии сессий (outbox_worker дренит в цикле)
+        # возвращал соединение с открытой транзакцией, удерживая FOR UPDATE и
+        # пряча событие под SKIP LOCKED навсегда. Ценой одного connect на сессию
+        # снимаем целый класс утечек состояния. Потолок: если connect-оверхед
+        # станет заметен — внешний пулер (PgBouncer) + NullPool на стороне app.
         self.engine = create_async_engine(
             url=url,
             echo=echo,
+            poolclass=NullPool,
         )
         self.session_factory = async_sessionmaker(
             bind=self.engine,

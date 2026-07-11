@@ -5,6 +5,7 @@
 владельца шифруется на клиенте его ключом и приходит сюда готовым шифртекстом
 (owner_wrapped), сервер DEK владельца не видит.
 """
+import asyncio
 import base64
 import uuid
 
@@ -92,6 +93,20 @@ class BridgeService:
         self.session.add_all(tables.PseudonymPool(id=p.id) for p in pseudonyms)
         await self.session.commit()
         return count
+
+    async def top_up_pool(self, target: int | None = None) -> int:
+        """Добирает пул до целевого размера (фоново, по расписанию — НЕ на выдачу).
+
+        Расписание, а не синхрон на выдачу: псевдоним должен полежать в пуле
+        (лаг), иначе при случайной выдаче свежесозданный уйдёт сразу и его
+        begins совпадёт с моментом выдачи. Возвращает сколько создано."""
+        target = target or settings.pseudonym_pool_target
+        have = (await self.session.execute(
+            select(func.count()).select_from(tables.PseudonymPool))).scalar_one()
+        deficit = target - have
+        if deficit <= 0:
+            return 0
+        return await self.replenish_pool(deficit)
 
     async def _claim_pseudonym(self) -> uuid.UUID:
         """Выдаёт случайный свободный псевдоним из пула и удаляет его из пула.
@@ -251,3 +266,21 @@ class BridgeService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                                 detail='доступ не найден (нет копии DEK или отозван)')
         return link, access
+
+
+async def pseudonym_pool_topper() -> None:
+    """Фоновый добор пула псевдонимов до целевого размера (стартует в lifespan).
+
+    По расписанию, независимо от темпа выдачи — так псевдоним всегда полежит
+    в пуле (лаг), и штатная выдача не уходит в аварийное пополнение."""
+    while True:
+        try:
+            async with db_helper.session_factory() as session:
+                created = await BridgeService(session).top_up_pool()
+            if created:
+                logger.info('пул псевдонимов: добрано %s', created)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 — БД мигнула: подождать и продолжить
+            logger.warning('пул псевдонимов: добор: %r', e)
+        await asyncio.sleep(settings.pseudonym_pool_check_s)

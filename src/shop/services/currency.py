@@ -1,11 +1,8 @@
-import uuid
 from typing import List
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, func
 
-from ..cache import get_cache
-from ..versioning import versioned_update
 from .. import tables
 from ..models.currency import Currency as CurrencyModel
 from ..models.currency import CurrencyUpdate, CurrencyFilter
@@ -31,9 +28,6 @@ class CurrencyService(CachedCrudService):
         if flt.category is None or flt.code is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                                 detail='Для обновления по коду нужны category и code')
-        values = currency_data.model_dump(exclude_unset=True)
-        if not values:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Нет полей для обновления')
         cid = (await self.session.execute(
             select(tables.Currency.id).where(
                 tables.Currency.category == flt.category,
@@ -41,9 +35,5 @@ class CurrencyService(CachedCrudService):
             ))).scalar_one_or_none()
         if cid is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        currency = await versioned_update(self.session, tables.Currency, cid, values)
-        if currency is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        await self.session.commit()
-        await get_cache().bump(self.ns)
-        return currency
+        # тело update (exclude_unset→400, versioned_update→404, commit, bump) — в базе
+        return await self.update(cid, currency_data)

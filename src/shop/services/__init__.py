@@ -11,6 +11,7 @@ __all__ = (
     "OperationService",
     "PersonService",
     "PlaceService",
+    "PropertyService",
     "RateService",
     "TranslationService",
     "UserService",
@@ -22,6 +23,7 @@ from .fsm import FSMService
 from .operation import OperationService
 from .person import PersonService
 from .place import PlaceService
+from .property import PropertyService
 from .rate import RateService
 from .translation import TranslationService
 from .category import CategoryService

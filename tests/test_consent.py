@@ -12,21 +12,14 @@ from shop.models.auth import TokenPayload
 from shop.models.company import CompanyCreate
 from shop.models.consent import ConsentDecision, ConsentRequest
 from shop.models.user import Contact, UserCreate
-from shop.outbox import process_one
 from shop.services.company import CompanyService
 from shop.services.consent import ConsentService
 from shop.services.person import PersonService
 from shop.services.user import UserService
 from shop.settings import settings
+from conftest import drain
 
 URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
-
-
-async def drain(Sess):
-    while True:
-        async with Sess() as s:
-            if not await process_one(s):
-                return
 
 
 async def test_main():

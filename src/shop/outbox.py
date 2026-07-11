@@ -66,12 +66,14 @@ async def process_one(session: AsyncSession) -> bool:
         return True
     try:
         await handler(session, row.payload)
-    except Exception as e:  # noqa: BLE001 — любой сбой обработчика не должен ронять воркер
+        row.processed = now
+        await session.commit()  # commit ВНУТРИ try: конфликт коммита (дубль
+                                # первичного баланса, сериализация) -> retry,
+                                # а не вылет воркера с зависшим событием
+    except Exception as e:  # noqa: BLE001 — любой сбой не должен ронять воркер
         await session.rollback()  # откат доменных изменений события
         await _register_failure(session, row_id, attempts_before, repr(e)[:500], now)
         return True
-    row.processed = now
-    await session.commit()
     return True
 
 

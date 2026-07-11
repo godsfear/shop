@@ -10,7 +10,7 @@ class PersonBase(BaseModel):
     name: dict                    # {'last': ..., 'first': ..., 'middle': ...}
     sex: bool
     birthdate: datetime.date
-    birth_place: uuid.UUID
+    birth_place: uuid.UUID | None = None   # необязательно (самоучёт-регистрация)
 
 
 class PersonCreate(PersonBase):

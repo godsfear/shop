@@ -268,15 +268,17 @@ def _register_new_objects(session: Session, flush_context, instances) -> None:
                 f"мост (Link) крепится только к identity-объекту, "
                 f"цель '{o.table}' — домен '{domains[o.id]}'")
 
-    # граница доменов: связь между доменами — только через мост
+    # граница приватности: запрещена ТОЛЬКО прямая связь identity<->operational
+    # (её путь — мост). reference (справочники) публичен, ссылки на него из
+    # любого домена безопасны: пациент(operational)->лекарство(reference) и т.п.
     for o in cross:
         if isinstance(o, Relation):
             d_src, d_trg = domains.get(o.objectid), domains.get(o.related_id)
             if d_trg is None:
                 raise DomainBoundaryError(f'цель связи не найдена в реестре: {o.related_id}')
-            if d_src != d_trg:
+            if {d_src, d_trg} == {Domain.IDENTITY, Domain.OPERATIONAL}:
                 raise DomainBoundaryError(
-                    f"связь между доменами '{d_src}' и '{d_trg}' запрещена — только через мост")
+                    "прямая связь identity<->operational запрещена — только через мост")
 
     # реестр пишется немедленно Core-upsert'ом (до плана flush): строки реестра
     # существуют раньше любых зависимых INSERT'ов независимо от сортировки таблиц,
@@ -322,9 +324,10 @@ _TRIGGER_FUNCTIONS = [
     BEGIN
         SELECT domain INTO d_src FROM object WHERE id = NEW.objectid;
         SELECT domain INTO d_trg FROM object WHERE id = NEW.related_id;
-        IF d_src IS DISTINCT FROM d_trg THEN
-            RAISE EXCEPTION 'связь между доменами % и % запрещена — только через мост',
-                d_src, d_trg;
+        -- запрещена только прямая identity<->operational; reference свободен
+        IF (d_src='identity' AND d_trg='operational')
+           OR (d_src='operational' AND d_trg='identity') THEN
+            RAISE EXCEPTION 'прямая связь identity<->operational запрещена — только через мост';
         END IF;
         RETURN NEW;
     END $$ LANGUAGE plpgsql
@@ -627,13 +630,32 @@ class Rate(BaseCategory, DescriptionMixin):
 
 class Data(BaseCategory, CrossTable, DescriptionMixin):
     name: Mapped[str] = mapped_column(String)
+    # hash -> Blob.hash: контент-адресованная ссылка на блоб в FileStore.
+    # НЕ FK: контент живёт за швом put/get (сейчас Blob, позже S3) — БД о нём не знает.
     hash: Mapped[str] = mapped_column(String)
     algorithm: Mapped[str] = mapped_column(String)
-    content: Mapped[bytes] = mapped_column(BYTEA)
 
     __local_table_args__ = (
         Index('ix_data', 'category', 'code', 'table', 'objectid', 'algorithm', 'hash'),
     )
+
+
+class Blob(Root):
+    """Контент-адресованное хранилище байтов — вне темпоральной модели и реестра
+    (служебная таблица, как Outbox/PseudonymPool).
+
+    hash = PK -> дедуп даром: одинаковый контент = одна строка. Домена нет —
+    это непрозрачные байты; чувствительна привязка (Data на псевдониме), не блоб.
+    Ceiling: BYTEA в основной БД; вынести в S3/MinIO за FileStore.put/get.
+    """
+    __tablename__ = "blob"
+
+    hash: Mapped[str] = mapped_column(String, primary_key=True)
+    algorithm: Mapped[str] = mapped_column(String)
+    size: Mapped[int] = mapped_column(Integer)
+    content: Mapped[bytes] = mapped_column(BYTEA)
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True),
+                                                       server_default=func.now())
 
 
 class Document(BaseCategory, CrossTable, DescriptionMixin):
@@ -663,7 +685,9 @@ class Person(Base):
     name: Mapped[dict] = mapped_column(JSONB)
     sex: Mapped[bool] = mapped_column(Boolean)
     birthdate: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    birth_place: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, ForeignKey("place.id"))
+    # необязательно: самоучёт-регистрация не требует места рождения (нет сида Place)
+    birth_place: Mapped[uuid6.UUID | None] = mapped_column(UUID_TYPE, ForeignKey("place.id"),
+                                                           nullable=True)
     sensitive: Mapped[list[str]] = mapped_column(ARRAY(String),nullable=True)
 
     __local_table_args__ = (
