@@ -82,11 +82,13 @@ class FSMService:
         self.session = session
 
     async def state(self, table: str, objectid: uuid.UUID) -> dict:
-        """Текущее состояние и доступные события (лениво: без строки — initial)."""
+        """Текущее состояние и доступные события (лениво: без строки — initial).
+        states — полный маршрут из конфига: фронт рисует таймлайн, не зная категорий."""
         config = await self._config(table, objectid)
         machine = self._machine(config, table, objectid,
                                 await self._current_row(table, objectid))
-        return {'state': machine.state, 'available': machine.available_events()}
+        return {'state': machine.state, 'available': machine.available_events(),
+                'states': list(config['states'])}
 
     async def trigger(self, table: str, objectid: uuid.UUID, event: str,
                       creator: uuid.UUID | None = None,
@@ -117,7 +119,8 @@ class FSMService:
             value={'state': new_state, 'event': event}, creator=creator))
         if commit:
             await self.session.commit()
-        return {'state': new_state, 'available': machine.available_events()}
+        return {'state': new_state, 'available': machine.available_events(),
+                'states': list(config['states'])}  # контракт как у state(): фронт рисует таймлайн
 
     async def history(self, table: str, objectid: uuid.UUID) -> list[tables.Property]:
         """Все состояния объекта, включая закрытые, в порядке наступления."""

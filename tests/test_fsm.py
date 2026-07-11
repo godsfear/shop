@@ -67,7 +67,8 @@ async def test_main():
     async with Sess() as s:
         fsm = FSMService(session=s)
         st = await fsm.state('entity', eid)
-    assert st == {'state': 'draft', 'available': ['archive', 'submit']}, st
+    assert st['state'] == 'draft' and st['available'] == ['archive', 'submit'], st
+    assert st['states'] == ['draft', 'review', 'published', 'archived'], st
     print('[ok] начальное состояние без строки в БД:', st)
 
     # --- переход submit ---

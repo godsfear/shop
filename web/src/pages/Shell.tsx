@@ -1,25 +1,24 @@
 import { useEffect, useState } from 'react'
 import { Outlet, Link, useNavigate } from 'react-router-dom'
-import { enroll, openSession } from '../api'
+import { openSession, ApiError } from '../api'
 import { useAuth } from '../auth'
 
-// Каркас: при входе идемпотентно выпускает мост (enroll) и открывает медсессию.
-// Псевдоним разворачивается на сервере — фронт его не видит.
+// Каркас: открывает owner-сессию. Мост ещё не выпущен (409) -> явный шаг
+// онбординга /welcome (пользователь видит момент выпуска ключей).
 export default function Shell() {
   const { setToken } = useAuth()
   const nav = useNavigate()
-  const [status, setStatus] = useState('открываю сессию…')
-  const [ready, setReady] = useState(false)   // гейт: дети грузят данные только по открытой сессии
+  const [status, setStatus] = useState('')
+  const [ready, setReady] = useState(false)   // гейт: дети грузят данные по открытой сессии
 
   useEffect(() => {
     (async () => {
       try {
-        await enroll()
         await openSession()
-        setStatus('сессия активна')
         setReady(true)
       } catch (e) {
-        setStatus('ошибка сессии: ' + (e as Error).message)
+        if (e instanceof ApiError && e.status === 409) { nav('/welcome'); return }
+        setStatus('нет связи с сервером: ' + (e as Error).message)
       }
     })()
   }, [])
@@ -29,11 +28,11 @@ export default function Shell() {
   return (
     <div className="app">
       <header>
-        <Link to="/" className="brand">Медкарта</Link>
-        <span className="status">{status}</span>
-        <button onClick={logout}>Выйти</button>
+        <Link to="/" className="brand">здоровье</Link>
+        <span className="chip on">Моя карта</span>
+        <button className="ghost right" onClick={logout}>Выйти</button>
       </header>
-      <main>{ready ? <Outlet /> : <p className="muted">{status}</p>}</main>
+      <main>{ready ? <Outlet /> : <p className="muted">{status || 'открываю сессию…'}</p>}</main>
     </div>
   )
 }

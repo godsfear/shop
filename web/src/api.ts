@@ -15,8 +15,9 @@ export interface Doc {
   hash: string; algorithm: string; begins: string; ends: string | null
 }
 export interface Assess { gaps: string[]; alerts: string[] }
-export interface FsmState { state: string; available: string[] }
+export interface FsmState { state: string; available: string[]; states: string[] }
 export type Concepts = Record<string, string>
+export interface Grant { link_id: string; key_id: string }
 
 export class ApiError extends Error {
   status: number
@@ -26,6 +27,12 @@ export class ApiError extends Error {
   }
 }
 
+// Режим «Пациенты» (Слой B): пока care-контекст установлен, каждый /me-запрос
+// несёт link_id/key_id — сервер резолвит чужую карту по согласию. null = моя карта.
+let care: Grant | null = null
+export const setCare = (g: Grant | null) => { care = g }
+export const getCare = () => care
+
 function authHeaders(extra?: HeadersInit): Headers {
   const h = new Headers(extra)
   const token = localStorage.getItem('token')
@@ -33,8 +40,14 @@ function authHeaders(extra?: HeadersInit): Headers {
   return h
 }
 
+function withCare(path: string): string {
+  if (!care || !path.startsWith('/me')) return path
+  const sep = path.includes('?') ? '&' : '?'
+  return `${path}${sep}link_id=${care.link_id}&key_id=${encodeURIComponent(care.key_id)}`
+}
+
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const res = await fetch(BASE + path, { ...opts, headers: authHeaders(opts.headers) })
+  const res = await fetch(BASE + withCare(path), { ...opts, headers: authHeaders(opts.headers) })
   if (!res.ok) {
     let detail: string = res.statusText
     try {
@@ -73,6 +86,8 @@ export async function signin(email: string, password: string): Promise<string> {
 export const enroll = () => req<void>('/me/enroll', { method: 'POST' })
 export const openSession = () => req<{ expires_in: number }>('/me/session', { method: 'POST' })
 export const concepts = () => req<Concepts>('/me/concepts')
+// чужие карты, доступные мне по согласиям (режим «Пациенты», Слой B)
+export const listGrants = () => req<Grant[]>('/me/grants')
 
 // --- эпизоды ---
 export const listEpisodes = () => req<Episode[]>('/me/episodes')

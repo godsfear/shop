@@ -5,6 +5,22 @@ import {
   listDocuments, uploadDocument, concepts,
   type FsmState, type Assess, type MedProperty, type Doc, type Concepts,
 } from '../api'
+import { EVENTS, SECTIONS, STATES, t } from '../ui'
+
+// Таймлайн жизненного цикла: полный маршрут из fsm.states, текущее — акцентом
+function Timeline({ fsm }: { fsm: FsmState }) {
+  const cur = fsm.states.indexOf(fsm.state)
+  return (
+    <div className="timeline">
+      {fsm.states.map((st, i) => (
+        <span key={st}
+              className={'st' + (i < cur ? ' done' : '') + (i === cur ? ' cur' : '')}>
+          {t(STATES, st)}
+        </span>
+      ))}
+    </div>
+  )
+}
 
 export default function Episode() {
   const { id = '' } = useParams()
@@ -72,19 +88,20 @@ export default function Episode() {
       {err && <p className="error">{err}</p>}
 
       <section>
-        <h3>Состояние: <b>{fsm?.state ?? '…'}</b></h3>
+        {fsm && <Timeline fsm={fsm} />}
         <div className="inline">
           {fsm?.available.map((ev) => (
-            <button key={ev} onClick={() => fire(ev)}>{ev}</button>
+            <button key={ev} onClick={() => fire(ev)}>{t(EVENTS, ev)}</button>
           ))}
-          {fsm && fsm.available.length === 0 && <span className="muted">переходов нет</span>}
+          {fsm && fsm.available.length === 0 && <span className="muted">маршрут завершён</span>}
         </div>
       </section>
 
       <section>
         <h3>Полнота и красные флаги</h3>
         {a?.alerts.map((x) => <p key={x} className="alert">⚠ красный флаг: {x}</p>)}
-        {a && a.gaps.length > 0 && <p className="muted">не заполнено: {a.gaps.join(', ')}</p>}
+        {a && a.gaps.length > 0 &&
+          <p className="muted">не заполнено: {a.gaps.map((g) => t(SECTIONS, g)).join(', ')}</p>}
         {a && a.alerts.length === 0 && a.gaps.length === 0 && <p className="muted">всё заполнено, флагов нет</p>}
       </section>
 
