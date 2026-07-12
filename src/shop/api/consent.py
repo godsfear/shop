@@ -40,6 +40,13 @@ async def my_consents(service: ConsentService = Depends(),
     return await service.mine(payload)
 
 
+@router.get('/granted', response_model=List[Consent])
+async def granted_consents(service: ConsentService = Depends(),
+                           payload: TokenPayload = Depends(get_token_payload)):
+    """Кто видит мои данные: действующие согласия по моим субъектам (для отзыва)."""
+    return await service.granted(payload)
+
+
 @router.post('/{consent_id}/approve', response_model=Consent)
 async def approve_consent(consent_id: uuid.UUID,
                           decision: ConsentDecision = Body(default=ConsentDecision()),

@@ -29,8 +29,13 @@ export class ApiError extends Error {
 
 // Режим «Пациенты» (Слой B): пока care-контекст установлен, каждый /me-запрос
 // несёт link_id/key_id — сервер резолвит чужую карту по согласию. null = моя карта.
-let care: Grant | null = null
-export const setCare = (g: Grant | null) => { care = g }
+// sessionStorage: режим переживает перезагрузку, но не закрытие вкладки.
+let care: Grant | null = JSON.parse(sessionStorage.getItem('care') ?? 'null')
+export const setCare = (g: Grant | null) => {
+  care = g
+  if (g) sessionStorage.setItem('care', JSON.stringify(g))
+  else sessionStorage.removeItem('care')
+}
 export const getCare = () => care
 
 function authHeaders(extra?: HeadersInit): Headers {
@@ -81,6 +86,27 @@ export async function signin(email: string, password: string): Promise<string> {
   })
   return r.access_token
 }
+
+// --- профиль ---
+export interface Me { id: string; person: string; contact: { email?: string } }
+export const me = () => req<Me>('/auth/user/')
+
+// --- согласия (consent-first доступ) ---
+export interface Consent {
+  id: string; table: string; objectid: string; grantee: string
+  scope: string; status: string; until: string | null; reason: string | null
+  begins: string; ends: string | null
+}
+export const consentIncoming = () => req<Consent[]>('/consent/incoming')
+export const consentMine = () => req<Consent[]>('/consent/mine')
+export const consentGranted = () => req<Consent[]>('/consent/granted')
+export const consentRequest = (subjectId: string, reason: string) =>
+  req<Consent>('/consent/request', json({
+    subject_table: 'person', subject_id: subjectId, scope: 'medical', reason }))
+export const consentApprove = (id: string, until: string | null) =>
+  req<Consent>(`/consent/${id}/approve`, json({ until }))
+export const consentDeny = (id: string) => req<Consent>(`/consent/${id}/deny`, json({}))
+export const consentRevoke = (id: string) => req<Consent>(`/consent/${id}/revoke`, json({}))
 
 // --- онбординг/сессия (owner: без тела, сервер сам разворачивает мост по JWT) ---
 export const enroll = () => req<void>('/me/enroll', { method: 'POST' })

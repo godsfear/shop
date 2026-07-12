@@ -155,6 +155,24 @@ class ConsentService:
         return list((await self.session.execute(select(tables.Consent).where(
             tables.Consent.grantee == payload.sub))).scalars().all())
 
+    async def granted(self, payload: TokenPayload) -> List[tables.Consent]:
+        """«Кто видит мои данные»: действующие согласия по субъектам, которыми
+        управляет вызывающий (без manage — управляющие не в этом списке)."""
+        q = select(tables.Consent).where(tables.Consent.status == APPROVED,
+                                         tables.Consent.scope != MANAGE,
+                                         _until_alive())
+        if settings.admin_role not in payload.roles:
+            person = (await self.session.execute(select(tables.User.person).where(
+                tables.User.id == payload.sub))).scalar_one_or_none()
+            managed = select(tables.Consent.objectid).where(
+                tables.Consent.grantee == payload.sub,
+                tables.Consent.scope == MANAGE,
+                tables.Consent.status == APPROVED,
+                _until_alive())
+            q = q.where(or_(tables.Consent.objectid == person,
+                            tables.Consent.objectid.in_(managed)))
+        return list((await self.session.execute(q)).scalars().all())
+
     async def check(self, subject_table: str, subject_id: uuid.UUID,
                     grantee: uuid.UUID, scope: str) -> bool:
         """Есть ли действующее согласие (горячий путь identity-эндпоинтов)."""
