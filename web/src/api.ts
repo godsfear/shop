@@ -130,10 +130,28 @@ export const transition = (id: string, event: string) =>
   req<FsmState>(`/me/episodes/${id}/transition`, json({ event }))
 export const assess = (id: string) => req<Assess>(`/me/episodes/${id}/assess`)
 
+// --- профиль здоровья: правка/закрытие/история записи на псевдониме ---
+export const listProperties = (category?: string) =>
+  req<MedProperty[]>('/me/properties' + (category ? `?category=${category}` : ''))
+export const addProperty = (p: { category?: string; code: string; name?: string;
+                                 value: Record<string, unknown> }) =>
+  req<MedProperty>('/me/properties', json(p))
+export const updateProperty = (id: string, value: Record<string, unknown>) =>
+  req<MedProperty>(`/me/properties/${id}`, json(value, 'PATCH'))
+export const closeProperty = (id: string) =>
+  req<MedProperty>(`/me/properties/${id}`, { method: 'DELETE' })
+export const propertyHistory = (id: string) =>
+  req<MedProperty[]>(`/me/properties/${id}/history`)
+
+// --- ИИ-оценка эпизода (результат — Property code='ddx' на эпизоде) ---
+export const evaluateEpisode = (id: string) =>
+  req<{ queued: boolean }>(`/me/episodes/${id}/evaluate`, { method: 'POST' })
+
 // --- интервью (сбор анамнеза): сервер ведёт опрос, фронт рендерит вопросы ---
 export interface InterviewQuestion {
   ask?: string; field?: string
   symptom?: string; slot?: string; system?: string; section?: string; gaps?: string[]
+  known?: string[]   // что уже в карте (секции анамнеза — подтверждение актуальности)
 }
 export interface InterviewSummary {
   chief_complaint: string | null

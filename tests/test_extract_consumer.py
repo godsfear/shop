@@ -8,6 +8,7 @@ from shop.medical_seed import seed_medical
 from shop.models.entity import EntityCreate
 from shop.services.entity import EntityService
 from shop.services.files import FileStore
+from shop.services.evaluate import request_evaluate
 from shop.services.extract import request_extract
 from shop.settings import settings
 from conftest import drain
@@ -66,6 +67,30 @@ async def test_main():
             t.Outbox.processed.is_(None)))).scalars().all()
     assert pending == [], pending
     print('[ok] событие outbox обработано')
+
+    # --- ИИ-оценка эпизода (episode.evaluate, заглушка без ключа) ---
+    async with Sess() as s:
+        request_evaluate(s, eid, pid, age=41, sex='м')
+        await s.commit()
+    await drain(Sess)
+    async with Sess() as s:
+        ddx = (await s.execute(select(t.Property).where(
+            t.Property.objectid == eid, t.Property.code == 'ddx'))).scalars().one()
+    assert ddx.value['source'] == 'ai' and ddx.value['assessments'], ddx.value
+    first = ddx.value['assessments'][0]
+    assert {'condition', 'likelihood', 'rationale'} <= set(first), first
+    print('[ok] episode.evaluate -> Property(ddx) с ранжированным списком')
+
+    # повторная оценка заменяет активную (версия — в историю)
+    async with Sess() as s:
+        request_evaluate(s, eid, pid, age=None, sex=None)
+        await s.commit()
+    await drain(Sess)
+    async with Sess() as s:
+        active = (await s.execute(select(t.Property).where(
+            t.Property.objectid == eid, t.Property.code == 'ddx'))).scalars().all()
+    assert len(active) == 1, active
+    print('[ok] повторная оценка: одна активная ddx, прежняя в истории')
 
     await eng.dispose()
     print('\nТЕСТ ИИ-КОНСУМЕРА ПРОЙДЕН')

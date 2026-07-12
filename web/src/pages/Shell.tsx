@@ -44,8 +44,9 @@ export default function Shell() {
         <NavLink to="/" className="brand" end>здоровье</NavLink>
         <nav className="topnav">
           <NavLink to="/" end>Сегодня</NavLink>
+          <NavLink to="/profile">Моя карта</NavLink>
           <NavLink to="/access">Доступы</NavLink>
-          <NavLink to="/patients">Пациенты</NavLink>
+          <NavLink to="/patients">Доверили мне</NavLink>
         </nav>
         <button className="ghost right" onClick={logout}>Выйти</button>
       </header>

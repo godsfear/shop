@@ -47,7 +47,7 @@ async def test_main():
     async with Sess() as s:
         r = await MedicalService(session=s).assess(pid, eid)
     assert 'symptom' not in r['gaps'], r          # симптомы заполнены
-    assert set(r['gaps']) == {'medication', 'allergy', 'heredity', 'surgery', 'social'}, r
+    assert set(r['gaps']) == {'medication', 'allergy', 'chronic', 'heredity', 'surgery', 'social'}, r
     assert r['alerts'] == ['acs'], r
     print('[ok] пробелы найдены (medication/allergy/heredity), флаг acs сработал')
 
@@ -59,7 +59,7 @@ async def test_main():
     async with Sess() as s:
         r = await MedicalService(session=s).assess(pid, eid)
     assert 'medication' not in r['gaps'], r
-    assert set(r['gaps']) == {'allergy', 'heredity', 'surgery', 'social'}, r
+    assert set(r['gaps']) == {'allergy', 'chronic', 'heredity', 'surgery', 'social'}, r
     print('[ok] после записи лекарства секция medication закрыта')
 
     # --- убрать боль в груди (absent) -> флаг acs гаснет ---

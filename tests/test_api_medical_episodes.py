@@ -111,7 +111,7 @@ async def test_main():
     async with Sess() as s:
         r = await _svc(s, ks, payload).assess(eid)
     assert r['alerts'] == ['acs'], r
-    assert set(r['gaps']) == {'medication', 'allergy', 'heredity', 'surgery', 'social'}, r
+    assert set(r['gaps']) == {'medication', 'allergy', 'chronic', 'heredity', 'surgery', 'social'}, r
     print('[ok] assess через /me: флаг acs + пробелы секций')
 
     # --- ВОРОТА: чужой эпизод -> 404 ---

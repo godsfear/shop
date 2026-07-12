@@ -10,13 +10,16 @@ Redis (medsession:{sub}, TTL) — запросы авторизуются сес
 серверному ключу пациента (стенд-ин клиентской крипты). Слой b (врач/близкий):
 тот же resolve по гранту группы — см. resolve_link (Слой B).
 """
+import datetime
 import uuid
 
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
+
+from ..versioning import versioned_expire, versioned_update
 
 from ..cache import get_cache
 from ..database import db_helper
@@ -30,6 +33,7 @@ from ..services.auth import get_token_payload
 from ..services.bridge import BridgeService
 from ..services.consent import APPROVED, MEDICAL, _until_alive
 from ..services.entity import EntityService
+from ..services.evaluate import request_evaluate
 from ..services.extract import request_extract
 from ..services.files import FileStore
 from ..services.fsm import FSMService
@@ -206,6 +210,38 @@ class MedAccessService:
                            table='pseudonym', objectid=pseudonym, value=data.value),
             creator=self.payload.sub)
 
+    async def _gate_property(self, property_id: uuid.UUID) -> tables.Property:
+        """Запись обязана висеть на псевдониме вызывающего (чужая/нет -> 404)."""
+        pseudonym = await self._resolve()
+        row = await self.session.get(tables.Property, property_id)
+        if row is None or row.table != 'pseudonym' or row.objectid != pseudonym:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='запись не найдена')
+        return row
+
+    async def update_property(self, property_id: uuid.UUID, value: dict) -> tables.Property:
+        """Новое значение записи (рост, дозировка...); версия-копия — история бесплатно."""
+        row = await self._gate_property(property_id)
+        updated = await versioned_update(self.session, tables.Property, row.id, {'value': value})
+        await self.session.commit()
+        return updated
+
+    async def close_property(self, property_id: uuid.UUID) -> tables.Property:
+        """Закрыть запись (перестал принимать лекарство и т.п.) — строка уходит в историю."""
+        row = await self._gate_property(property_id)
+        closed = await versioned_expire(self.session, tables.Property, row.id)
+        await self.session.commit()
+        return closed
+
+    async def property_history(self, property_id: uuid.UUID) -> list[tables.Property]:
+        """Версии записи (история значений показателя), от старых к новым."""
+        row = await self._gate_property(property_id)
+        q = (select(tables.Property)
+             .where(or_(tables.Property.id == row.id,
+                        tables.Property.version_of == row.id))
+             .order_by(tables.Property.begins)
+             .execution_options(include_expired=True))
+        return list((await self.session.execute(q)).scalars().all())
+
     # --- эпизоды (болезнь/травма): Entity на псевдониме ---
     async def episodes(self) -> list[tables.Entity]:
         pseudonym = await self._resolve()
@@ -277,6 +313,22 @@ class MedAccessService:
     async def assess(self, episode_id: uuid.UUID) -> dict:
         pseudonym = await self._gate_episode(episode_id)
         return await MedicalService(session=self.session).assess(pseudonym, episode_id)
+
+    async def evaluate(self, episode_id: uuid.UUID) -> dict:
+        """Поставить ИИ-оценку эпизода в очередь. Возраст/пол — только когда
+        вызывает владелец (identity-чтение самого себя); Слой B их не несёт."""
+        pseudonym = await self._gate_episode(episode_id)
+        age = sex = None
+        if self.link_id is None:
+            person = await self.session.get(tables.Person, await self._person_id())
+            if person is not None:
+                today = datetime.date.today()
+                bd = person.birthdate
+                age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+                sex = 'м' if person.sex else 'ж'
+        request_evaluate(self.session, episode_id, pseudonym, age, sex)
+        await self.session.commit()
+        return {'queued': True}
 
     # --- интервью (сбор анамнеза по протоколу) — за теми же воротами эпизода ---
     async def interview_open(self, episode_id: uuid.UUID) -> dict:

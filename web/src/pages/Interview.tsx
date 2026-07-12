@@ -151,6 +151,7 @@ export default function Interview() {
   const [secDict, setSecDict] = useState<DictItem[]>([])   // справочник текущей секции
   const [rosOpen, setRosOpen] = useState(false)            // «есть жалобы» -> выбор
   const [moreOpen, setMoreOpen] = useState(false)          // «да, ещё…» из резюме
+  const [histEdit, setHistEdit] = useState(false)          // «дополнить» вместо подтверждения
   const [free, setFree] = useState('')                     // текстовый слот
   const names = useRef<Names>({})
   const endRef = useRef<HTMLDivElement>(null)
@@ -160,7 +161,7 @@ export default function Interview() {
 
   const show = (v: InterviewView) => {
     setView(v)
-    setRosOpen(false); setMoreOpen(false); setFree('')
+    setRosOpen(false); setMoreOpen(false); setHistEdit(false); setFree('')
     setFeed((f) => [...f, { who: 'srv', text: srvText(v, names.current) }])
     if (v.state === 'history' || v.state === 'completeness') {
       const section = v.question?.section ?? v.question?.gaps?.[0]
@@ -264,7 +265,20 @@ export default function Interview() {
                          onSubmit={(codes, label) =>
                            answer({ positive: true, symptoms: codes }, label)} />}
 
-          {state === 'history' &&
+          {/* секция уже заполнена в карте — просим подтвердить актуальность */}
+          {state === 'history' && (q?.known?.length ?? 0) > 0 && !histEdit && (
+            <div className="answer">
+              <p className="muted">В карте: {q!.known!
+                .map((c) => names.current[c] ?? c).join(', ')}</p>
+              <div className="inline">
+                <button onClick={() => answer({ confirmed: true }, 'всё актуально')}>
+                  Актуально
+                </button>
+                <button className="ghost" onClick={() => setHistEdit(true)}>Дополнить…</button>
+              </div>
+            </div>
+          )}
+          {state === 'history' && ((q?.known?.length ?? 0) === 0 || histEdit) &&
             <ItemsEditor dict={secDict}
                          onSubmit={(items, label) => answer({ items }, label)} />}
 

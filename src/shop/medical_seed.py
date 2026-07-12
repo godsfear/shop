@@ -39,6 +39,11 @@ CONCEPTS = {
     "allergy":     ("Аллергия", {}),
     "heredity":    ("Наследственность", {}),
     "risk_factor": ("Фактор риска", {}),
+    # профиль здоровья владельца (scope=patient, экран «Моя карта»)
+    "vital":       ("Показатель", {}),           # рост/вес/давление — история темпоральностью
+    "chronic":     ("Хроническое состояние", {}),
+    "blood":       ("Группа крови", {}),
+    "vaccination": ("Прививка", {}),
     "illness": ("Болезнь", {
         "fsm": {
             "states": ["anamnesis", "diagnosis", "treatment", "remission", "recovered"],
@@ -56,6 +61,7 @@ CONCEPTS = {
             {"category": "symptom",    "scope": "episode"},
             {"category": "medication", "scope": "patient"},
             {"category": "allergy",    "scope": "patient"},
+            {"category": "chronic",    "scope": "patient"},
             {"category": "heredity",   "scope": "patient"},
             {"category": "surgery",    "scope": "patient"},
             {"category": "social",     "scope": "patient"},
@@ -125,6 +131,35 @@ DICTIONARY = {
     ],
     "allergy": [
         ("penicillin", "Пенициллин"), ("pollen", "Пыльца"), ("nuts", "Орехи"),
+        ("lactose", "Лактоза"), ("insect_sting", "Укусы насекомых"),
+    ],
+    "vital": [
+        ("height", "Рост"), ("weight", "Вес"),
+        ("blood_pressure", "Давление"), ("pulse", "Пульс"),
+    ],
+    "chronic": [
+        ("hypertension", "Гипертония"), ("diabetes2", "Сахарный диабет 2 типа"),
+        ("asthma", "Астма"), ("ihd", "ИБС"), ("gastritis", "Гастрит"),
+        ("migraine", "Мигрень"),
+    ],
+    "heredity": [
+        ("diabetes_family", "Диабет у родственников"),
+        ("hypertension_family", "Гипертония у родственников"),
+        ("cancer_family", "Онкология у родственников"),
+        ("heart_family", "Инфаркт/инсульт у родственников"),
+    ],
+    "surgery": [
+        ("appendectomy", "Аппендэктомия"), ("cholecystectomy", "Холецистэктомия"),
+        ("c_section", "Кесарево сечение"), ("hospitalization", "Госпитализация"),
+    ],
+    "social": [
+        ("smoking", "Курение"), ("alcohol", "Алкоголь"),
+        ("occupational", "Профессиональные вредности"), ("stress", "Хронический стресс"),
+        ("sedentary", "Малоподвижная работа"),
+    ],
+    "risk_factor": [
+        ("obesity", "Избыточный вес"), ("inactivity", "Гиподинамия"),
+        ("travel", "Недавние поездки"), ("infection_contact", "Контакт с инфекциями"),
     ],
     # обзор систем (ROS) — все 9 систем эталона, порядок = порядок обхода
     "system": [

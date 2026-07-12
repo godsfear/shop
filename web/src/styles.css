@@ -131,6 +131,10 @@ h2, h3 { margin: 8px 0; }
 .card.resume p { margin: 4px 0; font-size: 14.5px; }
 
 .card.find { border-left: 3px solid var(--accent); }
+.ddx { margin: 8px 0; padding-left: 20px; display: grid; gap: 8px; }
+.ddx .chip { margin-left: 8px; }
+.disclaimer { border-top: 1px solid var(--line); padding-top: 8px; }
+.rows.hist { margin-left: 14px; border-left: 2px solid var(--line); padding-left: 10px; }
 
 /* --- навигация и режим «Пациенты» --- */
 .topnav { display: flex; gap: 2px; }

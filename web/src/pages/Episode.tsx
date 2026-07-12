@@ -3,9 +3,15 @@ import { useParams, Link } from 'react-router-dom'
 import {
   getEpisode, renameEpisode, episodeHistory, episodeState, transition, assess,
   episodeProperties, addEpisodeProperty, listDocuments, uploadDocument, concepts,
+  evaluateEpisode,
   type Episode as Ep, type FsmState, type Assess, type MedProperty, type Doc,
   type Concepts, type StateLog,
 } from '../api'
+
+interface Ddx {
+  assessments: { condition: string; likelihood: number; rationale: string }[]
+  urgent: boolean; note?: string
+}
 import { EVENTS, SECTIONS, STATES, t } from '../ui'
 
 // Таймлайн жизненного цикла: полный маршрут из fsm.states, текущее — акцентом
@@ -37,6 +43,8 @@ export default function Episode() {
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState('')
   const [parsing, setParsing] = useState(false)           // документ в ИИ-разборе
+  const [ddx, setDdx] = useState<MedProperty | null>(null)  // ИИ-оценка (code=ddx)
+  const [evaluating, setEvaluating] = useState(false)
 
   // форма симптома
   const [symCode, setSymCode] = useState('')
@@ -53,7 +61,8 @@ export default function Episode() {
       setFsm(await episodeState(id))
       const props = await episodeProperties(id)
       setSymptoms(props.filter((p) => p.category === cs['symptom'] && !isAi(p)))
-      setFinds(props.filter(isAi))
+      setFinds(props.filter((p) => isAi(p) && p.code !== 'ddx'))
+      setDdx(props.find((p) => p.code === 'ddx') ?? null)
       setDocs(await listDocuments(id))
       setLog(await episodeHistory(id))
       setA(await assess(id))
@@ -70,6 +79,22 @@ export default function Episode() {
       setA(await assess(id))
       setLog(await episodeHistory(id))
     } catch (e) { setErr((e as Error).message) }
+  }
+
+  const evaluate = async () => {
+    setErr(''); setEvaluating(true)
+    const before = ddx?.begins
+    try {
+      await evaluateEpisode(id)
+      // оценка идёт в фоне (outbox -> ИИ): ждём новую/обновлённую запись ddx
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 2000))
+        const props = await episodeProperties(id)
+        const fresh = props.find((p) => p.code === 'ddx')
+        if (fresh && fresh.begins !== before) { setDdx(fresh); break }
+      }
+    } catch (e) { setErr((e as Error).message) }
+    finally { setEvaluating(false) }
   }
 
   const rename = async () => {
@@ -172,6 +197,37 @@ export default function Episode() {
         {a && a.gaps.length > 0 &&
           <p className="muted">не заполнено: {a.gaps.map((g) => t(SECTIONS, g)).join(', ')}</p>}
         {a && a.alerts.length === 0 && a.gaps.length === 0 && <p className="muted">всё заполнено, флагов нет</p>}
+      </section>
+
+      <section>
+        <h3>Оценка ИИ</h3>
+        <div className="inline">
+          <button onClick={evaluate} disabled={evaluating}>
+            {evaluating ? 'ИИ анализирует…' : (ddx ? 'Оценить заново' : 'Собрать и оценить (ИИ)')}
+          </button>
+          <span className="muted">все данные эпизода и карты уйдут ИИ одной задачей</span>
+        </div>
+        {ddx && (() => {
+          const v = ddx.value as unknown as Ddx
+          return (
+            <div className="card resume">
+              {v.urgent && <p className="alert">⚠ Данные указывают на возможное угрожающее
+                состояние — не откладывайте обращение за помощью.</p>}
+              <ol className="ddx">
+                {v.assessments.map((x, i) => (
+                  <li key={i}>
+                    <b>{x.condition}</b>
+                    <span className="chip state">{Math.round(x.likelihood * 100)}%</span>
+                    <div className="muted">{x.rationale}</div>
+                  </li>
+                ))}
+              </ol>
+              {v.note && <p className="muted">{v.note}</p>}
+              <p className="muted disclaimer">Предварительная оценка ИИ — не диагноз
+              и не заменяет осмотр врача. Обсудите результат со специалистом.</p>
+            </div>
+          )
+        })()}
       </section>
 
       <section>

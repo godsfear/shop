@@ -18,8 +18,10 @@ export const KINDS: Record<string, string> = { illness: 'болезнь', injury
 
 export const SECTIONS: Record<string, string> = {
   symptom: 'симптомы', medication: 'лекарства', allergy: 'аллергии',
-  heredity: 'наследственность', surgery: 'операции/госпитализации',
-  social: 'социальный анамнез', risk_factor: 'факторы риска',
+  chronic: 'хронические состояния', heredity: 'наследственность',
+  surgery: 'операции/госпитализации', social: 'социальный анамнез',
+  risk_factor: 'факторы риска', vital: 'показатели',
+  blood: 'группа крови', vaccination: 'прививки',
 }
 
 export const t = (dict: Record<string, string>, code: string) => dict[code] ?? code

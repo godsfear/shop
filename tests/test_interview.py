@@ -163,6 +163,20 @@ async def test_main():
     assert a['gaps'] == [], a
     print('[ok] assess: пробелов после интервью нет')
 
+    # ===== Сценарий A2: анамнез жизни уже в карте -> подтверждение актуальности
+    eid3 = await episode('ep-confirm')
+    async with Sess() as s:
+        await _svc(s, ks, payload).interview_open(eid3)
+    await ask(eid3, {'symptom': 'cough'})
+    r = await run_slots(eid3)
+    while r['state'] == 'ros':
+        r = await ask(eid3, {'positive': False})
+    assert r['state'] == 'history' and r['question']['section'] == 'medication'
+    assert 'aspirin' in r['question']['known'], r['question']   # карта уже заполнена сценарием A
+    r = await ask(eid3, {'confirmed': True})                    # актуально — секция пропущена
+    assert r['state'] == 'history' and r['question']['section'] == 'allergy', r
+    print('[ok] заполненная секция предъявлена (known) и подтверждена одним шагом')
+
     # ================= Сценарий B: красный флаг прерывает опрос ============
     eid2 = await episode('ep-acs')
     async with Sess() as s:

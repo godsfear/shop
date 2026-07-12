@@ -9,6 +9,7 @@ import asyncio
 
 from .logger import logger
 from .outbox import outbox_worker
+from .services import evaluate as _evaluate            # noqa: F401 — @outbox_handler
 from .services import extract as _extract              # noqa: F401 — @outbox_handler
 from .services import notifications as _notifications  # noqa: F401 — @outbox_handler
 from .services.bridge import pseudonym_pool_topper

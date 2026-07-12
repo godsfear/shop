@@ -71,6 +71,26 @@ async def add_my_property(body: MedPropertyIn, svc: MedAccessService = Depends()
     return await svc.add_property(body)
 
 
+# --- профиль здоровья: правка/закрытие/история записи (носитель — псевдоним) ---
+@router.patch('/properties/{property_id}', response_model=MedPropertyOut)
+async def update_my_property(property_id: uuid.UUID, body: dict,
+                             svc: MedAccessService = Depends()):
+    """Новое значение записи (рост, дозировка...); прежнее уходит в историю."""
+    return await svc.update_property(property_id, body)
+
+
+@router.delete('/properties/{property_id}', response_model=MedPropertyOut)
+async def close_my_property(property_id: uuid.UUID, svc: MedAccessService = Depends()):
+    """Закрыть запись (неактуальна); история сохраняется."""
+    return await svc.close_property(property_id)
+
+
+@router.get('/properties/{property_id}/history', response_model=List[MedPropertyOut])
+async def my_property_history(property_id: uuid.UUID, svc: MedAccessService = Depends()):
+    """Версии записи — история значений показателя."""
+    return await svc.property_history(property_id)
+
+
 # --- эпизоды (болезнь/травма) на псевдониме; доступ к {id} — за gate-проверкой ---
 @router.get('/episodes', response_model=List[EpisodeOut])
 async def my_episodes(svc: MedAccessService = Depends()):
@@ -147,6 +167,13 @@ async def interview_answer(episode_id: uuid.UUID, body: dict,
 @router.get('/episodes/{episode_id}/assess')
 async def episode_assess(episode_id: uuid.UUID, svc: MedAccessService = Depends()):
     return await svc.assess(episode_id)
+
+
+@router.post('/episodes/{episode_id}/evaluate', status_code=status.HTTP_202_ACCEPTED)
+async def episode_evaluate(episode_id: uuid.UUID, svc: MedAccessService = Depends()):
+    """Поставить ИИ-оценку в очередь; результат — Property(code='ddx') на эпизоде.
+    Предположения для обсуждения с врачом, НЕ диагноз."""
+    return await svc.evaluate(episode_id)
 
 
 # --- документы/анализы: загрузка (-> блоб + метаданные + ИИ-разбор), список ---

@@ -34,7 +34,8 @@ from .medical import MedicalService
 PROGRESS = 'progress'
 SUMMARY = 'summary'
 # секции анамнеза жизни в порядке опроса (коды концептов; scope=patient)
-HISTORY_SECTIONS = ['medication', 'allergy', 'surgery', 'heredity', 'social', 'risk_factor']
+HISTORY_SECTIONS = ['medication', 'allergy', 'chronic', 'surgery',
+                    'heredity', 'social', 'risk_factor']
 _SLOTS = [s['code'] for s in SYMPTOM_SCHEMA]
 _LABELS = {s['code']: s['label'] for s in SYMPTOM_SCHEMA}
 
@@ -179,10 +180,16 @@ class InterviewService:
         return 'history'
 
     async def _on_history(self, row, progress, body, episode_id, pseudonym, creator):
-        """Секция анамнеза жизни: {'items': [{code, ...}, ...]} (пусто = «нет» —
-        значимый отрицательный факт, закрывает секцию в полноте)."""
+        """Секция анамнеза жизни: {'items': [...]} (пусто = «нет» — значимое
+        отрицание) либо {'confirmed': true} — данные карты актуальны, секция
+        не пересобирается (карта уже закрывает полноту)."""
         section = HISTORY_SECTIONS[progress['section_idx']]
-        await self._write_section(section, body.get('items') or [], pseudonym, creator)
+        if body.get('confirmed'):
+            if not await self._section_known(section, pseudonym):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                    detail='подтверждать нечего — секция в карте пуста')
+        else:
+            await self._write_section(section, body.get('items') or [], pseudonym, creator)
         progress['section_idx'] += 1
         if progress['section_idx'] < len(HISTORY_SECTIONS):
             return 'history'
@@ -248,8 +255,10 @@ class InterviewService:
                                'ask': 'Есть ли жалобы со стороны системы?',
                                'field': 'positive'}
         elif st == 'history':
-            out['question'] = {'section': HISTORY_SECTIONS[progress['section_idx']],
-                               'field': 'items'}
+            section = HISTORY_SECTIONS[progress['section_idx']]
+            # known: что уже есть в карте — фронт предлагает подтвердить актуальность
+            out['question'] = {'section': section, 'field': 'items',
+                               'known': await self._section_known(section, pseudonym)}
         elif st == 'completeness':
             gaps = (await MedicalService(session=self.session)
                     .assess(pseudonym, episode_id))['gaps']
@@ -311,6 +320,17 @@ class InterviewService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                                 detail=f"симптом '{code}' не заведён на эпизоде")
         return row
+
+    async def _section_known(self, section: str, pseudonym) -> list[str]:
+        """Коды активных записей секции в карте пациента (для подтверждения)."""
+        cats = await medical_concepts(self.session)
+        if section not in cats:
+            return []
+        rows = (await self.session.execute(select(tables.Property.code).where(
+            tables.Property.table == 'pseudonym',
+            tables.Property.objectid == pseudonym,
+            tables.Property.category == cats[section]))).scalars().all()
+        return list(rows)
 
     async def _write_section(self, section, items, pseudonym, creator) -> None:
         """Секция анамнеза жизни на псевдониме; пусто = явный «нет» (status absent)."""

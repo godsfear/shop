@@ -10,6 +10,7 @@ from shop.database import db_helper
 from shop.middleware import middleware_proc
 from shop.api import router
 from shop.outbox import outbox_worker
+from shop.services import evaluate as _evaluate  # noqa: F401 — @outbox_handler('episode.evaluate')
 from shop.services import extract as _extract  # noqa: F401 — @outbox_handler('data.extract')
 from shop.services.bridge import pseudonym_pool_topper
 from shop.services.consent import consent_sweeper
