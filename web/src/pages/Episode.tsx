@@ -29,12 +29,14 @@ export default function Episode() {
   const [cs, setCs] = useState<Concepts>({})
   const [fsm, setFsm] = useState<FsmState | null>(null)
   const [symptoms, setSymptoms] = useState<MedProperty[]>([])
+  const [finds, setFinds] = useState<MedProperty[]>([])   // находки ИИ (source=ai)
   const [docs, setDocs] = useState<Doc[]>([])
   const [log, setLog] = useState<StateLog[]>([])
   const [a, setA] = useState<Assess | null>(null)
   const [err, setErr] = useState('')
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState('')
+  const [parsing, setParsing] = useState(false)           // документ в ИИ-разборе
 
   // форма симптома
   const [symCode, setSymCode] = useState('')
@@ -43,11 +45,15 @@ export default function Episode() {
   const [file, setFile] = useState<File | null>(null)
   const [docName, setDocName] = useState('')
 
+  const isAi = (p: MedProperty) => (p.value as { source?: string }).source === 'ai'
+
   const reload = async () => {
     try {
       setEp(await getEpisode(id))
       setFsm(await episodeState(id))
-      setSymptoms(await episodeProperties(id, cs['symptom']))
+      const props = await episodeProperties(id)
+      setSymptoms(props.filter((p) => p.category === cs['symptom'] && !isAi(p)))
+      setFinds(props.filter(isAi))
       setDocs(await listDocuments(id))
       setLog(await episodeHistory(id))
       setA(await assess(id))
@@ -95,8 +101,19 @@ export default function Episode() {
     try {
       await uploadDocument(file, docName || file.name, 'doc', cs['analysis'], id)
       setFile(null); setDocName('')
-      await reload()  // ИИ-разбор идёт асинхронно (outbox) — находки появятся позже
-    } catch (e) { setErr((e as Error).message) }
+      await reload()
+      // ИИ-разбор идёт в фоне (outbox): опрашиваем находки, пока не появятся
+      setParsing(true)
+      const before = finds.length
+      for (let i = 0; i < 5; i++) {
+        await new Promise((r) => setTimeout(r, 2000))
+        const props = await episodeProperties(id)
+        const ai = props.filter(isAi)
+        if (ai.length > before) { setFinds(ai); break }
+      }
+      setParsing(false)
+      await reload()
+    } catch (e) { setErr((e as Error).message); setParsing(false) }
   }
 
   return (
@@ -180,21 +197,36 @@ export default function Episode() {
       </section>
 
       <section>
-        <h3>Документы</h3>
+        <h3>Документы и находки ИИ</h3>
         <form className="inline" onSubmit={upload}>
           <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           <input placeholder="название" value={docName}
                  onChange={(e) => setDocName(e.target.value)} />
-          <button type="submit">Загрузить</button>
+          <button type="submit" disabled={!file || parsing}>Загрузить</button>
         </form>
-        <p className="muted">После загрузки ИИ разбирает документ в фоне — находки появятся среди симптомов/находок.</p>
+        {parsing && <p className="muted parsing">ИИ разбирает документ…</p>}
         <ul className="cards">
           {docs.map((d) => (
             <li key={d.id} className="card">{d.name || d.code}
-              <span className="muted"> · {d.hash.slice(0, 12)}…</span>
+              <span className="muted"> · {new Date(d.begins).toLocaleDateString()}</span>
             </li>
           ))}
         </ul>
+        {finds.length > 0 && (
+          <ul className="cards">
+            {finds.map((f) => {
+              const v = f.value as { kind?: string; text?: string; value?: string; unit?: string }
+              return (
+                <li key={f.id} className="card find">
+                  <span className="chip state">ИИ</span> <b>{f.code}</b>
+                  {v.kind && <span className="muted"> · {v.kind}</span>}
+                  {v.text && <div className="muted">{v.text}</div>}
+                  {v.value && <div>{v.value} {v.unit ?? ''}</div>}
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </section>
     </div>
   )

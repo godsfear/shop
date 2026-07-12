@@ -130,6 +130,12 @@ h2, h3 { margin: 8px 0; }
   border-radius: 6px; padding: 10px 14px; margin: 10px 0; }
 .card.resume p { margin: 4px 0; font-size: 14.5px; }
 
+.card.find { border-left: 3px solid var(--accent); }
+.parsing::after { content: ''; display: inline-block; width: 10px;
+  animation: dots 1.2s steps(4) infinite; overflow: hidden; vertical-align: bottom; }
+@keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+@media (prefers-reduced-motion: reduce) { .parsing::after { animation: none; } }
+
 /* журнал/история — нативный details */
 details.log { margin-top: 10px; }
 details.log summary { cursor: pointer; color: var(--muted); font-size: 13.5px;
