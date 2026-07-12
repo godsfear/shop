@@ -39,8 +39,8 @@ export default function Welcome() {
         <button onClick={start} disabled={busy}>
           {busy ? 'Выпускаю ключи…' : 'Выпустить ключи и начать'}
         </button>
-        <p className="muted">Вы специалист и своя карта не нужна? —{' '}
-          <a href="/patients">к пациентам</a></p>
+        <p className="muted">Своя карта не нужна — вам только доверили чужую? —{' '}
+          <a href="/patients">к доверенным картам</a></p>
       </div>
     </div>
   )

@@ -51,8 +51,10 @@ export default function Access() {
       {err && <p className="error">{err}</p>}
 
       <section>
-        <h3>Код пациента</h3>
-        <p className="muted">Сообщите его врачу — он запросит доступ, а вы решите здесь.</p>
+        <h3>Код доступа</h3>
+        <p className="muted">Сообщите его доверенному лицу (например, врачу) — оно
+        запросит доступ, а решение всегда за вами. Код не раскрывает данные и
+        не является псевдонимом — медзаписи им не адресуются.</p>
         <div className="inline">
           <code className="patient-code">{code || '…'}</code>
           <button className="ghost" onClick={copy}>{copied ? 'Скопирован' : 'Скопировать'}</button>

@@ -202,10 +202,15 @@ export default function Episode() {
       <section>
         <h3>Оценка ИИ</h3>
         <div className="inline">
-          <button onClick={evaluate} disabled={evaluating}>
+          {/* оценка по неполному анамнезу вводит в заблуждение — сначала опрос */}
+          <button onClick={evaluate} disabled={evaluating || !a || a.gaps.length > 0}>
             {evaluating ? 'ИИ анализирует…' : (ddx ? 'Оценить заново' : 'Собрать и оценить (ИИ)')}
           </button>
-          <span className="muted">все данные эпизода и карты уйдут ИИ одной задачей</span>
+          <span className="muted">
+            {a && a.gaps.length > 0
+              ? 'станет доступно после сбора анамнеза — пройдите опрос'
+              : 'все данные эпизода и карты уйдут ИИ одной задачей'}
+          </span>
         </div>
         {ddx && (() => {
           const v = ddx.value as unknown as Ddx

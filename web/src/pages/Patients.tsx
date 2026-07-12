@@ -46,15 +46,15 @@ export default function Patients() {
 
   return (
     <div>
-      <h2>Пациенты</h2>
+      <h2>Доверили мне</h2>
       {err && <p className="error">{err}</p>}
 
       <section>
         <h3>Запросить доступ</h3>
-        <p className="muted">Пациент сообщает вам код со страницы «Доступы» и сам
-        одобряет запрос — доступ можно отозвать в любой момент.</p>
+        <p className="muted">Владелец карты сообщает вам код доступа со страницы
+        «Доступы» и сам одобряет запрос — и может отозвать его в любой момент.</p>
         <form className="inline" onSubmit={request}>
-          <input placeholder="код пациента" value={code}
+          <input placeholder="код доступа владельца" value={code}
                  onChange={(e) => setCode(e.target.value)} />
           <input placeholder="представьтесь (видно пациенту)" value={reason}
                  onChange={(e) => setReason(e.target.value)} />
