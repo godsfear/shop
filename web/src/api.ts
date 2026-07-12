@@ -104,6 +104,34 @@ export const transition = (id: string, event: string) =>
   req<FsmState>(`/me/episodes/${id}/transition`, json({ event }))
 export const assess = (id: string) => req<Assess>(`/me/episodes/${id}/assess`)
 
+// --- интервью (сбор анамнеза): сервер ведёт опрос, фронт рендерит вопросы ---
+export interface InterviewQuestion {
+  ask?: string; field?: string
+  symptom?: string; slot?: string; system?: string; section?: string; gaps?: string[]
+}
+export interface InterviewSummary {
+  chief_complaint: string | null
+  symptoms: Record<string, Record<string, unknown>>
+  negatives: string[]
+  ros: Record<string, 'clear' | string[]>
+}
+export interface InterviewView {
+  state: string; queue: string[]; done: string[]
+  question?: InterviewQuestion
+  summary?: InterviewSummary
+  alerts?: string[]
+}
+export const interviewOpen = (id: string) =>
+  req<InterviewView>(`/me/episodes/${id}/interview`, { method: 'POST' })
+export const interviewState = (id: string) =>
+  req<InterviewView>(`/me/episodes/${id}/interview`)
+export const interviewAnswer = (id: string, body: Record<string, unknown>) =>
+  req<InterviewView>(`/me/episodes/${id}/interview/answer`, json(body))
+
+// --- справочники концептов (reference): чипы выбора ---
+export interface DictItem { code: string; name: string }
+export const dictionary = (concept: string) => req<DictItem[]>(`/me/dictionary/${concept}`)
+
 // --- симптомы/находки эпизода ---
 export const episodeProperties = (id: string, category?: string) =>
   req<MedProperty[]>(`/me/episodes/${id}/properties` + (category ? `?category=${category}` : ''))

@@ -122,8 +122,14 @@ export default function Episode() {
       <section>
         {fsm && <Timeline fsm={fsm} />}
         <div className="inline">
+          {/* сбор анамнеза — основной путь на этапе «анамнез» */}
+          {fsm?.state === 'anamnesis' &&
+            <Link to={`/episode/${id}/interview`}><button>Пройти опрос (анамнез)</button></Link>}
+          {fsm && fsm.state !== 'anamnesis' &&
+            <Link to={`/episode/${id}/interview`} className="muted">интервью</Link>}
           {fsm?.available.map((ev) => (
-            <button key={ev} onClick={() => fire(ev)}>{t(EVENTS, ev)}</button>
+            <button key={ev} className={fsm.state === 'anamnesis' ? 'ghost' : ''}
+                    onClick={() => fire(ev)}>{t(EVENTS, ev)}</button>
           ))}
           {fsm && fsm.available.length === 0 && <span className="muted">маршрут завершён</span>}
         </div>

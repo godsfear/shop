@@ -111,6 +111,25 @@ h2, h3 { margin: 8px 0; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
   padding: 10px 12px; }
 
+/* --- интервью: диалоговая лента --- */
+.interview .feed { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+.msg { border: 1px solid var(--line); background: var(--card); border-radius: 12px;
+  padding: 9px 13px; max-width: 85%; font-size: 15px; line-height: 1.45; }
+.msg.srv { border-top-left-radius: 3px; }
+.msg.me { margin-left: auto; background: var(--accent-soft); border-color: transparent;
+  border-top-right-radius: 3px; }
+.composer { border-top: 1px solid var(--line); padding-top: 12px; }
+.answer { display: flex; flex-direction: column; gap: 8px; }
+.answer p { margin: 0; }
+.chip.pick { cursor: pointer; background: var(--card); color: var(--text);
+  padding: 6px 13px; font-size: 14px; border-radius: 99px; }
+.chip.pick.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.slider input[type=range] { flex: 1; accent-color: var(--accent); }
+.slider .sev { font-size: 19px; min-width: 28px; text-align: center; }
+.stripe { border-left: 4px solid var(--danger); background: var(--danger-soft);
+  border-radius: 6px; padding: 10px 14px; margin: 10px 0; }
+.card.resume p { margin: 4px 0; font-size: 14.5px; }
+
 /* журнал/история — нативный details */
 details.log { margin-top: 10px; }
 details.log summary { cursor: pointer; color: var(--muted); font-size: 13.5px;

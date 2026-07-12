@@ -117,6 +117,10 @@ class FSMService:
         self.session.add(tables.Property(
             table=table, objectid=objectid, code=STATE_CODE,
             value={'state': new_state, 'event': event}, creator=creator))
+        # явный flush: прод-сессия живёт с autoflush=False — без него второй
+        # переход в той же транзакции (интервью: to_completeness -> to_summary)
+        # не увидит эту строку и решит, что автомат в initial-состоянии
+        await self.session.flush()
         if commit:
             await self.session.commit()
         return {'state': new_state, 'available': machine.available_events(),

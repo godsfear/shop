@@ -22,7 +22,7 @@
 import uuid
 
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from ..database import db_helper
 from ..medical_seed import SYMPTOM_SCHEMA, medical_concepts
@@ -50,7 +50,13 @@ class InterviewService:
     # ------------------------------------------------------------------ #
     async def open(self, episode_id: uuid.UUID, pseudonym: uuid.UUID,
                    creator: uuid.UUID | None = None) -> dict:
-        """Открывает (или возвращает уже открытое) интервью эпизода."""
+        """Открывает (или возвращает уже открытое) интервью эпизода.
+
+        Advisory-лок сериализует конкурентные открытия (двойной клик, двойной
+        эффект StrictMode) — иначе гонка создаёт два интервью на эпизоде."""
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext('interview:' || :eid))"),
+            {'eid': str(episode_id)})
         row = await self._interview(episode_id)
         if row is None:
             cats = await medical_concepts(self.session)
@@ -342,10 +348,12 @@ class InterviewService:
 
     async def _interview(self, episode_id) -> tables.Entity | None:
         cats = await medical_concepts(self.session)
+        # order_by: если дубль всё же возник (до advisory-лока) — детерминированно старейшее
         return (await self.session.execute(select(tables.Entity).where(
             tables.Entity.table == 'entity',
             tables.Entity.objectid == episode_id,
-            tables.Entity.category == cats.get('interview')))).scalars().first()
+            tables.Entity.category == cats.get('interview'))
+            .order_by(tables.Entity.begins, tables.Entity.id))).scalars().first()
 
     async def _require(self, episode_id) -> tables.Entity:
         row = await self._interview(episode_id)

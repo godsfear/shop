@@ -45,6 +45,12 @@ async def concepts(svc: MedAccessService = Depends()):
     return await svc.concepts()
 
 
+@router.get('/dictionary/{concept}')
+async def dictionary(concept: str, svc: MedAccessService = Depends()):
+    """Справочник элементов концепта: [{code, name}] — чипы выбора в интервью."""
+    return await svc.dictionary(concept)
+
+
 @router.delete('/session', status_code=status.HTTP_204_NO_CONTENT)
 async def close_session(svc: MedAccessService = Depends()):
     await svc.close_session()

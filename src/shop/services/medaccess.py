@@ -137,6 +137,17 @@ class MedAccessService:
         создания эпизодов/симптомов. Reference-данные (из seed_medical под корнем 'medical')."""
         return await medical_concepts(self.session)
 
+    async def dictionary(self, concept_code: str) -> list[dict]:
+        """Справочник элементов концепта (symptom/system/medication/...) — reference,
+        ворот не требует: чипы выбора в интервью и формах."""
+        cid = (await medical_concepts(self.session)).get(concept_code)
+        if cid is None:
+            return []
+        rows = (await self.session.execute(select(tables.Entity.code, tables.Entity.name)
+                .where(tables.Entity.category == cid)
+                .order_by(tables.Entity.name))).all()
+        return [{'code': code, 'name': name} for code, name in rows]
+
     async def grants(self) -> list[dict]:
         """Слой B, дискавери: чужие медкарты, доступные мне по одобренным согласиям.
         [{link_id, key_id}] — эти параметры передаются в каждом запросе /me/*."""

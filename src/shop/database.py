@@ -33,14 +33,19 @@ class DatabaseHelper:
         return session
 
     async def session_dependency(self) -> AsyncGenerator[AsyncSession, Any]:
-        async with self.session_factory() as session:
+        async with self.session_factory() as session:  # закрывает и при исключении
             yield session
-            await session.close()
 
     async def scoped_session_dependency(self) -> AsyncGenerator[async_scoped_session[AsyncSession], Any]:
         session = self.get_scoped_session()
-        yield session
-        await session.close()
+        try:
+            yield session
+        finally:
+            # finally ОБЯЗАТЕЛЕН: оборванный клиентом запрос (или исключение
+            # хэндлера) иначе пропускает close -> соединение остаётся
+            # 'idle in transaction' и его FOR UPDATE-замки висят вечно,
+            # подвешивая все последующие записи тех же строк
+            await session.remove()
 
 
 db_helper = DatabaseHelper(
