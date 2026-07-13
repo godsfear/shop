@@ -17,19 +17,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import tables
 
-# 11-слотовая схема разбора симптома (OPQRST/SOCRATES + расширение)
+# 11-слотовая схема разбора жалобы (OPQRST/SOCRATES + расширение).
+# label — вопрос пациенту как есть: человеческим языком, без мед. жаргона.
 SYMPTOM_SCHEMA = [
-    {"code": "onset",       "label": "Начало"},
-    {"code": "site",        "label": "Локализация"},
-    {"code": "character",   "label": "Характер"},
-    {"code": "severity",    "label": "Интенсивность (0–10)"},
-    {"code": "time",        "label": "Временной профиль"},
-    {"code": "provocation", "label": "Провоцирующие факторы"},
-    {"code": "palliation",  "label": "Облегчающие факторы"},
-    {"code": "radiation",   "label": "Иррадиация"},
-    {"code": "associations", "label": "Сопутствующие симптомы"},
-    {"code": "impact",      "label": "Влияние на жизнь"},
-    {"code": "previous",    "label": "Предыдущие эпизоды"},
+    {"code": "onset",       "label": "Когда это началось — и как: внезапно или постепенно?"},
+    {"code": "site",        "label": "Где именно ощущается? Опишите место"},
+    {"code": "character",   "label": "На что похоже ощущение — ноет, жжёт, давит, колет?"},
+    {"code": "severity",    "label": "Насколько сильно, по шкале от 0 до 10?"},
+    {"code": "time",        "label": "Как меняется со временем — постоянно, приступами, лучше или хуже?"},
+    {"code": "provocation", "label": "Что это вызывает или усиливает?"},
+    {"code": "palliation",  "label": "Что облегчает? Что уже пробовали?"},
+    {"code": "radiation",   "label": "Отдаёт ли куда-то ещё — в руку, спину, ногу?"},
+    {"code": "associations", "label": "Что ещё появилось одновременно с этим?"},
+    {"code": "impact",      "label": "Мешает ли это спать, работать, заниматься обычными делами?"},
+    {"code": "previous",    "label": "Случалось ли такое раньше? Чем тогда закончилось?"},
 ]
 
 # концепты: code -> (name, value-конфиг)
@@ -207,6 +208,11 @@ async def seed_medical(db: AsyncSession) -> dict[str, uuid.UUID]:
             cat = tables.Category(category=root.id, code=code, name=name,
                                   value=value or None)
             db.add(cat)
+            await db.flush()
+        elif (cat.value or None) != (value or None):
+            # конфиг концепта изменился (схема слотов, FSM, required) — обновить:
+            # сид — источник правды для справочного дерева
+            cat.value = value or None
             await db.flush()
         ids[code] = cat.id
 

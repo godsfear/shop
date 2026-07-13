@@ -19,7 +19,7 @@ function srvText(v: InterviewView, names: Names): string {
     case 'complaint':
       return 'Что беспокоит больше всего? Это станет главной жалобой.'
     case 'symptom':
-      return `${names[q?.symptom ?? ''] ?? q?.symptom}: ${q?.ask ?? ''}?`
+      return `${names[q?.symptom ?? ''] ?? q?.symptom}: ${q?.ask ?? ''}`
     case 'ros':
       return `Обзор систем — ${names[q?.system ?? ''] ?? q?.system}: есть ли жалобы?`
     case 'history':

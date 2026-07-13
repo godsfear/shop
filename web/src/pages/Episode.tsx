@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getEpisode, renameEpisode, episodeHistory, episodeState, transition, assess,
-  episodeProperties, addEpisodeProperty, listDocuments, uploadDocument, concepts,
+  episodeProperties, listDocuments, uploadDocument, concepts,
   evaluateEpisode,
   type Episode as Ep, type FsmState, type Assess, type MedProperty, type Doc,
   type Concepts, type StateLog,
@@ -46,9 +46,6 @@ export default function Episode() {
   const [ddx, setDdx] = useState<MedProperty | null>(null)  // ИИ-оценка (code=ddx)
   const [evaluating, setEvaluating] = useState(false)
 
-  // форма симптома
-  const [symCode, setSymCode] = useState('')
-  const [symStatus, setSymStatus] = useState('present')
   // форма документа
   const [file, setFile] = useState<File | null>(null)
   const [docName, setDocName] = useState('')
@@ -102,20 +99,6 @@ export default function Episode() {
     try {
       setEp(await renameEpisode(id, newName.trim()))
       setRenaming(false)
-    } catch (e) { setErr((e as Error).message) }
-  }
-
-  const addSymptom = async (e: FormEvent) => {
-    e.preventDefault()
-    setErr('')
-    if (!symCode) return
-    try {
-      await addEpisodeProperty(id, {
-        category: cs['symptom'], code: symCode,
-        value: { status: symStatus, source: 'self' },
-      })
-      setSymCode('')
-      await reload()
     } catch (e) { setErr((e as Error).message) }
   }
 
@@ -191,13 +174,18 @@ export default function Episode() {
         )}
       </section>
 
-      <section>
-        <h3>Полнота и красные флаги</h3>
-        {a?.alerts.map((x) => <p key={x} className="alert">⚠ красный флаг: {x}</p>)}
-        {a && a.gaps.length > 0 &&
-          <p className="muted">не заполнено: {a.gaps.map((g) => t(SECTIONS, g)).join(', ')}</p>}
-        {a && a.alerts.length === 0 && a.gaps.length === 0 && <p className="muted">всё заполнено, флагов нет</p>}
-      </section>
+      {/* показывается, только когда есть что дополнить или тревога */}
+      {a && (a.alerts.length > 0 || a.gaps.length > 0) && (
+        <section>
+          <h3>Стоит дополнить</h3>
+          {a.alerts.map((x) => <p key={x} className="alert">
+            ⚠ Признак возможного угрожающего состояния ({x}) — не откладывайте
+            обращение за помощью.</p>)}
+          {a.gaps.length > 0 &&
+            <p className="muted">Рассказ пока неполон: {a.gaps.map((g) => t(SECTIONS, g)).join(', ')}.
+            Быстрее всего — пройти опрос.</p>}
+        </section>
+      )}
 
       <section>
         <h3>Оценка ИИ</h3>
@@ -235,27 +223,22 @@ export default function Episode() {
         })()}
       </section>
 
-      <section>
-        <h3>Симптомы</h3>
-        <form className="inline" onSubmit={addSymptom}>
-          <input placeholder="код (напр. chest_pain)" value={symCode}
-                 onChange={(e) => setSymCode(e.target.value)} />
-          <select value={symStatus} onChange={(e) => setSymStatus(e.target.value)}>
-            <option value="present">есть</option>
-            <option value="absent">нет</option>
-            <option value="unknown">неизвестно</option>
-          </select>
-          <button type="submit">Добавить</button>
-        </form>
-        <ul className="cards">
-          {symptoms.map((s) => (
-            <li key={s.id} className="card">
-              <b>{s.code}</b> — {String((s.value as { status?: string }).status ?? '')}
-              <span className="muted"> ({String((s.value as { source?: string }).source ?? '')})</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {/* жалобы вносятся опросом (анамнез) — ручного ввода кодов нет */}
+      {symptoms.length > 0 && (
+        <section>
+          <h3>Жалобы</h3>
+          <ul className="cards">
+            {symptoms.map((s) => (
+              <li key={s.id} className="card">
+                <b>{s.name || s.code}</b>
+                {(s.value as { status?: string }).status === 'absent' &&
+                  <span className="muted"> — отсутствует (значимо)</span>}
+                <span className="muted"> · {String((s.value as { source?: string }).source ?? '')}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section>
         <h3>Документы и находки ИИ</h3>

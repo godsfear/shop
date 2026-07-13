@@ -1,21 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { openSession, getCare, setCare, ApiError } from '../api'
 import { useAuth } from '../auth'
 
-// Страницы, которым owner-сессия не нужна: согласия и Слой B работают без неё —
-// специалист без собственной карты не должен упираться в онбординг.
-const GUEST_OK = ['/access', '/patients']
-
-// Каркас: открывает owner-сессию (мост не выпущен: 409 -> явный онбординг /welcome).
+// Каркас: открывает owner-сессию. Мост не выпущен (409) — не тупик: страницы
+// работают, дашборд показывает плитку выпуска ключей (needEnroll в Outlet-контекст).
 // В режиме «Пациенты» (care) сессия не нужна — Слой B несёт link_id/key_id в запросах.
 export default function Shell() {
   const { setToken } = useAuth()
   const nav = useNavigate()
-  const loc = useLocation()
   const [status, setStatus] = useState('')
   const [ready, setReady] = useState(false)   // гейт: дети грузят данные по открытой сессии
   const [sessionOk, setSessionOk] = useState(false)
+  const [needEnroll, setNeedEnroll] = useState(false)
   const care = getCare()
 
   useEffect(() => {
@@ -23,17 +20,20 @@ export default function Shell() {
     (async () => {
       try {
         await openSession()
-        setSessionOk(true)
+        setSessionOk(true); setNeedEnroll(false)
         setReady(true)
       } catch (e) {
         if (e instanceof ApiError && e.status === 409) {
-          if (GUEST_OK.includes(loc.pathname)) { setReady(true); return }
-          nav('/welcome'); return
+          setNeedEnroll(true)
+          setReady(true)
+          return
         }
         setStatus('нет связи с сервером: ' + (e as Error).message)
       }
     })()
-  }, [care, loc.pathname])
+  }, [care, sessionOk])
+
+  const onEnrolled = () => setSessionOk(true)  // плитка на дашборде выпустила ключи
 
   const logout = () => { setCare(null); setToken(null); nav('/login') }
   const leaveCare = () => { setCare(null); nav('/patients') }
@@ -56,7 +56,9 @@ export default function Shell() {
           <button className="ghost" onClick={leaveCare}>Выйти из карты</button>
         </div>
       )}
-      <main>{ready ? <Outlet /> : <p className="muted">{status || 'открываю сессию…'}</p>}</main>
+      <main>{ready
+        ? <Outlet context={{ needEnroll, onEnrolled }} />
+        : <p className="muted">{status || 'открываю сессию…'}</p>}</main>
     </div>
   )
 }
