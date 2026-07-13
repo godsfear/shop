@@ -11,11 +11,16 @@ RUN uv sync --frozen --no-install-project --no-dev
 
 COPY src ./src
 COPY migrations ./migrations
-COPY alembic.ini ./
+COPY alembic.ini README.md ./
 RUN uv sync --frozen --no-dev && \
     useradd --system --no-create-home shop && chown -R shop /app
+# бинарники из собранного venv напрямую: без `uv run` (тому нужен writable HOME-кэш).
+# worker/init переопределяют команду в compose (python -m shop.worker / shop.init_stack).
+ENV PATH="/app/.venv/bin:$PATH"
 USER shop
 
 EXPOSE 8000
-# без reload; секреты (JWT_SECRET, KEK, DATABASE_URI под ролью app) — из окружения
-CMD ["uv", "run", "--no-dev", "uvicorn", "shop.app:app", "--host", "0.0.0.0", "--port", "8000"]
+# без reload; секреты (JWT_SECRET, KEK, DATABASE_URI под ролью app) — из окружения.
+# --proxy-headers + доверие X-Forwarded-For от nginx: rate-limit видит реальный IP.
+CMD ["uvicorn", "shop.app:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--proxy-headers", "--forwarded-allow-ips", "*"]

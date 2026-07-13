@@ -45,7 +45,8 @@ def _send_smtp(to: str, subject: str, body: str) -> None:
     msg['From'], msg['To'], msg['Subject'] = settings.mail_from, to, subject
     msg.set_content(body)
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as smtp:
-        smtp.starttls()
+        if settings.smtp_starttls:            # ловушка без TLS (Mailpit) — выключить
+            smtp.starttls()
         if settings.smtp_user:
             smtp.login(settings.smtp_user, settings.smtp_password)
         smtp.send_message(msg)

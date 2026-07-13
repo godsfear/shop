@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     # почта: подтверждение регистрации; без SMTP код пишется в лог (dev)
     smtp_host: str | None = None
     smtp_port: int = 587
+    smtp_starttls: bool = True              # false для локальной ловушки (Mailpit)
     smtp_user: str = ''
     smtp_password: str = ''
     mail_from: str = 'noreply@localhost'

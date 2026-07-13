@@ -1,0 +1,100 @@
+# Весь проект одной командой:  docker compose up --build
+#
+# Открыть:  http://localhost:8080        — приложение (nginx раздаёт SPA + /api)
+#           http://localhost:8025        — Mailpit: письма с кодами подтверждения
+#
+# Секреты берутся из .env (JWT_SECRET обязателен); остальное имеет dev-дефолты —
+# ПЕРЕД ПРОДОМ задать KEK, POSTGRES_PASSWORD, APP_DB_PASSWORD, RESEARCH_PASSWORD.
+# Почта: Mailpit ловит письма локально. Для реальной доставки замените на релей
+# (SES/SendGrid/собственный SMTP) — SMTP_HOST/PORT/USER/PASSWORD у api и worker.
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: shop
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "shop"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  mailpit:                          # SMTP-ловушка: письма видны на http://localhost:8025
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+    restart: unless-stopped
+
+  # одноразовый init: миграции (владельцем shop) + роли/RLS + медицинский сид
+  migrate:
+    build: .
+    command: ["python", "-m", "shop.init_stack"]
+    environment:
+      DATABASE_URI: postgresql+asyncpg://shop:${POSTGRES_PASSWORD:-secret}@postgres:5432/shop
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET требуется — задайте в .env}
+      KEK: ${KEK:-dev-kek}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-app}
+      RESEARCH_PASSWORD: ${RESEARCH_PASSWORD:-research}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:                              # веб-процесс FastAPI (воркеры — отдельный сервис)
+    build: .
+    environment:
+      DATABASE_URI: postgresql+asyncpg://app:${APP_DB_PASSWORD:-app}@postgres:5432/shop
+      REDIS_URI: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET требуется — задайте в .env}
+      KEK: ${KEK:-dev-kek}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      RUN_WORKERS: "false"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_STARTTLS: "false"
+      MAIL_FROM: noreply@shop.local
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  worker:                           # фоновые циклы: outbox, sweeper, пул псевдонимов
+    build: .
+    command: ["python", "-m", "shop.worker"]
+    environment:
+      DATABASE_URI: postgresql+asyncpg://app:${APP_DB_PASSWORD:-app}@postgres:5432/shop
+      REDIS_URI: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET требуется — задайте в .env}
+      KEK: ${KEK:-dev-kek}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_STARTTLS: "false"
+      MAIL_FROM: noreply@shop.local
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  web:                              # nginx: SPA + reverse-proxy /api -> api:8000
+    build: ./web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
