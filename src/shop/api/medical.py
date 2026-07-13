@@ -32,6 +32,12 @@ async def open_session(svc: MedAccessService = Depends(),
     return {'expires_in': await svc.open_session()}
 
 
+@router.get('/access-log')
+async def my_access_log(svc: MedAccessService = Depends()):
+    """Кто и когда разворачивал доступ к моей карте (append-only аудит ключей)."""
+    return await svc.access_log()
+
+
 @router.get('/grants')
 async def my_grants(svc: MedAccessService = Depends()):
     """Чужие медкарты, доступные мне по одобренным согласиям (Слой B):

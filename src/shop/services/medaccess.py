@@ -152,6 +152,36 @@ class MedAccessService:
                 .order_by(tables.Entity.name))).all()
         return [{'code': code, 'name': name} for code, name in rows]
 
+    async def access_log(self, limit: int = 100) -> list[dict]:
+        """Журнал доступов к моей карте — владельцу для прозрачности.
+
+        Источник — append-only аудит ключевого сервиса (KeyAudit, хеш-цепочка):
+        развороты ключа patient:{sub}, отказы и break-glass. actor = user id;
+        имя не раскрываем (каталог закрыт) — сопоставляем с reason согласий."""
+        key = self._patient_key()
+        events = ('key.unwrap', 'key.unwrap.denied', 'breakglass.execute')
+        rows = (await self.session.execute(
+            select(tables.KeyAudit)
+            .where(tables.KeyAudit.event.in_(events),
+                   tables.KeyAudit.data['key_id'].astext == key)
+            .order_by(tables.KeyAudit.seq.desc())
+            .limit(limit))).scalars().all()
+        # actor -> представление из согласий (действующих и прошлых версий не ищем — MVP)
+        reasons = {str(c.grantee): c.reason for c in (await self.session.execute(
+            select(tables.Consent).where(
+                tables.Consent.table == 'person',
+                tables.Consent.scope == MEDICAL))).scalars().all()}
+        me = str(self.payload.sub)
+        out = []
+        for r in rows:
+            actor = r.data.get('actor')
+            out.append({
+                'at': r.ts, 'event': r.event,
+                'who': 'вы' if actor == me else
+                       (reasons.get(actor) or f'доступ …{(actor or "")[-6:]}'),
+            })
+        return out
+
     async def grants(self) -> list[dict]:
         """Слой B, дискавери: чужие медкарты, доступные мне по одобренным согласиям.
         [{link_id, key_id}] — эти параметры передаются в каждом запросе /me/*."""

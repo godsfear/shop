@@ -114,6 +114,9 @@ export const openSession = () => req<{ expires_in: number }>('/me/session', { me
 export const concepts = () => req<Concepts>('/me/concepts')
 // чужие карты, доступные мне по согласиям (режим «Пациенты», Слой B)
 export const listGrants = () => req<Grant[]>('/me/grants')
+// журнал доступов к моей карте (append-only аудит ключей)
+export interface AccessLogEntry { at: string; event: string; who: string }
+export const accessLog = () => req<AccessLogEntry[]>('/me/access-log')
 
 // --- эпизоды ---
 export interface StateLog { state: string; event: string | null; begins: string; ends: string | null }

@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react'
 import {
-  consentApprove, consentDeny, consentGranted, consentIncoming, consentRevoke, me,
-  type Consent,
+  accessLog, consentApprove, consentDeny, consentGranted, consentIncoming,
+  consentRevoke, me,
+  type AccessLogEntry, type Consent,
 } from '../api'
+
+const LOG_EVENTS: Record<string, string> = {
+  'key.unwrap': 'просмотр карты',
+  'key.unwrap.denied': 'отказ в доступе',
+  'breakglass.execute': 'ЭКСТРЕННЫЙ доступ',
+}
 
 const TERMS: Record<string, number | null> = {
   'месяц': 30, 'год': 365, 'бессрочно': null,
@@ -13,6 +20,7 @@ export default function Access() {
   const [code, setCode] = useState('')
   const [incoming, setIncoming] = useState<Consent[]>([])
   const [granted, setGranted] = useState<Consent[]>([])
+  const [log, setLog] = useState<AccessLogEntry[]>([])
   const [err, setErr] = useState('')
   const [copied, setCopied] = useState(false)
 
@@ -20,6 +28,7 @@ export default function Access() {
     try {
       setIncoming((await consentIncoming()).filter((c) => c.scope === 'medical'))
       setGranted(await consentGranted())
+      setLog(await accessLog().catch(() => []))  // журнал пуст, если карта не выпущена
     } catch (e) { setErr((e as Error).message) }
   }
   useEffect(() => { me().then((u) => setCode(u.person)).catch(() => {}); load() }, [])
@@ -76,6 +85,24 @@ export default function Access() {
                 ))}
                 <button className="ghost" onClick={() => decide(c, 'deny')}>Отказать</button>
               </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h3>Журнал доступов</h3>
+        <p className="muted">Каждый разворот доступа к карте пишется в защищённый
+        от подделки журнал (включая отказы и экстренные доступы). Повторные
+        обращения в пределах ~5 минут не дублируются.</p>
+        {log.length === 0 && <p className="muted">записей пока нет</p>}
+        <ul className="rows">
+          {log.map((e, i) => (
+            <li key={i} className="row-link">
+              <span className={e.event === 'key.unwrap' ? '' : 'error'}>
+                {LOG_EVENTS[e.event] ?? e.event}</span>
+              <span>{e.who}</span>
+              <span className="muted">{new Date(e.at).toLocaleString()}</span>
             </li>
           ))}
         </ul>
