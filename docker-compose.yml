@@ -57,10 +57,11 @@ services:
       KEK: ${KEK:-dev-kek}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       RUN_WORKERS: "false"
-      SMTP_HOST: mailpit
+      RESEND_API_KEY: ${RESEND_API_KEY:-}   # задан -> реальная отправка через Resend
+      MAIL_FROM: ${MAIL_FROM:-onboarding@resend.dev}
+      SMTP_HOST: mailpit                    # fallback, когда RESEND_API_KEY пуст
       SMTP_PORT: "1025"
       SMTP_STARTTLS: "false"
-      MAIL_FROM: noreply@shop.local
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -77,10 +78,11 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET требуется — задайте в .env}
       KEK: ${KEK:-dev-kek}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
-      SMTP_HOST: mailpit
+      RESEND_API_KEY: ${RESEND_API_KEY:-}   # задан -> реальная отправка через Resend
+      MAIL_FROM: ${MAIL_FROM:-onboarding@resend.dev}
+      SMTP_HOST: mailpit                    # fallback, когда RESEND_API_KEY пуст
       SMTP_PORT: "1025"
       SMTP_STARTTLS: "false"
-      MAIL_FROM: noreply@shop.local
     depends_on:
       migrate:
         condition: service_completed_successfully

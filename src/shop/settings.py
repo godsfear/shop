@@ -49,7 +49,8 @@ class Settings(BaseSettings):
     # фоновые воркеры в web-процессе; false на репликах многопроцессного прода
     # (тогда воркеры — одним процессом: python -m shop.worker)
     run_workers: bool = True
-    # почта: подтверждение регистрации; без SMTP код пишется в лог (dev)
+    # почта: подтверждение регистрации. Приоритет: Resend -> SMTP -> лог (dev)
+    resend_api_key: str | None = None      # Resend HTTP API (задаётся в .env)
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_starttls: bool = True              # false для локальной ловушки (Mailpit)
