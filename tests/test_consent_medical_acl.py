@@ -7,7 +7,7 @@ import datetime
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import text, update
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
@@ -36,6 +36,9 @@ async def _mkuser(s, place_id, email):
     s.add(person); await s.commit()
     user = await UserService(session=s).create(UserCreate(
         person=person.id, contact=Contact(email=email), password='correct-horse'))
+    # запрашивать чужие карты может только подтверждённая почта
+    await s.execute(update(t.User).where(t.User.id == user.id).values(confirmed=True))
+    await s.commit()
     return person.id, user.id
 
 

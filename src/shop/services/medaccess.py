@@ -46,6 +46,39 @@ from .. import tables
 _SESSION_NS = 'medsession'
 
 
+async def enroll_patient(session, keys, user_id: uuid.UUID, person_id: uuid.UUID) -> None:
+    """Выпуск медключей и моста пациента; идемпотентно.
+
+    Вызывается при регистрации (ключи выпускаются каждому сразу — решение
+    владельца) и из /me/enroll (страховка для учёток, созданных до этого).
+    MVP-стенд-ин клиентской крипты: ceiling — owner-DEK на клиенте."""
+    existing = (await session.execute(select(tables.Link).where(
+        tables.Link.table == 'person', tables.Link.objectid == person_id,
+        tables.Link.scope == 'medical'))).scalars().first()
+    if existing is not None:
+        return                                      # уже выпущен
+    patient_key = f'patient:{user_id}'
+    for kid in ('escrow', patient_key):             # escrow — общесистемный (break-glass)
+        try:
+            await keys.create_key(kid)
+        except KeyServiceError:
+            pass                                    # ключ уже существует
+    await keys.grant(patient_key, str(user_id))
+    try:
+        await BridgeService(session=session, keys=keys).create_link(
+            'person', person_id, 'medical', groups={patient_key: person_id})
+    except IntegrityError:
+        # конкурентный выпуск уже создал мост (uq_link_subject_scope) — идемпотентно
+        await session.rollback()
+    # re-sync: медицинские согласия, одобренные ДО выпуска ключа, догрантиваются
+    grantees = (await session.execute(select(tables.Consent.grantee).where(
+        tables.Consent.table == 'person', tables.Consent.objectid == person_id,
+        tables.Consent.scope == MEDICAL, tables.Consent.status == APPROVED,
+        _until_alive()))).scalars().all()
+    for grantee in grantees:
+        await keys.grant(patient_key, str(grantee))
+
+
 class MedAccessService:
     """Сессия + доступ к медданным пациента (по псевдониму), НЕ сущность-CRUD.
 
@@ -66,35 +99,11 @@ class MedAccessService:
         self.link_id = link_id
         self.key_id = key_id
 
-    # --- онбординг: выпуск моста пациента (MVP-стенд-ин, KeyService — заглушка) ---
+    # --- онбординг: выпуск моста (штатно происходит при регистрации) ---
     async def enroll(self) -> None:
-        """Идемпотентно выпускает медицинский мост пациента: ключ patient:{sub} +
-        грант + Link(person,'medical'). Это «выпуск ключей» MVP — серверный стенд-ин
-        клиентской крипты (ceiling: owner-DEK в проде на клиенте, KeyService не заглушка)."""
-        person_id = await self._person_id()
-        if await self._owner_link(person_id) is not None:
-            return                                  # уже выпущен
-        keys = self.bridge.keys
-        for kid in ('escrow', self._patient_key()):  # escrow — общесистемный (break-glass)
-            try:
-                await keys.create_key(kid)
-            except KeyServiceError:
-                pass                                # ключ уже существует
-        await keys.grant(self._patient_key(), str(self.payload.sub))
-        try:
-            await self.bridge.create_link('person', person_id, 'medical',
-                                          groups={self._patient_key(): person_id})
-        except IntegrityError:
-            # конкурентный enroll уже выпустил мост (uq_link_subject_scope) — идемпотентно
-            await self.session.rollback()
-        # re-sync: медицинские согласия, одобренные ДО enroll (ключа ещё не было),
-        # догрантиваются здесь — connect-точка Consent -> KeyService (см. consent.py)
-        grantees = (await self.session.execute(select(tables.Consent.grantee).where(
-            tables.Consent.table == 'person', tables.Consent.objectid == person_id,
-            tables.Consent.scope == MEDICAL, tables.Consent.status == APPROVED,
-            _until_alive()))).scalars().all()
-        for grantee in grantees:
-            await keys.grant(self._patient_key(), str(grantee))
+        """Идемпотентный довыпуск ключей — для учёток, созданных до автовыпуска."""
+        await enroll_patient(self.session, self.bridge.keys,
+                             self.payload.sub, await self._person_id())
 
     # --- сессия (ТОЛЬКО Слой A: owner). Слой B (врач/близкий) сессию не использует:
     # он stateless — link_id/key_id в каждом запросе (см. _resolve); делегированная

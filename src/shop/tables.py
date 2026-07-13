@@ -443,6 +443,8 @@ class User(Base):
     public_key: Mapped[str] = mapped_column(String)
     # роли попадают в JWT (claims: sub + roles); выдача — только админом
     roles: Mapped[list[str]] = mapped_column(ARRAY(String), server_default=text("'{}'"))
+    # почта подтверждена кодом: без этого нельзя запрашивать чужие карты
+    confirmed: Mapped[bool] = mapped_column(Boolean, server_default=text('false'))
 
     __local_table_args__ = (
         Index('ix_user_contact', 'contact', postgresql_using='gin', postgresql_where=ACTIVE),

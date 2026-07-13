@@ -4,7 +4,7 @@ import datetime
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import text, select
+from sqlalchemy import text, select, update
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
@@ -49,6 +49,9 @@ async def test_main():
         friend = await usvc.create(UserCreate(person=friend_person.id,
                                               contact=Contact(email='friend@x.com'),
                                               password='correct-horse'))
+        # запрашивать доступ может только подтверждённая почта
+        await s.execute(update(t.User).values(confirmed=True))
+        await s.commit()
         country_id, place_id = country.id, country.id
         owner_person_id, friend_id = owner_person.id, friend.id
     owner_p = TokenPayload(sub=owner.id)

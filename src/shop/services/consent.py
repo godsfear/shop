@@ -65,7 +65,14 @@ class ConsentService:
         self.keys = keys
 
     async def request(self, data: ConsentRequest, payload: TokenPayload) -> tables.Consent:
-        """Запрос доступа: grantee = запрашивающий; владельцу уходит уведомление."""
+        """Запрос доступа: grantee = запрашивающий; владельцу уходит уведомление.
+        Только подтверждённая почта: запрашивающий чужие данные обязан быть
+        верифицирован — его след в аудите должен вести к живому контакту."""
+        confirmed = (await self.session.execute(select(tables.User.confirmed).where(
+            tables.User.id == payload.sub))).scalar_one_or_none()
+        if not confirmed:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail='подтвердите почту, чтобы запрашивать доступ к чужим данным')
         domain = (await self.session.execute(select(tables.ObjectRegistry.domain).where(
             tables.ObjectRegistry.id == data.subject_id))).scalar_one_or_none()
         if domain is None:

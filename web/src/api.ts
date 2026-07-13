@@ -88,8 +88,12 @@ export async function signin(email: string, password: string): Promise<string> {
 }
 
 // --- профиль ---
-export interface Me { id: string; person: string; contact: { email?: string } }
+export interface Me { id: string; person: string; contact: { email?: string }
+                      confirmed: boolean }
 export const me = () => req<Me>('/auth/user/')
+// подтверждение почты кодом из письма
+export const confirmEmail = (code: string) => req<Me>('/auth/confirm/', json({ code }))
+export const resendConfirm = () => req<void>('/auth/confirm/resend/', { method: 'POST' })
 
 // --- согласия (consent-first доступ) ---
 export interface Consent {

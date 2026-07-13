@@ -41,5 +41,11 @@ class UserRoles(BaseModel):
     roles: list[str]
 
 
+class ConfirmCode(BaseModel):
+    """Код подтверждения почты из письма."""
+    code: str
+
+
 class User(UserBase, ReadMixin):
     roles: list[str] = []
+    confirmed: bool = False   # почта подтверждена кодом

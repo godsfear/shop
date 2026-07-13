@@ -39,7 +39,7 @@ async def test_main():
 
     # --- сквозная регистрация: персона встроена в signup ---
     async with Sess() as s:
-        token = await UserService(session=s).register_new_user(SignUp(
+        token, _ = await UserService(session=s).register_new_user(SignUp(
             person=PersonCreate(name={'last': 'Петров'}, sex=True,
                                 birthdate=datetime.date(1990, 1, 1),
                                 birth_place=place_id),

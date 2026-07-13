@@ -144,6 +144,12 @@ h2, h3 { margin: 8px 0; }
 .topnav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .care-banner { display: flex; align-items: center; gap: 12px; justify-content: center;
   background: var(--accent); color: #fff; padding: 7px 16px; font-size: 14px; }
+.confirm-banner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  justify-content: center; background: var(--danger-soft); color: var(--text);
+  padding: 8px 16px; font-size: 14px; border-bottom: 1px solid var(--line); }
+.confirm-banner input { max-width: 140px; padding: 6px 10px; }
+.confirm-banner button { padding: 6px 14px; font-size: 13.5px; }
+.confirm-banner .msg-note { color: var(--muted); font-size: 13px; }
 .care-banner button { background: transparent; border: 1px solid rgba(255,255,255,.6);
   color: #fff; padding: 3px 12px; font-size: 13px; }
 .patient-code { background: var(--accent-soft); color: var(--accent);

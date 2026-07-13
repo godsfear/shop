@@ -13,6 +13,7 @@ from shop.settings import settings
 from shop.tables import User
 from shop.versioning import versioned_expire, versioned_update
 from .auth import AuthService
+from .mailer import request_confirm
 from shop import tables
 from shop.models.auth import Challenge, Token
 from shop.models.user import SignUp, UserCreate, UserUpdate
@@ -94,8 +95,9 @@ class UserService:
         await get_cache().delete(f'user:{user_id}')
         return user
 
-    async def register_new_user(self, signup: SignUp) -> Token:
-        """Регистрация: Person + User создаются одной транзакцией."""
+    async def register_new_user(self, signup: SignUp) -> tuple[Token, User]:
+        """Регистрация: Person + User одной транзакцией; на email уходит код
+        подтверждения (письмо — через outbox той же транзакцией)."""
         person = tables.Person(**signup.person.model_dump())
         self.session.add(person)
         await self.session.flush()
@@ -106,8 +108,20 @@ class UserService:
             public_key=signup.public_key,
         )
         self.session.add(user)
+        await self.session.flush()
+        if signup.contact.email:
+            await request_confirm(self.session, user.id, signup.contact.email)
         await self.session.commit()
-        return AuthService.create_token(user)
+        return AuthService.create_token(user), user
+
+    async def confirm(self, user_id: uuid.UUID) -> User:
+        """Пометить почту подтверждённой (код уже сверен в mailer.check_confirm)."""
+        user = await versioned_update(self.session, User, user_id, {'confirmed': True})
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        await self.session.commit()
+        await get_cache().delete(f'user:{user_id}')
+        return user
 
     async def authenticate_user(self, prop: str, password: str) -> Token:
         user = await self.get_by_contact(prop)

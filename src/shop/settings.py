@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     # фоновые воркеры в web-процессе; false на репликах многопроцессного прода
     # (тогда воркеры — одним процессом: python -m shop.worker)
     run_workers: bool = True
+    # почта: подтверждение регистрации; без SMTP код пишется в лог (dev)
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str = ''
+    smtp_password: str = ''
+    mail_from: str = 'noreply@localhost'
+    confirm_ttl_s: int = 24 * 3600         # жизнь кода подтверждения (Redis)
     # периметр HTTP
     auth_rate_limit: int = 10              # попыток /auth/* с одного IP за окно
     auth_rate_window_s: int = 60           # окно rate limit (сек)
