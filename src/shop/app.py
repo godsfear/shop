@@ -9,22 +9,16 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from shop.database import db_helper
 from shop.middleware import middleware_proc
 from shop.api import router
-from shop.outbox import outbox_worker
-from shop.services import evaluate as _evaluate  # noqa: F401 — @outbox_handler('episode.evaluate')
-from shop.services import mailer as _mailer      # noqa: F401 — @outbox_handler('notify.email')
-from shop.services import extract as _extract  # noqa: F401 — @outbox_handler('data.extract')
-from shop.services.bridge import pseudonym_pool_topper
-from shop.services.consent import consent_sweeper
 from shop.settings import settings
+from shop.worker import background_coros
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # обработчики outbox зарегистрированы импортом сервисов (shop.api -> services);
-    # RUN_WORKERS=false на репликах — воркеры отдельным процессом (shop.worker)
-    tasks = [asyncio.create_task(outbox_worker()),
-             asyncio.create_task(consent_sweeper()),
-             asyncio.create_task(pseudonym_pool_topper())] if settings.run_workers else []
+    # RUN_WORKERS=false на репликах — фон отдельным процессом (shop.worker).
+    # background_coros регистрирует @outbox_handler и выбирает режим (шина/in-DB).
+    tasks = [asyncio.create_task(c) for c in background_coros()] \
+        if settings.run_workers else []
     yield
     for task in tasks:
         task.cancel()

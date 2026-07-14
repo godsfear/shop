@@ -13,11 +13,19 @@ docker compose up --build
 ```
 
 - приложение — http://localhost:8080 (nginx раздаёт SPA и проксирует `/api`);
-- письма с кодами подтверждения — http://localhost:8025 (Mailpit).
+- письма с кодами подтверждения — http://localhost:8025 (Mailpit);
+- шина событий (RabbitMQ) — http://localhost:15672 (guest/guest).
 
-Стек: `postgres` (PostGIS), `redis`, `migrate` (одноразовый: схема + RLS + сид),
-`api`, `worker` (outbox/sweeper/пул псевдонимов), `web` (nginx), `mailpit`.
-Данные БД — в томе `pgdata`. Перед продом задать `KEK`, `POSTGRES_PASSWORD`,
+Стек: `postgres` (PostGIS), `redis`, `rabbitmq`, `migrate` (одноразовый: схема +
+RLS + сид), `api`, `worker`, `web` (nginx), `mailpit`. Данные БД — в томе `pgdata`.
+
+Шина событий (гибрид outbox + RabbitMQ, см. `eventbus.py`): atomicity «данные +
+событие» держит outbox, relay перекачивает события в topic-exchange, консумеры
+читают из очередей `shop.ai` (ИИ-разбор/оценка — масштабируется репликами
+`worker`), `shop.mail`, `shop.notify` с дедупликацией (ProcessedEvent) и
+ретраями через retry/dead-очереди. Переключатель `EVENT_BUS` (в compose у
+`worker` = true); при `false` — воркер разбирает outbox напрямую (для тестов
+и простого одноузлового деплоя). Перед продом задать `KEK`, `POSTGRES_PASSWORD`,
 `APP_DB_PASSWORD`, `RESEARCH_PASSWORD`; `GOOGLE_API_KEY` опционален (без него —
 детерминированная ИИ-заглушка).
 

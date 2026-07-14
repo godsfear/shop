@@ -191,6 +191,20 @@ class Outbox(Root):
     )
 
 
+class ProcessedEvent(Root):
+    """Идемпотентность консумеров шины: доставка RabbitMQ — at-least-once
+    (relay мог опубликовать и упасть до пометки outbox), поэтому консумер
+    в своей транзакции вставляет id события сюда ON CONFLICT DO NOTHING —
+    повтор -> 0 строк -> обработку пропускаем. Эффект exactly-once на
+    at-least-once транспорте. Для in-DB process_one не нужна (там свой exactly-once).
+    """
+    __tablename__ = "processed_event"
+
+    id: Mapped[uuid6.UUID] = mapped_column(UUID_TYPE, primary_key=True)
+    processed: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True),
+                                                         server_default=func.now())
+
+
 class DomainBoundaryError(Exception):
     """Попытка связать объекты разных доменов минуя мост псевдонимизации."""
 

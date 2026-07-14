@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     outbox_poll_s: float = 1.0             # пауза воркера при пустой очереди
     outbox_max_attempts: int = 5           # попыток до пометки события мёртвым
     outbox_backoff_s: float = 5.0          # задержка ретрая × номер попытки (тесты ставят 0)
+    # шина событий (RabbitMQ): outbox -> relay -> exchange -> консумеры (см. eventbus.py)
+    event_bus: bool = False                # true: worker гоняет relay+консумеры вместо in-DB
+    rabbitmq_uri: str = 'amqp://guest:guest@localhost:5672/'
+    bus_prefetch: int = 8                  # незакрытых сообщений на консумера (масштаб ИИ)
+    bus_max_attempts: int = 5              # ретраев сообщения до dead-letter
+    bus_retry_delay_ms: int = 5000         # задержка ретрая через retry-очередь (TTL)
     consent_sweep_s: float = 3600.0        # период фонового протухания согласий (until)
     # фоновые воркеры в web-процессе; false на репликах многопроцессного прода
     # (тогда воркеры — одним процессом: python -m shop.worker)
