@@ -31,6 +31,7 @@ def _svc(s, ks, payload):
 
 async def test_main():
     settings.google_api_key = None                # держим заглушку: без сети/Gemini
+    settings.auto_extract = True                  # тест проверяет авто-разбор при загрузке
     eng = create_async_engine(URI, poolclass=NullPool)
     async with eng.begin() as conn:
         await conn.execute(text('DROP SCHEMA public CASCADE'))

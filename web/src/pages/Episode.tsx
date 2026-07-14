@@ -43,7 +43,6 @@ export default function Episode() {
   const [err, setErr] = useState('')
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState('')
-  const [parsing, setParsing] = useState(false)           // документ в ИИ-разборе
   const [ddx, setDdx] = useState<MedProperty | null>(null)  // ИИ-оценка (code=ddx)
   const [workup, setWorkup] = useState<MedProperty | null>(null)  // рекоменд. анализы (code=workup)
   const [evaluating, setEvaluating] = useState(false)
@@ -110,21 +109,12 @@ export default function Episode() {
     setErr('')
     if (!file) return
     try {
+      // документ читается ИИ при нажатии «Диагноз» (оригинал мультимодально),
+      // не разбирается при загрузке — просто сохраняем и показываем в списке
       await uploadDocument(file, docName || file.name, 'doc', cs['analysis'], id)
       setFile(null); setDocName('')
       await reload()
-      // ИИ-разбор идёт в фоне (outbox): опрашиваем находки, пока не появятся
-      setParsing(true)
-      const before = finds.length
-      for (let i = 0; i < 5; i++) {
-        await new Promise((r) => setTimeout(r, 2000))
-        const props = await episodeProperties(id)
-        const ai = props.filter(isAi)
-        if (ai.length > before) { setFinds(ai); break }
-      }
-      setParsing(false)
-      await reload()
-    } catch (e) { setErr((e as Error).message); setParsing(false) }
+    } catch (e) { setErr((e as Error).message) }
   }
 
   return (
@@ -269,14 +259,15 @@ export default function Episode() {
       )}
 
       <section>
-        <h3>Документы и находки ИИ</h3>
+        <h3>Документы</h3>
+        <p className="muted">Результаты анализов и обследований. Читаются ИИ при
+        нажатии «Диагноз» (оригиналы), не разбираются при загрузке.</p>
         <form className="inline" onSubmit={upload}>
           <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           <input placeholder="название" value={docName}
                  onChange={(e) => setDocName(e.target.value)} />
-          <button type="submit" disabled={!file || parsing}>Загрузить</button>
+          <button type="submit" disabled={!file}>Загрузить</button>
         </form>
-        {parsing && <p className="muted parsing">ИИ разбирает документ…</p>}
         <ul className="cards">
           {docs.map((d) => (
             <li key={d.id} className="card">{d.name || d.code}

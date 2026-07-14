@@ -395,9 +395,9 @@ class MedAccessService:
     async def upload_document(self, content: bytes, name: str, code: str,
                               category: uuid.UUID | None = None, media_type: str = '',
                               episode_id: uuid.UUID | None = None) -> tables.Data:
-        """Кладёт файл: блоб (FileStore) + Data(метаданные, hash) + событие
-        data.extract (ИИ-разбор) — всё одной транзакцией: консумер увидит
-        событие только вместе с блобом."""
+        """Кладёт файл: блоб (FileStore) + Data(метаданные, hash). При
+        settings.auto_extract — ещё и событие data.extract (ИИ-разбор в
+        структурные находки); по умолчанию off — диагноз читает оригинал."""
         table, objectid = await self._scope(episode_id)
         ref = await FileStore(session=self.session).put(content)
         data = tables.Data(category=category, code=code, name=name,
@@ -406,7 +406,8 @@ class MedAccessService:
                            media_type=media_type or None,   # для мультимодального диагноза
                            creator=self.payload.sub)
         self.session.add(data)
-        request_extract(self.session, ref['hash'], table, objectid, media_type)
+        if settings.auto_extract:
+            request_extract(self.session, ref['hash'], table, objectid, media_type)
         await self.session.commit()
         return data
 

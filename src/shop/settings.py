@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # ИИ-разбор документов (services/extract.py); нет ключа -> детерминированная заглушка
     google_api_key: str | None = None      # Gemini; задаётся в .env, в код не пишется
     gemini_model: str = 'gemini-2.5-flash'
+    # авто-разбор документа при загрузке в структурные находки. Off: диагноз и так
+    # читает оригиналы мультимодально, лишний ИИ-вызов на каждую загрузку не нужен
+    auto_extract: bool = False
     # Redis-кэш (см. cache.py); недоступность Redis не роняет приложение
     redis_uri: str = 'redis://localhost:6379/0'
     cache_ttl_user_s: int = 300            # профиль пользователя
