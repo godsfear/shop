@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getEpisode, renameEpisode, episodeHistory, episodeState, transition, assess,
-  episodeProperties, listDocuments, uploadDocument, concepts,
+  episodeProperties, listDocuments, uploadDocument, concepts, dictionary,
   evaluateEpisode,
   type Episode as Ep, type FsmState, type Assess, type MedProperty, type Doc,
   type Concepts, type StateLog,
@@ -70,7 +70,13 @@ export default function Episode() {
       setA(await assess(id))
     } catch (e) { setErr((e as Error).message) }
   }
-  useEffect(() => { concepts().then(setCs).catch(() => {}) }, [])
+  // код жалобы -> русское имя из справочника (существующие записи хранят код)
+  const [symNames, setSymNames] = useState<Record<string, string>>({})
+  useEffect(() => {
+    concepts().then(setCs).catch(() => {})
+    dictionary('symptom').then((d) =>
+      setSymNames(Object.fromEntries(d.map((x) => [x.code, x.name])))).catch(() => {})
+  }, [])
   // перезагрузка данных, когда стали известны концепты (нужен id категории симптома)
   useEffect(() => { if (id) reload() }, [id, cs['symptom']])
 
@@ -276,7 +282,7 @@ export default function Episode() {
           <ul className="cards">
             {symptoms.map((s) => (
               <li key={s.id} className="card">
-                <b>{s.name || s.code}</b>
+                <b>{s.name || symNames[s.code] || s.code}</b>
                 {(s.value as { status?: string }).status === 'absent' &&
                   <span className="muted"> — отсутствует (значимо)</span>}
                 <span className="muted"> · {String((s.value as { source?: string }).source ?? '')}</span>

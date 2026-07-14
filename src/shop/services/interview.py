@@ -320,8 +320,14 @@ class InterviewService:
             tables.Property.category == cats['symptom'],
             tables.Property.code == code))).scalars().first()
         if row is None and create:
+            # русское имя из справочника — чтобы жалоба не отображалась кодом
+            # (свой текст в справочнике не найдётся -> name=None, показываем сам код)
+            name = (await self.session.execute(select(tables.Entity.name).where(
+                tables.Entity.category == cats['symptom'],
+                tables.Entity.code == code))).scalars().first()
             row = tables.Property(table='entity', objectid=episode_id,
-                                  category=cats['symptom'], code=code, creator=creator,
+                                  category=cats['symptom'], code=code, name=name,
+                                  creator=creator,
                                   value={'status': 'present', 'source': 'interview',
                                          'slots': {}})
             self.session.add(row)
