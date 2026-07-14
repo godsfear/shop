@@ -36,7 +36,7 @@ DEAD_EX = 'shop.events.dead'
 
 # очередь -> топики, которые она обслуживает (привязки к main-exchange)
 QUEUE_TOPICS = {
-    'shop.ai':     ['data.extract', 'episode.evaluate'],
+    'shop.ai':     ['data.extract', 'episode.evaluate', 'episode.workup'],
     'shop.mail':   ['notify.email'],
     'shop.notify': ['notify.breakglass', 'notify.access', 'notify.consent'],
 }

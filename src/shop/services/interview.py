@@ -28,6 +28,7 @@ from ..database import db_helper
 from ..medical_seed import SYMPTOM_SCHEMA, medical_concepts
 from ..versioning import versioned_update
 from .. import tables
+from .evaluate import request_workup
 from .fsm import FSMService
 from .medical import MedicalService
 
@@ -225,6 +226,8 @@ class InterviewService:
             table='entity', objectid=episode_id, code=SUMMARY, creator=creator,
             value={**(await self._summary(episode_id, progress, pseudonym)),
                    'confirmed': True}))
+        # анамнез собран -> ИИ рекомендует анализы (в очередь, той же транзакцией)
+        request_workup(self.session, episode_id, pseudonym)
         await self.fsm.trigger('entity', row.id, commit=False, event='confirm', creator=creator)
         return 'confirmed'
 

@@ -403,6 +403,7 @@ class MedAccessService:
         data = tables.Data(category=category, code=code, name=name,
                            table=table, objectid=objectid,
                            hash=ref['hash'], algorithm=ref['algorithm'],
+                           media_type=media_type or None,   # для мультимодального диагноза
                            creator=self.payload.sub)
         self.session.add(data)
         request_extract(self.session, ref['hash'], table, objectid, media_type)

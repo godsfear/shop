@@ -10,8 +10,9 @@ import {
 
 interface Ddx {
   assessments: { condition: string; likelihood: number; rationale: string }[]
-  urgent: boolean; note?: string
+  urgent: boolean; note?: string; docs?: number
 }
+interface Workup { tests: { test: string; reason: string }[] }
 import { EVENTS, SECTIONS, STATES, t } from '../ui'
 
 // Таймлайн жизненного цикла: полный маршрут из fsm.states, текущее — акцентом
@@ -44,6 +45,7 @@ export default function Episode() {
   const [newName, setNewName] = useState('')
   const [parsing, setParsing] = useState(false)           // документ в ИИ-разборе
   const [ddx, setDdx] = useState<MedProperty | null>(null)  // ИИ-оценка (code=ddx)
+  const [workup, setWorkup] = useState<MedProperty | null>(null)  // рекоменд. анализы (code=workup)
   const [evaluating, setEvaluating] = useState(false)
 
   // форма документа
@@ -58,8 +60,9 @@ export default function Episode() {
       setFsm(await episodeState(id))
       const props = await episodeProperties(id)
       setSymptoms(props.filter((p) => p.category === cs['symptom'] && !isAi(p)))
-      setFinds(props.filter((p) => isAi(p) && p.code !== 'ddx'))
+      setFinds(props.filter((p) => isAi(p) && p.code !== 'ddx' && p.code !== 'workup'))
       setDdx(props.find((p) => p.code === 'ddx') ?? null)
+      setWorkup(props.find((p) => p.code === 'workup') ?? null)
       setDocs(await listDocuments(id))
       setLog(await episodeHistory(id))
       setA(await assess(id))
@@ -187,19 +190,44 @@ export default function Episode() {
         </section>
       )}
 
+      {/* рекомендованные анализы — ИИ подбирает автоматически после анамнеза */}
+      {workup && (() => {
+        const w = workup.value as unknown as Workup
+        if (!w.tests?.length) return null
+        return (
+          <section>
+            <h3>Рекомендованные анализы</h3>
+            <p className="muted">ИИ предлагает сдать для уточнения. Загрузите
+            результаты ниже — они войдут в диагноз.</p>
+            <ul className="cards">
+              {w.tests.map((x, i) => (
+                <li key={i} className="card">
+                  <b>{x.test}</b>
+                  <div className="muted">{x.reason}</div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+      })()}
+
       <section>
-        <h3>Оценка ИИ</h3>
+        <h3>Диагноз (оценка ИИ)</h3>
         <div className="inline">
-          {/* оценка по неполному анамнезу вводит в заблуждение — сначала опрос */}
+          {/* диагноз по неполному анамнезу вводит в заблуждение — сначала опрос */}
           <button onClick={evaluate} disabled={evaluating || !a || a.gaps.length > 0}>
-            {evaluating ? 'ИИ анализирует…' : (ddx ? 'Оценить заново' : 'Собрать и оценить (ИИ)')}
+            {evaluating ? 'ИИ анализирует…' : (ddx ? 'Пересчитать диагноз' : 'Диагноз')}
           </button>
           <span className="muted">
             {a && a.gaps.length > 0
               ? 'станет доступно после сбора анамнеза — пройдите опрос'
-              : 'все данные эпизода и карты уйдут ИИ одной задачей'}
+              : 'анамнез и оригиналы загруженных документов уйдут ИИ одной задачей'}
           </span>
         </div>
+        {/* мягкое предупреждение о неполноте: рекомендованы анализы, но документов нет */}
+        {workup && (workup.value as unknown as Workup).tests?.length > 0 && docs.length === 0 &&
+          <p className="muted">Рекомендованные анализы ещё не загружены — оценка
+          будет менее точной.</p>}
         {ddx && (() => {
           const v = ddx.value as unknown as Ddx
           return (

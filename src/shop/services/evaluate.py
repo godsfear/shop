@@ -1,13 +1,13 @@
-"""ИИ-оценка эпизода: все данные эпизода + профиль пациента -> ранжированный
-список предположений (НЕ диагноз — система поддержки, решает врач).
+"""ИИ-клинический цикл эпизода (система поддержки, НЕ диагноз — решает врач):
 
-outbox-топик 'episode.evaluate' (кнопка на эпизоде -> request_evaluate).
-Консумер собирает симптомы со слотами, находки документов и анамнез жизни,
-гоняет Gemini со structured output и пишет Property(code='ddx', source='ai')
-на эпизод — одна активная оценка, повторный запуск заменяет (версии в истории).
+1. WORKUP (topic 'episode.workup', авто после анамнеза): по собранному анамнезу
+   ИИ рекомендует, какие анализы сдать для уточнения. Пишет Property(code='workup').
+2. DIAGNOSIS (topic 'episode.evaluate', кнопка «Диагноз»): анамнез + ОРИГИНАЛЫ
+   загруженных документов (мультимодально) -> ранжированный список предположений.
+   Пишет Property(code='ddx') — одна активная оценка, повтор заменяет (версии).
 
-Возраст/пол кладёт в payload вызывающий (владелец — из своей персоны);
-консумер живёт в операционном контуре и identity-данных не видит.
+Оба консумера живут в операционном контуре (identity не видят); возраст/пол
+кладёт в payload вызывающий из своей персоны.
 """
 import json
 import uuid
@@ -21,20 +21,25 @@ from ..outbox import emit, outbox_handler
 from ..settings import settings
 from ..versioning import versioned_update
 from .extract import _gemini_client
+from .files import FileStore
 from .. import tables
 
 TOPIC_EVALUATE = 'episode.evaluate'
+TOPIC_WORKUP = 'episode.workup'
 DDX_CODE = 'ddx'
+WORKUP_CODE = 'workup'
+_INTERNAL_CODES = {DDX_CODE, WORKUP_CODE, 'state'}
 
-_PROMPT = (
-    'Ты — система поддержки принятия клинических решений. По данным эпизода и '
-    'профилю пациента предложи ранжированный список возможных состояний '
-    '(differential diagnosis). Это ПРЕДПОЛОЖЕНИЯ для обсуждения с врачом, не диагноз. '
-    'likelihood — субъективная вероятность 0..1, по убыванию. rationale — короткое '
-    'обоснование по-русски со ссылкой на конкретные данные. urgent=true, если данные '
-    'указывают на угрожающее состояние, требующее немедленной помощи.'
+_DDX_PROMPT = (
+    'Ты — система поддержки принятия клинических решений. По анамнезу и '
+    'приложенным документам (результаты анализов/обследований) предложи '
+    'ранжированный список возможных состояний (differential diagnosis). Это '
+    'ПРЕДПОЛОЖЕНИЯ для обсуждения с врачом, не диагноз. likelihood — субъективная '
+    'вероятность 0..1, по убыванию. rationale — короткое обоснование по-русски со '
+    'ссылкой на конкретные данные (в т.ч. значения из документов). urgent=true, если '
+    'данные указывают на угрожающее состояние, требующее немедленной помощи.'
 )
-_SCHEMA = {
+_DDX_SCHEMA = {
     'type': 'OBJECT',
     'properties': {
         'assessments': {
@@ -55,25 +60,56 @@ _SCHEMA = {
     'required': ['assessments', 'urgent'],
 }
 
+_WORKUP_PROMPT = (
+    'Ты — система поддержки принятия клинических решений. По собранному анамнезу '
+    'предложи, какие анализы и обследования стоит сдать пациенту, чтобы уточнить '
+    'предположительный диагноз. Только обоснованное, по убыванию важности. test — '
+    'название анализа/обследования по-русски; reason — зачем (что подтвердит/исключит).'
+)
+_WORKUP_SCHEMA = {
+    'type': 'OBJECT',
+    'properties': {
+        'tests': {
+            'type': 'ARRAY',
+            'items': {
+                'type': 'OBJECT',
+                'properties': {
+                    'test': {'type': 'STRING'},
+                    'reason': {'type': 'STRING'},
+                },
+                'required': ['test', 'reason'],
+            },
+        },
+    },
+    'required': ['tests'],
+}
+
 
 def request_evaluate(session: AsyncSession, episode_id: uuid.UUID,
                      pseudonym: uuid.UUID, age: int | None, sex: str | None) -> None:
-    """Ставит оценку в очередь — вызывать в транзакции (за воротами эпизода)."""
-    emit(session, TOPIC_EVALUATE, {
-        'episode': str(episode_id), 'pseudonym': str(pseudonym),
-        'age': age, 'sex': sex,
-    })
+    """Диагноз в очередь — вызывать в транзакции (за воротами эпизода)."""
+    emit(session, TOPIC_EVALUATE, {'episode': str(episode_id), 'pseudonym': str(pseudonym),
+                                   'age': age, 'sex': sex})
+
+
+def request_workup(session: AsyncSession, episode_id: uuid.UUID,
+                   pseudonym: uuid.UUID) -> None:
+    """Рекомендацию анализов в очередь — авто после сбора анамнеза (интервью)."""
+    emit(session, TOPIC_WORKUP, {'episode': str(episode_id), 'pseudonym': str(pseudonym)})
 
 
 async def _bundle(session: AsyncSession, episode_id: uuid.UUID,
                   pseudonym: uuid.UUID) -> dict:
-    """Все данные эпизода + анамнез жизни, с кодами концептов вместо id."""
+    """Анамнез: симптомы эпизода со слотами + анамнез жизни (коды концептов).
+    Находки ИИ из документов (source=ai) НЕ включаем — оригиналы уходят
+    мультимодально; служебные коды (ddx/workup/state) исключены."""
     cats = await medical_concepts(session)
     names = {v: k for k, v in cats.items()}
 
     def rows_to_list(rows):
         return [{'concept': names.get(p.category), 'code': p.code, **(p.value or {})}
-                for p in rows if p.code != DDX_CODE and p.code != 'state']
+                for p in rows if p.code not in _INTERNAL_CODES
+                and (p.value or {}).get('source') != 'ai']
 
     ep = (await session.execute(select(tables.Property).where(
         tables.Property.table == 'entity',
@@ -84,54 +120,88 @@ async def _bundle(session: AsyncSession, episode_id: uuid.UUID,
     return {'episode': rows_to_list(ep), 'patient': rows_to_list(pat)}
 
 
-async def _evaluate_gemini(bundle: dict) -> dict:
-    from google.genai import types
-
-    client = _gemini_client(settings.google_api_key)
-    resp = await client.aio.models.generate_content(
-        model=settings.gemini_model,
-        contents=[_PROMPT, json.dumps(bundle, ensure_ascii=False)],
-        config=types.GenerateContentConfig(
-            response_mime_type='application/json', response_schema=_SCHEMA))
-    out = json.loads(resp.text)
-    out['assessments'] = sorted(out.get('assessments', []),
-                                key=lambda a: -a.get('likelihood', 0))
+async def _episode_docs(session: AsyncSession, episode_id: uuid.UUID) -> list[tuple[bytes, str]]:
+    """Оригиналы документов эпизода: (байты, mime) — для мультимодального диагноза."""
+    rows = (await session.execute(select(tables.Data).where(
+        tables.Data.table == 'entity', tables.Data.objectid == episode_id))).scalars().all()
+    store = FileStore(session=session)
+    out = []
+    for d in rows:
+        blob = await store.get(d.hash)
+        if blob is not None:
+            out.append((blob, d.media_type or 'application/pdf'))
     return out
 
 
-def _stub(bundle: dict) -> dict:
-    return {'assessments': [{'condition': 'оценка недоступна (нет ключа ИИ)',
-                             'likelihood': 0.0,
-                             'rationale': f"собрано данных: эпизод {len(bundle['episode'])}, "
-                                          f"карта {len(bundle['patient'])}"}],
-            'urgent': False, 'note': 'заглушка без ИИ'}
-
-
-@outbox_handler(TOPIC_EVALUATE)
-async def _evaluate(session: AsyncSession, payload: dict) -> None:
-    episode_id = uuid.UUID(payload['episode'])
-    pseudonym = uuid.UUID(payload['pseudonym'])
-    bundle = await _bundle(session, episode_id, pseudonym)
+def _with_identity(bundle: dict, payload: dict) -> dict:
     if payload.get('age') is not None:
         bundle['patient'].append({'concept': 'age', 'years': payload['age']})
     if payload.get('sex'):
         bundle['patient'].append({'concept': 'sex', 'value': payload['sex']})
+    return bundle
 
-    result = _stub(bundle)
-    if settings.google_api_key:
-        try:
-            result = await _evaluate_gemini(bundle)
-        except Exception as e:  # noqa: BLE001 — сбой ИИ не должен ронять outbox
-            logger.warning('evaluate: Gemini недоступен (%r) — заглушка', e)
-    value = {**result, 'source': 'ai', 'model': settings.gemini_model}
 
+async def _upsert(session: AsyncSession, episode_id: uuid.UUID, code: str, value: dict) -> None:
     existing = (await session.execute(select(tables.Property).where(
-        tables.Property.table == 'entity',
-        tables.Property.objectid == episode_id,
-        tables.Property.code == DDX_CODE))).scalars().first()
+        tables.Property.table == 'entity', tables.Property.objectid == episode_id,
+        tables.Property.code == code))).scalars().first()
     if existing is not None:
         await versioned_update(session, tables.Property, existing.id, {'value': value})
     else:
-        session.add(tables.Property(table='entity', objectid=episode_id,
-                                    code=DDX_CODE, value=value))
-    # commit — за process_one (вместе с пометкой события)
+        session.add(tables.Property(table='entity', objectid=episode_id, code=code, value=value))
+
+
+async def _gemini(prompt: str, schema: dict, bundle: dict,
+                  docs: list[tuple[bytes, str]] | None = None) -> dict:
+    from google.genai import types
+
+    contents: list = [prompt, json.dumps(bundle, ensure_ascii=False)]
+    for blob, mime in (docs or []):        # оригиналы документов — мультимодально
+        contents.append(types.Part.from_bytes(data=blob, mime_type=mime))
+    client = _gemini_client(settings.google_api_key)
+    resp = await client.aio.models.generate_content(
+        model=settings.gemini_model, contents=contents,
+        config=types.GenerateContentConfig(response_mime_type='application/json',
+                                            response_schema=schema))
+    return json.loads(resp.text)
+
+
+# ------------------------------------------------------------------ диагноз
+@outbox_handler(TOPIC_EVALUATE)
+async def _evaluate(session: AsyncSession, payload: dict) -> None:
+    episode_id = uuid.UUID(payload['episode'])
+    pseudonym = uuid.UUID(payload['pseudonym'])
+    bundle = _with_identity(await _bundle(session, episode_id, pseudonym), payload)
+    docs = await _episode_docs(session, episode_id)
+
+    result = {'assessments': [{'condition': 'оценка недоступна (нет ключа ИИ)',
+                               'likelihood': 0.0, 'rationale': f'документов: {len(docs)}'}],
+              'urgent': False, 'note': 'заглушка без ИИ'}
+    if settings.google_api_key:
+        try:
+            result = await _gemini(_DDX_PROMPT, _DDX_SCHEMA, bundle, docs)
+            result['assessments'] = sorted(result.get('assessments', []),
+                                           key=lambda a: -a.get('likelihood', 0))
+        except Exception as e:  # noqa: BLE001 — сбой ИИ не должен ронять консумер
+            logger.warning('evaluate: Gemini недоступен (%r) — заглушка', e)
+    await _upsert(session, episode_id, DDX_CODE,
+                  {**result, 'source': 'ai', 'model': settings.gemini_model,
+                   'docs': len(docs)})
+    # commit — за вызывающим (process_one / консумер шины)
+
+
+# --------------------------------------------------------- рекомендация анализов
+@outbox_handler(TOPIC_WORKUP)
+async def _workup(session: AsyncSession, payload: dict) -> None:
+    episode_id = uuid.UUID(payload['episode'])
+    pseudonym = uuid.UUID(payload['pseudonym'])
+    bundle = await _bundle(session, episode_id, pseudonym)
+
+    result = {'tests': [], 'note': 'заглушка без ИИ'}
+    if settings.google_api_key:
+        try:
+            result = await _gemini(_WORKUP_PROMPT, _WORKUP_SCHEMA, bundle)
+        except Exception as e:  # noqa: BLE001
+            logger.warning('workup: Gemini недоступен (%r) — заглушка', e)
+    await _upsert(session, episode_id, WORKUP_CODE,
+                  {**result, 'source': 'ai', 'model': settings.gemini_model})

@@ -655,6 +655,8 @@ class Data(BaseCategory, CrossTable, DescriptionMixin):
     # НЕ FK: контент живёт за швом put/get (сейчас Blob, позже S3) — БД о нём не знает.
     hash: Mapped[str] = mapped_column(String)
     algorithm: Mapped[str] = mapped_column(String)
+    # MIME документа — нужен для мультимодальной отправки оригиналов в ИИ (диагноз)
+    media_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
     __local_table_args__ = (
         Index('ix_data', 'category', 'code', 'table', 'objectid', 'algorithm', 'hash'),
