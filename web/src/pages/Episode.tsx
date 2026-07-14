@@ -45,6 +45,8 @@ export default function Episode() {
   const [newName, setNewName] = useState('')
   const [ddx, setDdx] = useState<MedProperty | null>(null)  // ИИ-оценка (code=ddx)
   const [workup, setWorkup] = useState<MedProperty | null>(null)  // рекоменд. анализы (code=workup)
+  const [hasSummary, setHasSummary] = useState(false)     // интервью подтверждено
+  const [workupPending, setWorkupPending] = useState(false)
   const [evaluating, setEvaluating] = useState(false)
 
   // форма документа
@@ -62,6 +64,7 @@ export default function Episode() {
       setFinds(props.filter((p) => isAi(p) && p.code !== 'ddx' && p.code !== 'workup'))
       setDdx(props.find((p) => p.code === 'ddx') ?? null)
       setWorkup(props.find((p) => p.code === 'workup') ?? null)
+      setHasSummary(props.some((p) => p.code === 'summary'))  // интервью подтверждено
       setDocs(await listDocuments(id))
       setLog(await episodeHistory(id))
       setA(await assess(id))
@@ -70,6 +73,23 @@ export default function Episode() {
   useEffect(() => { concepts().then(setCs).catch(() => {}) }, [])
   // перезагрузка данных, когда стали известны концепты (нужен id категории симптома)
   useEffect(() => { if (id) reload() }, [id, cs['symptom']])
+
+  // рекомендация анализов генерится в фоне (шина) после подтверждения интервью —
+  // если резюме уже есть, а workup ещё нет, коротко опрашиваем, пока не придёт
+  useEffect(() => {
+    if (!hasSummary || workup) return
+    let stop = false
+    setWorkupPending(true)
+    ;(async () => {
+      for (let i = 0; i < 8 && !stop; i++) {
+        await new Promise((r) => setTimeout(r, 2500))
+        const w = (await episodeProperties(id)).find((p) => p.code === 'workup')
+        if (w) { setWorkup(w); break }
+      }
+      if (!stop) setWorkupPending(false)
+    })()
+    return () => { stop = true }
+  }, [hasSummary, workup, id])
 
   const fire = async (event: string) => {
     setErr('')
@@ -200,6 +220,14 @@ export default function Episode() {
           </section>
         )
       })()}
+
+      {/* анализы ещё подбираются (шина обрабатывает событие после подтверждения) */}
+      {!workup && workupPending && (
+        <section>
+          <h3>Рекомендованные анализы</h3>
+          <p className="muted parsing">ИИ подбирает анализы по анамнезу…</p>
+        </section>
+      )}
 
       <section>
         <h3>Диагноз (оценка ИИ)</h3>
