@@ -25,7 +25,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy import select, text
 
 from ..database import db_helper
-from ..medical_seed import SYMPTOM_SCHEMA, medical_concepts
+from ..medical_seed import SYMPTOM_SCHEMA, medical_concepts, symptom_slots
 from ..versioning import versioned_update
 from .. import tables
 from .evaluate import request_workup
@@ -37,8 +37,13 @@ SUMMARY = 'summary'
 # секции анамнеза жизни в порядке опроса (коды концептов; scope=patient)
 HISTORY_SECTIONS = ['medication', 'allergy', 'chronic', 'surgery',
                     'heredity', 'social', 'risk_factor']
-_SLOTS = [s['code'] for s in SYMPTOM_SCHEMA]
+_SLOTS = [s['code'] for s in SYMPTOM_SCHEMA]        # полный набор (fallback)
 _LABELS = {s['code']: s['label'] for s in SYMPTOM_SCHEMA}
+
+
+def _slots(progress) -> list[str]:
+    """Слоты текущего симптома (пер-симптомные, заданы в _next_symptom)."""
+    return progress.get('slots') or _SLOTS
 
 
 class InterviewService:
@@ -117,7 +122,8 @@ class InterviewService:
         if progress.get('current') is None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                                 detail='нет текущего симптома')
-        slot = _SLOTS[progress['slot']]
+        slot_seq = _slots(progress)                # применимые слоты этой жалобы
+        slot = slot_seq[progress['slot']]
         value = body.get('value')
         if value is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
@@ -142,7 +148,7 @@ class InterviewService:
             return 'emergency'
 
         progress['slot'] += 1
-        if progress['slot'] < len(_SLOTS):
+        if progress['slot'] < len(slot_seq):
             return 'symptom'
         # симптом разобран: следующий из очереди, обзор систем либо (если ROS
         # уже пройден — возврат «да, ещё...» из резюме) сразу обратно к резюме
@@ -249,7 +255,7 @@ class InterviewService:
         if st == 'complaint':
             out['question'] = {'ask': 'Главная жалоба', 'field': 'symptom'}
         elif st == 'symptom':
-            slot = _SLOTS[progress['slot']]
+            slot = _slots(progress)[progress['slot']]
             out['question'] = {'symptom': progress['current'], 'slot': slot,
                                'ask': _LABELS[slot], 'field': 'value'}
         elif st == 'ros':
@@ -302,6 +308,7 @@ class InterviewService:
         """Берёт симптом из очереди и заводит под него Property на эпизоде."""
         progress['current'] = progress['queue'].pop(0)
         progress['slot'] = 0
+        progress['slots'] = symptom_slots(progress['current'])   # пер-симптомные слоты
         await self._symptom_property(episode_id, progress['current'], creator, create=True)
 
     async def _symptom_property(self, episode_id, code, creator=None,

@@ -33,6 +33,18 @@ SYMPTOM_SCHEMA = [
     {"code": "previous",    "label": "Случалось ли такое раньше? Чем тогда закончилось?"},
 ]
 
+# слоты локализации/характера боли — неуместны для нелокализованных жалоб
+_LOCALIZED_SLOTS = {"site", "character", "radiation"}
+# нелокализованные (системные) жалобы: нет «где», «на что похоже», «отдаёт ли»
+SYSTEMIC_SYMPTOMS = {"dizziness", "nausea", "fever", "weakness", "cough", "dyspnea"}
+
+
+def symptom_slots(code: str) -> list[str]:
+    """Слоты уточнения для жалобы. У нелокализованных (головокружение, тошнота…)
+    убраны site/character/radiation; неизвестные (свой текст) — спрашиваем всё."""
+    skip = _LOCALIZED_SLOTS if code in SYSTEMIC_SYMPTOMS else set()
+    return [s["code"] for s in SYMPTOM_SCHEMA if s["code"] not in skip]
+
 # концепты: code -> (name, value-конфиг)
 CONCEPTS = {
     "symptom":     ("Симптом", {"schema": SYMPTOM_SCHEMA}),

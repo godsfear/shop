@@ -74,16 +74,23 @@ async def test_main():
         async with Sess() as s:
             return await _svc(s, ks, payload).interview_answer(eid, body)
 
+    async def cur(eid):
+        async with Sess() as s:
+            return await _svc(s, ks, payload).interview_state(eid)
+
     async def run_slots(eid, associations=None, severity=3):
-        """Прогоняет 11 слотов текущего симптома; возвращает последний ответ."""
-        r = None
-        for slot in SLOTS:
-            value = {'severity': severity,
-                     'associations': associations or []}.get(slot, f'ответ:{slot}')
-            r = await ask(eid, {'value': value})
-            if r['state'] == 'emergency':
-                return r
-        return r
+        """Отвечает на слоты ТЕКУЩЕГО симптома (число зависит от жалобы —
+        у нелокализованных меньше). Следует за состоянием, не за фикс. списком."""
+        v = await cur(eid)
+        sym = v['question'].get('symptom') if v['state'] == 'symptom' else None
+        while v['state'] == 'symptom' and v['question'].get('symptom') == sym:
+            slot = v['question']['slot']
+            value = severity if slot == 'severity' else \
+                (associations or [] if slot == 'associations' else f'ответ:{slot}')
+            v = await ask(eid, {'value': value})
+            if v['state'] == 'emergency':
+                break
+        return v
 
     # ================= Сценарий A: полный проход до подтверждения =========
     eid = await episode('ep-full')
@@ -176,6 +183,20 @@ async def test_main():
     r = await ask(eid3, {'confirmed': True})                    # актуально — секция пропущена
     assert r['state'] == 'history' and r['question']['section'] == 'allergy', r
     print('[ok] заполненная секция предъявлена (known) и подтверждена одним шагом')
+
+    # ===== Сценарий A3: нелокализованная жалоба — нет site/character/radiation
+    eidz = await episode('ep-sys')
+    async with Sess() as s:
+        await _svc(s, ks, payload).interview_open(eidz)
+    await ask(eidz, {'symptom': 'dizziness'})
+    seen = []
+    v = await cur(eidz)
+    while v['state'] == 'symptom' and v['question'].get('symptom') == 'dizziness':
+        slot = v['question']['slot']
+        seen.append(slot)
+        v = await ask(eidz, {'value': 3 if slot == 'severity' else 'ответ'})
+    assert 'onset' in seen and not ({'site', 'character', 'radiation'} & set(seen)), seen
+    print('[ok] нелокализованная жалоба: слоты site/character/radiation пропущены')
 
     # ================= Сценарий B: красный флаг прерывает опрос ============
     eid2 = await episode('ep-acs')

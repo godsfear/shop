@@ -56,12 +56,14 @@ function Chips({ items, picked, onToggle }: {
 
 /** Выбор симптомов: чипы справочника + свой вариант (слаг латиницей не нужен —
  * код придумывает пользователь по-русски, бэк принимает любой code). */
-function SymptomPick({ dict, multi, submitLabel, onSubmit }: {
-  dict: DictItem[]; multi: boolean; submitLabel: string
+function SymptomPick({ dict, multi, submitLabel, exclude = [], onSubmit }: {
+  dict: DictItem[]; multi: boolean; submitLabel: string; exclude?: string[]
   onSubmit: (codes: string[], label: string) => void
 }) {
   const [picked, setPicked] = useState<string[]>([])
   const [free, setFree] = useState('')
+  // не показываем уже выбранные/разобранные симптомы — иначе опрос циклится
+  const avail = dict.filter((d) => !exclude.includes(d.code))
   const toggle = (code: string) => setPicked(multi
     ? (picked.includes(code) ? picked.filter((c) => c !== code) : [...picked, code])
     : [code])
@@ -74,7 +76,7 @@ function SymptomPick({ dict, multi, submitLabel, onSubmit }: {
   }
   return (
     <div className="answer">
-      <Chips items={dict} picked={picked} onToggle={toggle} />
+      <Chips items={avail} picked={picked} onToggle={toggle} />
       <div className="inline">
         <input placeholder="свой вариант" value={free}
                onChange={(e) => setFree(e.target.value)} />
@@ -196,6 +198,9 @@ export default function Interview() {
 
   const q = view?.question
   const state = view?.state ?? ''
+  // уже покрытые жалобы (разобранные + в очереди + текущая) — прячем из выбора
+  const covered = [...(view?.done ?? []), ...(view?.queue ?? []), q?.symptom]
+    .filter(Boolean) as string[]
   const cur = FLOW.indexOf(state)
 
   return (
@@ -234,7 +239,7 @@ export default function Interview() {
           {state === 'symptom' && q?.slot === 'associations' && (
             <div className="answer">
               <p className="muted">Отметьте, что появилось одновременно — каждый уйдёт в разбор.</p>
-              <SymptomPick dict={symDict} multi submitLabel="Ответить"
+              <SymptomPick dict={symDict} multi submitLabel="Ответить" exclude={covered}
                            onSubmit={(codes, label) => answer({ value: codes }, label)} />
               <button className="ghost" onClick={() => answer({ value: [] }, 'ничего')}>
                 Ничего сопутствующего
@@ -261,7 +266,7 @@ export default function Interview() {
             </div>
           )}
           {state === 'ros' && rosOpen &&
-            <SymptomPick dict={symDict} multi submitLabel="Ответить"
+            <SymptomPick dict={symDict} multi submitLabel="Ответить" exclude={covered}
                          onSubmit={(codes, label) =>
                            answer({ positive: true, symptoms: codes }, label)} />}
 
@@ -309,7 +314,7 @@ export default function Interview() {
             </div>
           )}
           {state === 'summary' && moreOpen &&
-            <SymptomPick dict={symDict} multi submitLabel="Добавить в разбор"
+            <SymptomPick dict={symDict} multi submitLabel="Добавить в разбор" exclude={covered}
                          onSubmit={(codes, label) => answer({ more: codes }, label)} />}
 
           {state === 'emergency' && (
