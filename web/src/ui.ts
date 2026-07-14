@@ -16,6 +16,11 @@ export const EVENTS: Record<string, string> = {
 
 export const KINDS: Record<string, string> = { illness: 'болезнь', injury: 'травма' }
 
+// красные флаги (коды из Category.value.red_flags -> services/medical.py)
+export const RED_FLAGS: Record<string, string> = {
+  acs: 'острый коронарный синдром',
+}
+
 export const SECTIONS: Record<string, string> = {
   symptom: 'симптомы', medication: 'лекарства', allergy: 'аллергии',
   chronic: 'хронические состояния', heredity: 'наследственность',

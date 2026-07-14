@@ -13,7 +13,7 @@ interface Ddx {
   urgent: boolean; note?: string; docs?: number
 }
 interface Workup { tests: { test: string; reason: string }[] }
-import { EVENTS, SECTIONS, STATES, t } from '../ui'
+import { EVENTS, RED_FLAGS, SECTIONS, STATES, t } from '../ui'
 
 // Таймлайн жизненного цикла: полный маршрут из fsm.states, текущее — акцентом
 function Timeline({ fsm }: { fsm: FsmState }) {
@@ -198,7 +198,7 @@ export default function Episode() {
         <section>
           <h3>Стоит дополнить</h3>
           {a.alerts.map((x) => <p key={x} className="alert">
-            ⚠ Признак возможного угрожающего состояния ({x}) — не откладывайте
+            ⚠ Признак возможного угрожающего состояния ({t(RED_FLAGS, x)}) — не откладывайте
             обращение за помощью.</p>)}
           {a.gaps.length > 0 &&
             <p className="muted">Рассказ пока неполон: {a.gaps.map((g) => t(SECTIONS, g)).join(', ')}.
