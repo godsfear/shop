@@ -87,6 +87,12 @@ async def test_main():
     assert {'code': 'headache', 'name': 'Headache'} in d
     print('[ok] /me/meta + словарь на en: переводы из Translation')
 
+    # словарь скрывает не соответствующее полу владельца (пациент — мужчина)
+    async with Sess() as s:
+        surg = await _svc(s, ks, payload).dictionary('surgery')
+    assert 'c_section' not in {x['code'] for x in surg}, surg
+    print('[ok] словарь: кесарево сечение скрыто для владельца-мужчины')
+
     async def episode(code):
         async with Sess() as s:
             ep = await _svc(s, ks, payload).open_episode(

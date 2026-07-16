@@ -89,6 +89,8 @@ const EN: Record<string, string> = {
   '— не откладывайте обращение за помощью.': '— do not delay seeking medical help.',
   'Рассказ пока неполон:': 'The story is still incomplete:',
   'Быстрее всего — пройти опрос.': 'The fastest way is the interview.',
+  'Анамнез (резюме опроса)': 'History (interview summary)',
+  'подтверждено пациентом': 'confirmed by the patient',
   'Рекомендованные анализы': 'Recommended tests',
   'Отранжированы по ценности и доступности. По каждому — загрузите документ с результатом или впишите результат сами; всё войдёт в диагноз.':
     'Ranked by value and accessibility. For each one, upload a result document or type the result yourself; everything feeds the diagnosis.',

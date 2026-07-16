@@ -38,6 +38,10 @@ _LOCALIZED_SLOTS = {"site", "character", "radiation"}
 # нелокализованные (системные) жалобы: нет «где», «на что похоже», «отдаёт ли»
 SYSTEMIC_SYMPTOMS = {"dizziness", "nausea", "fever", "chills", "weakness", "cough", "dyspnea"}
 
+# элементы словаря, уместные только для одного пола (Person.sex: true = муж);
+# dictionary() скрывает несоответствующие владельцу (кесарево у мужчины)
+SEX_SPECIFIC = {"c_section": False}
+
 
 def symptom_slots(code: str) -> list[str]:
     """Слоты уточнения для жалобы. У нелокализованных (головокружение, тошнота…)

@@ -48,6 +48,7 @@ export default function Episode() {
   const [ddx, setDdx] = useState<MedProperty | null>(null)  // ИИ-оценка (code=ddx)
   const [workup, setWorkup] = useState<MedProperty | null>(null)  // рекоменд. анализы (code=workup)
   const [hasSummary, setHasSummary] = useState(false)     // интервью подтверждено
+  const [summary, setSummary] = useState<MedProperty | null>(null)  // резюме анамнеза
   const [workupPending, setWorkupPending] = useState(false)
   const [evaluating, setEvaluating] = useState(false)
 
@@ -72,7 +73,9 @@ export default function Episode() {
         && (p.value as { result?: string }).result !== undefined))
       setDdx(props.find((p) => p.code === 'ddx') ?? null)
       setWorkup(props.find((p) => p.code === 'workup') ?? null)
-      setHasSummary(props.some((p) => p.code === 'summary'))  // интервью подтверждено
+      const sum = props.find((p) => p.code === 'summary') ?? null
+      setSummary(sum)
+      setHasSummary(sum !== null)                             // интервью подтверждено
       setDocs(await listDocuments(id))
       setLog(await episodeHistory(id))
       setA(await assess(id))
@@ -82,8 +85,9 @@ export default function Episode() {
   const [symNames, setSymNames] = useState<Record<string, string>>({})
   useEffect(() => {
     concepts().then(setCs).catch(() => {})
-    dictionary('symptom').then((d) =>
-      setSymNames(Object.fromEntries(d.map((x) => [x.code, x.name])))).catch(() => {})
+    // symptom + system: имена жалоб и систем (резюме анамнеза, ROS)
+    Promise.all([dictionary('symptom'), dictionary('system')]).then(([a, b]) =>
+      setSymNames(Object.fromEntries([...a, ...b].map((x) => [x.code, x.name])))).catch(() => {})
   }, [])
   // перезагрузка данных, когда стали известны концепты (нужен id категории симптома)
   useEffect(() => { if (id) reload() }, [id, cs['symptom']])
@@ -246,6 +250,30 @@ export default function Episode() {
             {ui('Быстрее всего — пройти опрос.')}</p>}
         </section>
       )}
+
+      {/* резюме подтверждённого анамнеза — то, что пациент видел на шаге summary */}
+      {summary && (() => {
+        const v = summary.value as {
+          chief_complaint?: string; symptoms?: Record<string, unknown>
+          negatives?: string[]; ros?: Record<string, unknown>
+        }
+        const nm = (c: string) => symNames[c] ?? c
+        const positive = Object.entries(v.ros ?? {}).filter(([, s]) => s !== 'clear')
+        return (
+          <section>
+            <h3>{ui('Анамнез (резюме опроса)')}</h3>
+            <div className="card resume">
+              <p><b>{ui('Главная жалоба:')}</b> {nm(v.chief_complaint ?? '')}</p>
+              <p><b>{ui('Симптомы:')}</b> {Object.keys(v.symptoms ?? {}).map(nm).join(', ') || '—'}</p>
+              {(v.negatives?.length ?? 0) > 0 &&
+                <p><b>{ui('Отрицания:')}</b> {v.negatives!.map(nm).join(', ')}</p>}
+              <p><b>{ui('Обзор систем:')}</b> {positive.length === 0
+                ? ui('без жалоб') : positive.map(([s]) => nm(s)).join(', ')}</p>
+              <p className="muted">{ui('подтверждено пациентом')} · {new Date(summary.begins).toLocaleString()}</p>
+            </div>
+          </section>
+        )
+      })()}
 
       {/* рекомендованные анализы — ИИ ранжирует по ценности и доступности;
           по каждому можно загрузить документ или вписать результат вручную

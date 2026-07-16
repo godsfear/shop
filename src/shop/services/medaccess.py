@@ -24,7 +24,7 @@ from ..versioning import versioned_expire, versioned_update
 from ..cache import get_cache
 from ..database import db_helper
 from ..keyservice import KeyServiceError, PolicyError
-from ..medical_seed import medical_concepts
+from ..medical_seed import SEX_SPECIFIC, medical_concepts
 from ..models.auth import TokenPayload
 from ..models.entity import EntityCreate, EntityUpdate
 from ..models.medical import EpisodeIn, MedPropertyIn
@@ -197,6 +197,15 @@ class MedAccessService:
             await resolve(self.session, 'entity', [r[0] for r in rows], self.lang)
         items = [{'code': code, 'name': tr.get((eid, 'name'), name)}
                  for eid, code, name in rows]
+        # owner-режим: скрыть не соответствующее полу владельца (кесарево у
+        # мужчины). Слой B (link_id) — пол пациента не раскрыт, показываем всё.
+        if self.link_id is None:
+            sex = (await self.session.execute(
+                select(tables.Person.sex)
+                .join(tables.User, tables.User.person == tables.Person.id)
+                .where(tables.User.id == self.payload.sub))).scalar_one_or_none()
+            if sex is not None:
+                items = [i for i in items if SEX_SPECIFIC.get(i['code'], sex) == sex]
         # порядок — по подписи на языке ответа (для system порядок обхода
         # задаёт бэк интервью, здесь только представление)
         return sorted(items, key=lambda i: i['name'])
