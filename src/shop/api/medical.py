@@ -51,6 +51,13 @@ async def concepts(svc: MedAccessService = Depends()):
     return await svc.concepts()
 
 
+@router.get('/meta')
+async def meta(svc: MedAccessService = Depends()):
+    """Подписи доменных кодов (концепты, состояния/события FSM, красные флаги) —
+    фронт не хранит доменных текстов, источник один: справочное дерево."""
+    return await svc.meta()
+
+
 @router.get('/dictionary/{concept}')
 async def dictionary(concept: str, svc: MedAccessService = Depends()):
     """Справочник элементов концепта: [{code, name}] — чипы выбора в интервью."""

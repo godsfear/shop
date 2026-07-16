@@ -45,18 +45,29 @@ def symptom_slots(code: str) -> list[str]:
     skip = _LOCALIZED_SLOTS if code in SYSTEMIC_SYMPTOMS else set()
     return [s["code"] for s in SYMPTOM_SCHEMA if s["code"] not in skip]
 
-# концепты: code -> (name, value-конфиг)
+# подписи состояний/событий эпизода — фронт получает их из GET /me/meta:
+# единый источник подписей — сид/БД, во фронте доменных текстов нет
+_EPISODE_STATE_LABELS = {
+    "anamnesis": "анамнез", "diagnosis": "диагноз", "treatment": "лечение",
+    "remission": "ремиссия", "recovered": "выздоровление",
+}
+_EPISODE_EVENT_LABELS = {
+    "diagnose": "Поставить диагноз", "treat": "Начать лечение",
+    "recover": "Выздоровление", "remit": "Ремиссия", "relapse": "Рецидив",
+}
+
+# концепты: code -> (name, value-конфиг); name — подпись для UI (секции, чипы)
 CONCEPTS = {
-    "symptom":     ("Симптом", {"schema": SYMPTOM_SCHEMA}),
-    "medication":  ("Лекарство", {}),
-    "allergy":     ("Аллергия", {}),
+    "symptom":     ("Симптомы", {"schema": SYMPTOM_SCHEMA}),
+    "medication":  ("Лекарства", {}),
+    "allergy":     ("Аллергии", {}),
     "heredity":    ("Наследственность", {}),
-    "risk_factor": ("Фактор риска", {}),
+    "risk_factor": ("Факторы риска", {}),
     # профиль здоровья владельца (scope=patient, экран «Моя карта»)
-    "vital":       ("Показатель", {}),           # рост/вес/давление — история темпоральностью
-    "chronic":     ("Хроническое состояние", {}),
+    "vital":       ("Показатели", {}),           # рост/вес/давление — история темпоральностью
+    "chronic":     ("Хронические состояния", {}),
     "blood":       ("Группа крови", {}),
-    "vaccination": ("Прививка", {}),
+    "vaccination": ("Прививки", {}),
     "illness": ("Болезнь", {
         "fsm": {
             "states": ["anamnesis", "diagnosis", "treatment", "remission", "recovered"],
@@ -68,6 +79,8 @@ CONCEPTS = {
                 {"event": "remit",    "source": "treatment",  "dest": "remission"},
                 {"event": "relapse",  "source": "remission",  "dest": "treatment"},
             ],
+            "state_labels": _EPISODE_STATE_LABELS,
+            "event_labels": _EPISODE_EVENT_LABELS,
         },
         # секции полноты: {category-код концепта, scope: episode|patient}
         "required": [
@@ -80,6 +93,7 @@ CONCEPTS = {
             {"category": "social",     "scope": "patient"},
         ],
         "red_flags": ["acs"],   # обработчик — код (@redflag_handler), см. services/medical.py
+        "red_flag_labels": {"acs": "острый коронарный синдром"},
     }),
     "injury": ("Травма", {
         "fsm": {
@@ -90,6 +104,9 @@ CONCEPTS = {
                 {"event": "treat",    "source": "diagnosis", "dest": "treatment"},
                 {"event": "recover",  "source": "treatment", "dest": "recovered"},
             ],
+            # общие подписи эпизода: лишние ключи (remission) безвредны — meta мержит
+            "state_labels": _EPISODE_STATE_LABELS,
+            "event_labels": _EPISODE_EVENT_LABELS,
         },
         "required": [
             {"category": "symptom", "scope": "episode"},
@@ -124,6 +141,11 @@ CONCEPTS = {
                 {"event": "red_flag",        "source": "symptom",      "dest": "emergency"},
                 {"event": "resume",          "source": "emergency",    "dest": "symptom"},
             ],
+            "state_labels": {
+                "complaint": "жалоба", "symptom": "симптомы", "ros": "обзор систем",
+                "history": "анамнез жизни", "completeness": "полнота",
+                "summary": "резюме", "confirmed": "подтверждено", "emergency": "экстренно",
+            },
         },
     }),
 }
@@ -221,10 +243,11 @@ async def seed_medical(db: AsyncSession) -> dict[str, uuid.UUID]:
                                   value=value or None)
             db.add(cat)
             await db.flush()
-        elif (cat.value or None) != (value or None):
-            # конфиг концепта изменился (схема слотов, FSM, required) — обновить:
+        elif (cat.value or None) != (value or None) or cat.name != name:
+            # конфиг или подпись концепта изменились — обновить:
             # сид — источник правды для справочного дерева
             cat.value = value or None
+            cat.name = name
             await db.flush()
         ids[code] = cat.id
 

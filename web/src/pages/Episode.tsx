@@ -201,7 +201,7 @@ export default function Episode() {
             ⚠ Признак возможного угрожающего состояния ({t(RED_FLAGS, x)}) — не откладывайте
             обращение за помощью.</p>)}
           {a.gaps.length > 0 &&
-            <p className="muted">Рассказ пока неполон: {a.gaps.map((g) => t(SECTIONS, g)).join(', ')}.
+            <p className="muted">Рассказ пока неполон: {a.gaps.map((g) => t(SECTIONS, g).toLocaleLowerCase()).join(', ')}.
             Быстрее всего — пройти опрос.</p>}
         </section>
       )}

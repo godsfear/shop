@@ -4,6 +4,7 @@ import {
   ApiError, confirmEmail, enroll, getCare, me, openSession, resendConfirm, setCare,
 } from '../api'
 import { useAuth } from '../auth'
+import { loadMeta } from '../ui'
 
 // Плашка «подтвердите почту»: код из письма; без подтверждения нельзя
 // запрашивать чужие карты (контроль регистрируемых).
@@ -49,7 +50,8 @@ export default function Shell() {
   }, [])
 
   useEffect(() => {
-    if (care || sessionOk) { setReady(true); return }
+    // подписи доменных кодов (/me/meta) — до рендера страниц; при ошибке коды как есть
+    if (care || sessionOk) { loadMeta().finally(() => setReady(true)); return }
     (async () => {
       try {
         await openSession()
@@ -64,8 +66,7 @@ export default function Shell() {
           return
         }
       }
-      setSessionOk(true)
-      setReady(true)
+      setSessionOk(true)   // эффект перезапустится и догрузит meta -> ready
     })()
   }, [care, sessionOk])
 

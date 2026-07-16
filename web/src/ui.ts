@@ -1,32 +1,23 @@
-// Словарь интерфейса: системные коды бэка -> русские подписи.
-// Единственное место маппинга (i18n-задел): новые состояния/события/секции — сюда.
-export const STATES: Record<string, string> = {
-  anamnesis: 'анамнез', diagnosis: 'диагноз', treatment: 'лечение',
-  remission: 'ремиссия', recovered: 'выздоровление',
-  // интервью
-  complaint: 'жалоба', symptom: 'симптомы', ros: 'обзор систем',
-  history: 'анамнез жизни', completeness: 'полнота', summary: 'резюме',
-  confirmed: 'подтверждено', emergency: 'экстренно',
-}
+// Подписи доменных кодов приходят из GET /me/meta — единый источник истины
+// это сид/БД (Category.name + метки в value.fsm). Здесь только кэш и t():
+// доменных текстов во фронте нет; правка подписи в сиде видна без правки кода.
+import { meta } from './api'
 
-export const EVENTS: Record<string, string> = {
-  diagnose: 'Поставить диагноз', treat: 'Начать лечение', recover: 'Выздоровление',
-  remit: 'Ремиссия', relapse: 'Рецидив',
-}
+export const STATES: Record<string, string> = {}
+export const EVENTS: Record<string, string> = {}
+export const KINDS: Record<string, string> = {}     // концепты-эпизоды: болезнь/травма
+export const SECTIONS: Record<string, string> = {}  // все концепты: секции анамнеза/карты
+export const RED_FLAGS: Record<string, string> = {}
 
-export const KINDS: Record<string, string> = { illness: 'болезнь', injury: 'травма' }
-
-// красные флаги (коды из Category.value.red_flags -> services/medical.py)
-export const RED_FLAGS: Record<string, string> = {
-  acs: 'острый коронарный синдром',
-}
-
-export const SECTIONS: Record<string, string> = {
-  symptom: 'симптомы', medication: 'лекарства', allergy: 'аллергии',
-  chronic: 'хронические состояния', heredity: 'наследственность',
-  surgery: 'операции/госпитализации', social: 'социальный анамнез',
-  risk_factor: 'факторы риска', vital: 'показатели',
-  blood: 'группа крови', vaccination: 'прививки',
-}
+let loading: Promise<void> | null = null
+// однократная загрузка (Shell ждёт её до рендера страниц); при ошибке
+// t() отдаёт код как есть — интерфейс живёт, просто без подписей
+export const loadMeta = () => loading ??= meta().then((m) => {
+  Object.assign(STATES, m.states)
+  Object.assign(EVENTS, m.events)
+  Object.assign(KINDS, m.kinds)
+  Object.assign(SECTIONS, m.concepts)
+  Object.assign(RED_FLAGS, m.red_flags)
+}).catch(() => { loading = null })
 
 export const t = (dict: Record<string, string>, code: string) => dict[code] ?? code

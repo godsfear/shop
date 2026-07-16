@@ -25,7 +25,7 @@ function srvText(v: InterviewView, names: Names): string {
     case 'history':
       return `Анамнез жизни — ${t(SECTIONS, q?.section ?? '')}: что отметить?`
     case 'completeness':
-      return `Остались пробелы: ${(q?.gaps ?? []).map((g) => t(SECTIONS, g)).join(', ')}. Заполним?`
+      return `Остались пробелы: ${(q?.gaps ?? []).map((g) => t(SECTIONS, g).toLocaleLowerCase()).join(', ')}. Заполним?`
     case 'summary':
       return 'Резюме собрано. Всё ли верно и полно?'
     case 'emergency':

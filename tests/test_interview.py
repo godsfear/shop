@@ -64,6 +64,16 @@ async def test_main():
     async with Sess() as s:
         await _svc(s, ks, payload).open_session()
 
+    # /me/meta — подписи доменных кодов из сида (единый источник для фронта)
+    async with Sess() as s:
+        m = await _svc(s, ks, payload).meta()
+    assert m['states']['anamnesis'] == 'анамнез' and m['states']['ros'] == 'обзор систем'
+    assert m['events']['diagnose'] == 'Поставить диагноз'
+    assert set(m['kinds']) == {'illness', 'injury'}
+    assert m['red_flags']['acs'] == 'острый коронарный синдром'
+    assert m['concepts']['medication'] == 'Лекарства'
+    print('[ok] /me/meta: подписи состояний/событий/концептов/флагов из сида')
+
     async def episode(code):
         async with Sess() as s:
             ep = await _svc(s, ks, payload).open_episode(

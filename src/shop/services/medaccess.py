@@ -150,6 +150,27 @@ class MedAccessService:
         создания эпизодов/симптомов. Reference-данные (из seed_medical под корнем 'medical')."""
         return await medical_concepts(self.session)
 
+    async def meta(self) -> dict:
+        """Подписи доменных кодов для UI: {concepts, kinds, states, events, red_flags},
+        каждый — {код: подпись}. Единый источник — справочное дерево (сид):
+        правка подписи в БД видна фронту без правки кода.
+        kinds — концепты-эпизоды (определяют fsm+required): чипы «болезнь/травма»."""
+        ids = list((await medical_concepts(self.session)).values())
+        cats = (await self.session.execute(select(tables.Category)
+                .where(tables.Category.id.in_(ids)))).scalars()
+        out: dict[str, dict] = {'concepts': {}, 'kinds': {}, 'states': {},
+                                'events': {}, 'red_flags': {}}
+        for c in cats:
+            out['concepts'][c.code] = c.name
+            v = c.value or {}
+            fsm = v.get('fsm') or {}
+            if fsm and v.get('required'):
+                out['kinds'][c.code] = c.name
+            out['states'].update(fsm.get('state_labels') or {})
+            out['events'].update(fsm.get('event_labels') or {})
+            out['red_flags'].update(v.get('red_flag_labels') or {})
+        return out
+
     async def dictionary(self, concept_code: str) -> list[dict]:
         """Справочник элементов концепта (symptom/system/medication/...) — reference,
         ворот не требует: чипы выбора в интервью и формах."""
