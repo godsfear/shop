@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import {
   getEpisode, renameEpisode, episodeHistory, episodeState, transition, assess,
   episodeProperties, listDocuments, uploadDocument, concepts, dictionary,
-  evaluateEpisode,
+  evaluateEpisode, addEpisodeProperty,
   type Episode as Ep, type FsmState, type Assess, type MedProperty, type Doc,
   type Concepts, type StateLog,
 } from '../api'
@@ -12,7 +12,7 @@ interface Ddx {
   assessments: { condition: string; likelihood: number; rationale: string }[]
   urgent: boolean; note?: string; docs?: number
 }
-interface Workup { tests: { test: string; reason: string }[] }
+interface Workup { tests: { test: string; reason: string; self?: boolean }[] }
 import { EVENTS, RED_FLAGS, SECTIONS, STATES, t } from '../ui'
 import { ui } from '../i18n'
 
@@ -56,6 +56,9 @@ export default function Episode() {
 
   const isAi = (p: MedProperty) => (p.value as { source?: string }).source === 'ai'
 
+  // результаты, внесённые пациентом вручную (самостоятельные пробы и т.п.)
+  const [results, setResults] = useState<MedProperty[]>([])
+
   const reload = async () => {
     try {
       setEp(await getEpisode(id))
@@ -63,6 +66,9 @@ export default function Episode() {
       const props = await episodeProperties(id)
       setSymptoms(props.filter((p) => p.category === cs['symptom'] && !isAi(p)))
       setFinds(props.filter((p) => isAi(p) && p.code !== 'ddx' && p.code !== 'workup'))
+      setResults(props.filter((p) =>
+        (p.value as { source?: string; result?: string }).source === 'patient'
+        && (p.value as { result?: string }).result !== undefined))
       setDdx(props.find((p) => p.code === 'ddx') ?? null)
       setWorkup(props.find((p) => p.code === 'workup') ?? null)
       setHasSummary(props.some((p) => p.code === 'summary'))  // интервью подтверждено
@@ -128,6 +134,34 @@ export default function Episode() {
     try {
       setEp(await renameEpisode(id, newName.trim()))
       setRenaming(false)
+    } catch (e) { setErr((e as Error).message) }
+  }
+
+  // --- действия по конкретному рекомендованному анализу -----------------
+  const [resFor, setResFor] = useState<string | null>(null)  // test, для которого открыт ввод
+  const [resText, setResText] = useState('')
+
+  // текстовый результат = свойство эпизода (concept=analysis, source=patient);
+  // войдёт в диагноз вместе с анамнезом — документ для домашних проб не нужен
+  const saveResult = async (test: string) => {
+    setErr('')
+    try {
+      await addEpisodeProperty(id, {
+        category: cs['analysis'], code: `res-${Date.now()}`, name: test,
+        value: { test, result: resText.trim(), source: 'patient' },
+      })
+      setResFor(null); setResText('')
+      await reload()
+    } catch (e) { setErr((e as Error).message) }
+  }
+
+  // документ по конкретному анализу: имя документа = название анализа
+  const uploadFor = async (test: string, f: File | null) => {
+    if (!f) return
+    setErr('')
+    try {
+      await uploadDocument(f, test, 'doc', cs['analysis'], id)
+      await reload()
     } catch (e) { setErr((e as Error).message) }
   }
 
@@ -206,21 +240,52 @@ export default function Episode() {
         </section>
       )}
 
-      {/* рекомендованные анализы — ИИ подбирает автоматически после анамнеза */}
+      {/* рекомендованные анализы — ИИ ранжирует по ценности и доступности;
+          по каждому можно загрузить документ или вписать результат вручную
+          (домашние пробы документа не дают) */}
       {workup && (() => {
         const w = workup.value as unknown as Workup
         if (!w.tests?.length) return null
         return (
           <section>
             <h3>{ui('Рекомендованные анализы')}</h3>
-            <p className="muted">{ui('ИИ предлагает сдать для уточнения. Загрузите результаты ниже — они войдут в диагноз.')}</p>
+            <p className="muted">{ui('Отранжированы по ценности и доступности. По каждому — загрузите документ с результатом или впишите результат сами; всё войдёт в диагноз.')}</p>
             <ul className="cards">
-              {w.tests.map((x, i) => (
-                <li key={i} className="card">
-                  <b>{x.test}</b>
-                  <div className="muted">{x.reason}</div>
-                </li>
-              ))}
+              {w.tests.map((x, i) => {
+                const done = results.find((r) => (r.value as { test?: string }).test === x.test)
+                const doc = docs.find((d) => d.name === x.test)
+                return (
+                  <li key={i} className="card">
+                    <b>{i + 1}. {x.test}</b>
+                    {x.self && <span className="chip state"> {ui('можно дома')}</span>}
+                    <div className="muted">{x.reason}</div>
+                    {done && <div>✓ {ui('Результат:')}{' '}
+                      {String((done.value as { result?: string }).result ?? '')}</div>}
+                    {doc && !done && <div className="muted">✓ {ui('документ загружен')}</div>}
+                    {!done && resFor !== x.test && (
+                      <div className="inline">
+                        <button className="ghost small" onClick={() => { setResFor(x.test); setResText('') }}>
+                          {ui('Вписать результат')}
+                        </button>
+                        <label className="ghost small btn-file">
+                          {ui('Загрузить документ')}
+                          <input type="file" hidden
+                                 onChange={(e) => uploadFor(x.test, e.target.files?.[0] ?? null)} />
+                        </label>
+                      </div>
+                    )}
+                    {resFor === x.test && (
+                      <div className="inline">
+                        <input value={resText} autoFocus placeholder={ui('что получилось — своими словами')}
+                               onChange={(e) => setResText(e.target.value)}
+                               onKeyDown={(e) => { if (e.key === 'Enter' && resText.trim()) saveResult(x.test) }} />
+                        <button onClick={() => saveResult(x.test)} disabled={!resText.trim()}>{ui('Сохранить')}</button>
+                        <button className="ghost" onClick={() => setResFor(null)}>{ui('Отмена')}</button>
+                      </div>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
           </section>
         )
@@ -247,8 +312,9 @@ export default function Episode() {
               : ui('анамнез и оригиналы загруженных документов уйдут ИИ одной задачей')}
           </span>
         </div>
-        {/* мягкое предупреждение о неполноте: рекомендованы анализы, но документов нет */}
-        {workup && (workup.value as unknown as Workup).tests?.length > 0 && docs.length === 0 &&
+        {/* мягкое предупреждение о неполноте: рекомендованы анализы, а результатов нет */}
+        {workup && (workup.value as unknown as Workup).tests?.length > 0
+          && docs.length === 0 && results.length === 0 &&
           <p className="muted">{ui('Рекомендованные анализы ещё не загружены — оценка будет менее точной.')}</p>}
         {ddx && (() => {
           const v = ddx.value as unknown as Ddx

@@ -90,8 +90,14 @@ const EN: Record<string, string> = {
   'Рассказ пока неполон:': 'The story is still incomplete:',
   'Быстрее всего — пройти опрос.': 'The fastest way is the interview.',
   'Рекомендованные анализы': 'Recommended tests',
-  'ИИ предлагает сдать для уточнения. Загрузите результаты ниже — они войдут в диагноз.':
-    'The AI suggests these to clarify the picture. Upload the results below — they will feed the diagnosis.',
+  'Отранжированы по ценности и доступности. По каждому — загрузите документ с результатом или впишите результат сами; всё войдёт в диагноз.':
+    'Ranked by value and accessibility. For each one, upload a result document or type the result yourself; everything feeds the diagnosis.',
+  'можно дома': 'can do at home',
+  'Результат:': 'Result:',
+  'документ загружен': 'document uploaded',
+  'Вписать результат': 'Type the result',
+  'Загрузить документ': 'Upload a document',
+  'что получилось — своими словами': 'what happened — in your own words',
   'ИИ подбирает анализы по анамнезу…': 'The AI is selecting tests from your history…',
   'Диагноз (оценка ИИ)': 'Diagnosis (AI assessment)',
   'ИИ анализирует…': 'AI is analyzing…',
