@@ -12,7 +12,8 @@ interface Ddx {
   assessments: { condition: string; likelihood: number; rationale: string }[]
   urgent: boolean; note?: string; docs?: number
 }
-interface Workup { tests: { test: string; reason: string; self?: boolean }[] }
+interface WorkupTest { code?: string; test: string; reason: string; self?: boolean }
+interface Workup { tests: WorkupTest[] }
 import { EVENTS, RED_FLAGS, SECTIONS, STATES, t } from '../ui'
 import { ui } from '../i18n'
 
@@ -142,28 +143,34 @@ export default function Episode() {
   const [resText, setResText] = useState('')
 
   // текстовый результат = свойство эпизода (concept=analysis, source=patient);
-  // войдёт в диагноз вместе с анамнезом — документ для домашних проб не нужен
-  const saveResult = async (test: string) => {
+  // войдёт в диагноз вместе с анамнезом — документ для домашних проб не нужен.
+  // Ключ связи с рекомендацией — стабильный code из ответа ИИ (переживает
+  // пересчёт workup); для старых ответов без кода — название.
+  const saveResult = async (x: WorkupTest) => {
     setErr('')
     try {
       await addEpisodeProperty(id, {
-        category: cs['analysis'], code: `res-${Date.now()}`, name: test,
-        value: { test, result: resText.trim(), source: 'patient' },
+        category: cs['analysis'], code: x.code ?? `res-${Date.now()}`, name: x.test,
+        value: { code: x.code, test: x.test, result: resText.trim(), source: 'patient' },
       })
       setResFor(null); setResText('')
       await reload()
     } catch (e) { setErr((e as Error).message) }
   }
 
-  // документ по конкретному анализу: имя документа = название анализа
-  const uploadFor = async (test: string, f: File | null) => {
+  // документ по конкретному анализу: code/имя документа = код/название анализа
+  const uploadFor = async (x: WorkupTest, f: File | null) => {
     if (!f) return
     setErr('')
     try {
-      await uploadDocument(f, test, 'doc', cs['analysis'], id)
+      await uploadDocument(f, x.test, x.code ?? 'doc', cs['analysis'], id)
       await reload()
     } catch (e) { setErr((e as Error).message) }
   }
+
+  // выполнен ли рекомендованный анализ: по коду, иначе по названию
+  const matches = (code: string | null, name: string | null, x: WorkupTest) =>
+    (x.code != null && code === x.code) || name === x.test
 
   const upload = async (e: FormEvent) => {
     e.preventDefault()
@@ -252,8 +259,11 @@ export default function Episode() {
             <p className="muted">{ui('Отранжированы по ценности и доступности. По каждому — загрузите документ с результатом или впишите результат сами; всё войдёт в диагноз.')}</p>
             <ul className="cards">
               {w.tests.map((x, i) => {
-                const done = results.find((r) => (r.value as { test?: string }).test === x.test)
-                const doc = docs.find((d) => d.name === x.test)
+                const done = results.find((r) => {
+                  const v = r.value as { code?: string; test?: string }
+                  return matches(v.code ?? null, v.test ?? null, x)
+                })
+                const doc = docs.find((d) => matches(d.code, d.name, x))
                 return (
                   <li key={i} className="card">
                     <b>{i + 1}. {x.test}</b>
@@ -270,7 +280,7 @@ export default function Episode() {
                         <label className="ghost small btn-file">
                           {ui('Загрузить документ')}
                           <input type="file" hidden
-                                 onChange={(e) => uploadFor(x.test, e.target.files?.[0] ?? null)} />
+                                 onChange={(e) => uploadFor(x, e.target.files?.[0] ?? null)} />
                         </label>
                       </div>
                     )}
@@ -278,8 +288,8 @@ export default function Episode() {
                       <div className="inline">
                         <input value={resText} autoFocus placeholder={ui('что получилось — своими словами')}
                                onChange={(e) => setResText(e.target.value)}
-                               onKeyDown={(e) => { if (e.key === 'Enter' && resText.trim()) saveResult(x.test) }} />
-                        <button onClick={() => saveResult(x.test)} disabled={!resText.trim()}>{ui('Сохранить')}</button>
+                               onKeyDown={(e) => { if (e.key === 'Enter' && resText.trim()) saveResult(x) }} />
+                        <button onClick={() => saveResult(x)} disabled={!resText.trim()}>{ui('Сохранить')}</button>
                         <button className="ghost" onClick={() => setResFor(null)}>{ui('Отмена')}</button>
                       </div>
                     )}
