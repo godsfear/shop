@@ -5,6 +5,7 @@ import {
   type Consent, type Grant,
 } from '../api'
 import { STATES, t } from '../ui'
+import { ui } from '../i18n'
 
 const REQ_STATES: Record<string, string> = {
   requested: 'ожидает решения', approved: 'одобрено',
@@ -33,7 +34,7 @@ export default function Patients() {
     e.preventDefault()
     setErr(''); setSent(false)
     try {
-      await consentRequest(code.trim(), reason.trim() || 'запрос доступа')
+      await consentRequest(code.trim(), reason.trim() || ui('запрос доступа'))
       setCode(''); setReason(''); setSent(true)
       await load()
     } catch (e) { setErr((e as Error).message) }
@@ -46,31 +47,30 @@ export default function Patients() {
 
   return (
     <div>
-      <h2>Доверили мне</h2>
+      <h2>{ui('Доверили мне')}</h2>
       {err && <p className="error">{err}</p>}
 
       <section>
-        <h3>Запросить доступ</h3>
-        <p className="muted">Владелец карты сообщает вам код доступа со страницы
-        «Доступы» и сам одобряет запрос — и может отозвать его в любой момент.</p>
+        <h3>{ui('Запросить доступ')}</h3>
+        <p className="muted">{ui('Владелец карты сообщает вам код доступа со страницы «Доступы» и сам одобряет запрос — и может отозвать его в любой момент.')}</p>
         <form className="inline" onSubmit={request}>
-          <input placeholder="код доступа владельца" value={code}
+          <input placeholder={ui('код доступа владельца')} value={code}
                  onChange={(e) => setCode(e.target.value)} />
-          <input placeholder="представьтесь (видно пациенту)" value={reason}
+          <input placeholder={ui('представьтесь (видно пациенту)')} value={reason}
                  onChange={(e) => setReason(e.target.value)} />
-          <button type="submit" disabled={!code.trim()}>Запросить</button>
+          <button type="submit" disabled={!code.trim()}>{ui('Запросить')}</button>
         </form>
-        {sent && <p className="muted">Запрос отправлен — ждёт решения пациента.</p>}
+        {sent && <p className="muted">{ui('Запрос отправлен — ждёт решения пациента.')}</p>}
       </section>
 
       {mine.length > 0 && (
         <section>
-          <h3>Мои запросы</h3>
+          <h3>{ui('Мои запросы')}</h3>
           <ul className="rows">
             {mine.map((c) => (
               <li key={c.id} className="row-link">
-                <span>{c.reason || 'запрос'}</span>
-                <span className="chip state">{REQ_STATES[c.status] ?? t(STATES, c.status)}</span>
+                <span>{c.reason || ui('запрос')}</span>
+                <span className="chip state">{ui(REQ_STATES[c.status] ?? t(STATES, c.status))}</span>
                 <span className="muted">{new Date(c.begins).toLocaleDateString()}</span>
               </li>
             ))}
@@ -79,14 +79,14 @@ export default function Patients() {
       )}
 
       <section>
-        <h3>Доступные карты</h3>
-        {grants.length === 0 && <p className="muted">Одобренных доступов пока нет.</p>}
+        <h3>{ui('Доступные карты')}</h3>
+        {grants.length === 0 && <p className="muted">{ui('Одобренных доступов пока нет.')}</p>}
         <ul className="cards">
           {grants.map((g) => (
             <li key={g.link_id} className="card">
               <div className="inline">
-                <span>Карта пациента <span className="muted">…{g.link_id.slice(-6)}</span></span>
-                <button onClick={() => open(g)}>Открыть карту</button>
+                <span>{ui('Карта пациента')} <span className="muted">…{g.link_id.slice(-6)}</span></span>
+                <button onClick={() => open(g)}>{ui('Открыть карту')}</button>
               </div>
             </li>
           ))}

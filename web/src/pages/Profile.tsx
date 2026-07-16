@@ -5,6 +5,7 @@ import {
   type Concepts, type DictItem, type MedProperty,
 } from '../api'
 import { SECTIONS, t } from '../ui'
+import { ui } from '../i18n'
 
 // Разделы «Моей карты» в порядке показа; vital — особый (значение+история)
 const PROFILE_SECTIONS = ['vital', 'chronic', 'medication', 'allergy',
@@ -34,7 +35,7 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
     if (!code) return
     try {
       const value: Record<string, unknown> = vital
-        ? { value: val.trim(), unit: UNITS[code] ?? '' }
+        ? { value: val.trim(), unit: ui(UNITS[code] ?? '') }   // единица — на языке ввода
         : { status: 'present' }
       const existing = vital ? items.find((i) => i.code === code) : undefined
       if (existing) await updateProperty(existing.id, { ...existing.value, ...value })
@@ -59,7 +60,7 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
     <section className="tile">
       <header><h3>{t(SECTIONS, concept)}</h3></header>
       {err && <p className="error">{err}</p>}
-      {items.length === 0 && <p className="muted">пока пусто</p>}
+      {items.length === 0 && <p className="muted">{ui('пока пусто')}</p>}
       <ul className="rows">
         {items.map((p) => (
           <li key={p.id}>
@@ -67,9 +68,9 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
               <span>{p.name || names.get(p.code) || p.code}</span>
               {vital && <b>{String(p.value.value ?? '')} {String(p.value.unit ?? '')}</b>}
               {vital && <button className="ghost small" onClick={() => toggleHist(p)}>
-                {hist[p.id] ? 'скрыть' : 'история'}</button>}
+                {hist[p.id] ? ui('скрыть') : ui('история')}</button>}
               <button className="ghost small" style={{ marginLeft: 'auto' }}
-                      onClick={() => close(p)}>закрыть</button>
+                      onClick={() => close(p)}>{ui('закрыть')}</button>
             </div>
             {hist[p.id] && (
               <ul className="rows hist">
@@ -87,16 +88,16 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
       <div className="inline">
         {dict.length > 0 && (
           <select value={picked} onChange={(e) => setPicked(e.target.value)}>
-            <option value="">— из справочника —</option>
+            <option value="">{ui('— из справочника —')}</option>
             {dict.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
           </select>
         )}
-        {!vital && <input placeholder="свой вариант" value={free}
+        {!vital && <input placeholder={ui('свой вариант')} value={free}
                           onChange={(e) => setFree(e.target.value)} />}
-        {vital && <input placeholder="значение" value={val}
+        {vital && <input placeholder={ui('значение')} value={val}
                          onChange={(e) => setVal(e.target.value)} />}
         <button onClick={add} disabled={vital ? !(picked && val.trim()) : !(picked || free.trim())}>
-          {vital ? 'Записать' : 'Добавить'}
+          {vital ? ui('Записать') : ui('Добавить')}
         </button>
       </div>
     </section>
@@ -110,9 +111,8 @@ export default function Profile() {
   useEffect(() => { concepts().then(setCs).catch(() => {}) }, [])
   return (
     <div>
-      <h2>Моя карта</h2>
-      <p className="muted">Постоянные данные о здоровье. Врач увидит их по вашему
-      согласию; опрос при новом эпизоде лишь попросит подтвердить актуальность.</p>
+      <h2>{ui('Моя карта')}</h2>
+      <p className="muted">{ui('Постоянные данные о здоровье. Врач увидит их по вашему согласию; опрос при новом эпизоде лишь попросит подтвердить актуальность.')}</p>
       <div className="tiles">
         {PROFILE_SECTIONS.filter((s) => cs[s]).map((s) =>
           <Section key={s} concept={s} cid={cs[s]} />)}

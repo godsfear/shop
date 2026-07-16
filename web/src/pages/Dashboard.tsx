@@ -5,6 +5,7 @@ import {
   type Episode, type Doc, type Concepts,
 } from '../api'
 import { KINDS, STATES, t } from '../ui'
+import { ui } from '../i18n'
 
 // available пуст -> маршрут завершён: эпизод уходит в «Историю болезни»
 interface EpisodeRow extends Episode { fsm?: string; closed?: boolean }
@@ -47,8 +48,8 @@ export default function Dashboard() {
     concepts().then((c) => {
       setCs(c)
       if (Object.keys(c).length === 0)
-        setErr('Справочник пуст — на сервере не прогнан медицинский сид ' +
-               '(uv run python scripts/bootstrap_dev.py)')
+        setErr(ui('Справочник пуст — на сервере не прогнан медицинский сид') +
+               ' (uv run python scripts/bootstrap_dev.py)')
     }).catch((e) => setErr((e as Error).message))
     load()
   }, [])
@@ -60,7 +61,7 @@ export default function Dashboard() {
     const cat = cs[kind]
     if (!cat) return
     try {
-      const auto = `${t(KINDS, kind)} от ${new Date().toLocaleDateString()}`
+      const auto = `${t(KINDS, kind)} ${ui('от')} ${new Date().toLocaleDateString()}`
       const ep = await createEpisode(cat, `ep-${Date.now()}`,
         auto[0].toUpperCase() + auto.slice(1))
       nav(`/episode/${ep.id}`)
@@ -75,28 +76,28 @@ export default function Dashboard() {
       {err && <p className="error" style={{ gridColumn: '1 / -1' }}>{err}</p>}
 
       <section className="tile">
-        <header><h3>Эпизоды</h3>
+        <header><h3>{ui('Эпизоды')}</h3>
           <button className="ghost" onClick={() => setCreating(!creating)}
                   disabled={!Object.keys(cs).length}>
-            {creating ? 'Отмена' : '+ Новый'}
+            {creating ? ui('Отмена') : ui('+ Новый')}
           </button>
         </header>
         {creating && (
           <div className="inline">
-            <span className="muted">Что случилось?</span>
+            <span className="muted">{ui('Что случилось?')}</span>
             {Object.entries(KINDS).map(([k, label]) => (
               <button key={k} onClick={() => create(k)}>{label}</button>
             ))}
           </div>
         )}
         {active.length === 0 && !creating &&
-          <p className="muted">Сейчас ничего не беспокоит. Заболели или травма — откройте эпизод.</p>}
+          <p className="muted">{ui('Сейчас ничего не беспокоит. Заболели или травма — откройте эпизод.')}</p>}
         <ul className="rows">
           {active.map((ep) => <li key={ep.id}><EpisodeLink ep={ep} /></li>)}
         </ul>
         {closed.length > 0 && (
           <details className="log">
-            <summary>История болезни ({closed.length})</summary>
+            <summary>{ui('История болезни')} ({closed.length})</summary>
             <ul className="rows">
               {closed.map((ep) => <li key={ep.id}><EpisodeLink ep={ep} /></li>)}
             </ul>
@@ -105,8 +106,8 @@ export default function Dashboard() {
       </section>
 
       <section className="tile">
-        <header><h3>Документы</h3></header>
-        {docs.length === 0 && <p className="muted">Анализы и выписки — на странице эпизода.</p>}
+        <header><h3>{ui('Документы')}</h3></header>
+        {docs.length === 0 && <p className="muted">{ui('Анализы и выписки — на странице эпизода.')}</p>}
         <ul className="rows">
           {docs.map((d) => (
             <li key={d.id} className="row-link">
@@ -118,9 +119,9 @@ export default function Dashboard() {
       </section>
 
       {/* перспектива: те же плитки, данные подключатся новыми концептами ядра */}
-      <section className="tile future"><header><h3>Сон</h3></header><p>скоро</p></section>
-      <section className="tile future"><header><h3>Нагрузки</h3></header><p>скоро</p></section>
-      <section className="tile future"><header><h3>Питание</h3></header><p>скоро</p></section>
+      <section className="tile future"><header><h3>{ui('Сон')}</h3></header><p>{ui('скоро')}</p></section>
+      <section className="tile future"><header><h3>{ui('Нагрузки')}</h3></header><p>{ui('скоро')}</p></section>
+      <section className="tile future"><header><h3>{ui('Питание')}</h3></header><p>{ui('скоро')}</p></section>
     </div>
   )
 }

@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { signin } from '../api'
 import { useAuth } from '../auth'
+import { ui } from '../i18n'
+import { LangSwitch } from './Shell'
 
 export default function Login() {
   const { setToken } = useAuth()
@@ -23,15 +25,15 @@ export default function Login() {
 
   return (
     <div className="auth">
-      <h1>Медкарта</h1>
+      <h1>{ui('Медкарта')} <LangSwitch /></h1>
       <form onSubmit={submit}>
-        <h2>Вход</h2>
+        <h2>{ui('Вход')}</h2>
         {err && <p className="error">{err}</p>}
         <input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input type="password" placeholder="пароль" value={password}
+        <input type="password" placeholder={ui('пароль')} value={password}
                onChange={(e) => setPassword(e.target.value)} />
-        <button type="submit">Войти</button>
-        <p className="muted">Нет аккаунта? <Link to="/register">Регистрация</Link></p>
+        <button type="submit">{ui('Войти')}</button>
+        <p className="muted">{ui('Нет аккаунта?')} <Link to="/register">{ui('Регистрация')}</Link></p>
       </form>
     </div>
   )

@@ -4,6 +4,7 @@ import {
   consentRevoke, me,
   type AccessLogEntry, type Consent,
 } from '../api'
+import { ui } from '../i18n'
 
 const LOG_EVENTS: Record<string, string> = {
   'key.unwrap': 'просмотр карты',
@@ -56,34 +57,32 @@ export default function Access() {
 
   return (
     <div>
-      <h2>Доступ к моей карте</h2>
+      <h2>{ui('Доступ к моей карте')}</h2>
       {err && <p className="error">{err}</p>}
 
       <section>
-        <h3>Код доступа</h3>
-        <p className="muted">Сообщите его доверенному лицу (например, врачу) — оно
-        запросит доступ, а решение всегда за вами. Код не раскрывает данные и
-        не является псевдонимом — медзаписи им не адресуются.</p>
+        <h3>{ui('Код доступа')}</h3>
+        <p className="muted">{ui('Сообщите его доверенному лицу (например, врачу) — оно запросит доступ, а решение всегда за вами. Код не раскрывает данные и не является псевдонимом — медзаписи им не адресуются.')}</p>
         <div className="inline">
           <code className="patient-code">{code || '…'}</code>
-          <button className="ghost" onClick={copy}>{copied ? 'Скопирован' : 'Скопировать'}</button>
+          <button className="ghost" onClick={copy}>{copied ? ui('Скопирован') : ui('Скопировать')}</button>
         </div>
       </section>
 
       <section>
-        <h3>Входящие запросы</h3>
-        {incoming.length === 0 && <p className="muted">Новых запросов нет.</p>}
+        <h3>{ui('Входящие запросы')}</h3>
+        {incoming.length === 0 && <p className="muted">{ui('Новых запросов нет.')}</p>}
         <ul className="cards">
           {incoming.map((c) => (
             <li key={c.id} className="card">
-              <p><b>{c.reason || 'без представления'}</b>
+              <p><b>{c.reason || ui('без представления')}</b>
                 <span className="muted"> · {new Date(c.begins).toLocaleDateString()}</span></p>
               <div className="inline">
-                <span className="muted">разрешить на:</span>
+                <span className="muted">{ui('разрешить на:')}</span>
                 {Object.entries(TERMS).map(([label, days]) => (
-                  <button key={label} onClick={() => decide(c, days)}>{label}</button>
+                  <button key={label} onClick={() => decide(c, days)}>{ui(label)}</button>
                 ))}
-                <button className="ghost" onClick={() => decide(c, 'deny')}>Отказать</button>
+                <button className="ghost" onClick={() => decide(c, 'deny')}>{ui('Отказать')}</button>
               </div>
             </li>
           ))}
@@ -91,16 +90,14 @@ export default function Access() {
       </section>
 
       <section>
-        <h3>Журнал доступов</h3>
-        <p className="muted">Каждый разворот доступа к карте пишется в защищённый
-        от подделки журнал (включая отказы и экстренные доступы). Повторные
-        обращения в пределах ~5 минут не дублируются.</p>
-        {log.length === 0 && <p className="muted">записей пока нет</p>}
+        <h3>{ui('Журнал доступов')}</h3>
+        <p className="muted">{ui('Каждый разворот доступа к карте пишется в защищённый от подделки журнал (включая отказы и экстренные доступы). Повторные обращения в пределах ~5 минут не дублируются.')}</p>
+        {log.length === 0 && <p className="muted">{ui('записей пока нет')}</p>}
         <ul className="rows">
           {log.map((e, i) => (
             <li key={i} className="row-link">
               <span className={e.event === 'key.unwrap' ? '' : 'error'}>
-                {LOG_EVENTS[e.event] ?? e.event}</span>
+                {ui(LOG_EVENTS[e.event] ?? e.event)}</span>
               <span>{e.who}</span>
               <span className="muted">{new Date(e.at).toLocaleString()}</span>
             </li>
@@ -109,16 +106,16 @@ export default function Access() {
       </section>
 
       <section>
-        <h3>Кто видит карту</h3>
-        {granted.length === 0 && <p className="muted">Доступов нет — карту видите только вы.</p>}
+        <h3>{ui('Кто видит карту')}</h3>
+        {granted.length === 0 && <p className="muted">{ui('Доступов нет — карту видите только вы.')}</p>}
         <ul className="cards">
           {granted.map((c) => (
             <li key={c.id} className="card">
-              <p><b>{c.reason || 'доступ'}</b>
+              <p><b>{c.reason || ui('доступ')}</b>
                 <span className="muted"> · {c.until
-                  ? 'до ' + new Date(c.until).toLocaleDateString() : 'бессрочно'}</span></p>
+                  ? ui('до') + ' ' + new Date(c.until).toLocaleDateString() : ui('бессрочно')}</span></p>
               <div className="inline">
-                <button className="ghost" onClick={() => revoke(c)}>Отозвать</button>
+                <button className="ghost" onClick={() => revoke(c)}>{ui('Отозвать')}</button>
               </div>
             </li>
           ))}

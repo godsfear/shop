@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { signup } from '../api'
 import { useAuth } from '../auth'
+import { ui } from '../i18n'
+import { LangSwitch } from './Shell'
 
 export default function Register() {
   const { setToken } = useAuth()
@@ -26,25 +28,25 @@ export default function Register() {
 
   return (
     <div className="auth">
-      <h1>Медкарта</h1>
+      <h1>{ui('Медкарта')} <LangSwitch /></h1>
       <form onSubmit={submit}>
-        <h2>Регистрация</h2>
+        <h2>{ui('Регистрация')}</h2>
         {err && <p className="error">{err}</p>}
         <input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input type="password" placeholder="пароль (≥8 символов)" value={password}
+        <input type="password" placeholder={ui('пароль (≥8 символов)')} value={password}
                onChange={(e) => setPassword(e.target.value)} />
-        <input placeholder="фамилия" value={last} onChange={(e) => setLast(e.target.value)} />
-        <label className="row">Пол
+        <input placeholder={ui('фамилия')} value={last} onChange={(e) => setLast(e.target.value)} />
+        <label className="row">{ui('Пол')}
           <select value={sex} onChange={(e) => setSex(e.target.value)}>
-            <option value="true">муж</option>
-            <option value="false">жен</option>
+            <option value="true">{ui('муж')}</option>
+            <option value="false">{ui('жен')}</option>
           </select>
         </label>
-        <label className="row">Дата рождения
+        <label className="row">{ui('Дата рождения')}
           <input type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} />
         </label>
-        <button type="submit">Создать аккаунт</button>
-        <p className="muted">Уже есть аккаунт? <Link to="/login">Вход</Link></p>
+        <button type="submit">{ui('Создать аккаунт')}</button>
+        <p className="muted">{ui('Уже есть аккаунт?')} <Link to="/login">{ui('Вход')}</Link></p>
       </form>
     </div>
   )

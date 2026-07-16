@@ -42,6 +42,8 @@ function authHeaders(extra?: HeadersInit): Headers {
   const h = new Headers(extra)
   const token = localStorage.getItem('token')
   if (token) h.set('Authorization', `Bearer ${token}`)
+  // бэк отвечает на языке запроса (подписи, вопросы интервью, ИИ)
+  h.set('Accept-Language', localStorage.getItem('lang') ?? 'ru')
   return h
 }
 

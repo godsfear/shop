@@ -14,6 +14,7 @@ interface Ddx {
 }
 interface Workup { tests: { test: string; reason: string }[] }
 import { EVENTS, RED_FLAGS, SECTIONS, STATES, t } from '../ui'
+import { ui } from '../i18n'
 
 // Таймлайн жизненного цикла: полный маршрут из fsm.states, текущее — акцентом
 function Timeline({ fsm }: { fsm: FsmState }) {
@@ -145,19 +146,19 @@ export default function Episode() {
 
   return (
     <div>
-      <p><Link to="/">← сегодня</Link></p>
+      <p><Link to="/">{ui('← сегодня')}</Link></p>
       {renaming ? (
         <div className="inline">
-          <input value={newName} autoFocus placeholder="диагноз / название"
+          <input value={newName} autoFocus placeholder={ui('диагноз / название')}
                  onChange={(e) => setNewName(e.target.value)} />
-          <button onClick={rename} disabled={!newName.trim()}>Сохранить</button>
-          <button className="ghost" onClick={() => setRenaming(false)}>Отмена</button>
+          <button onClick={rename} disabled={!newName.trim()}>{ui('Сохранить')}</button>
+          <button className="ghost" onClick={() => setRenaming(false)}>{ui('Отмена')}</button>
         </div>
       ) : (
-        <h2>{ep?.name || ep?.code || 'Эпизод'}{' '}
+        <h2>{ep?.name || ep?.code || ui('Эпизод')}{' '}
           <button className="ghost small"
                   onClick={() => { setNewName(ep?.name ?? ''); setRenaming(true) }}>
-            переименовать
+            {ui('переименовать')}
           </button>
         </h2>
       )}
@@ -168,18 +169,18 @@ export default function Episode() {
         <div className="inline">
           {/* сбор анамнеза — основной путь на этапе «анамнез» */}
           {fsm?.state === 'anamnesis' &&
-            <Link to={`/episode/${id}/interview`}><button>Пройти опрос (анамнез)</button></Link>}
+            <Link to={`/episode/${id}/interview`}><button>{ui('Пройти опрос (анамнез)')}</button></Link>}
           {fsm && fsm.state !== 'anamnesis' &&
-            <Link to={`/episode/${id}/interview`} className="muted">интервью</Link>}
+            <Link to={`/episode/${id}/interview`} className="muted">{ui('интервью')}</Link>}
           {fsm?.available.map((ev) => (
             <button key={ev} className={fsm.state === 'anamnesis' ? 'ghost' : ''}
                     onClick={() => fire(ev)}>{t(EVENTS, ev)}</button>
           ))}
-          {fsm && fsm.available.length === 0 && <span className="muted">маршрут завершён</span>}
+          {fsm && fsm.available.length === 0 && <span className="muted">{ui('маршрут завершён')}</span>}
         </div>
         {log.length > 0 && (
           <details className="log">
-            <summary>Журнал ({log.length})</summary>
+            <summary>{ui('Журнал')} ({log.length})</summary>
             <ul className="rows">
               {log.map((r, i) => (
                 <li key={i} className="row-link">
@@ -196,13 +197,12 @@ export default function Episode() {
       {/* показывается, только когда есть что дополнить или тревога */}
       {a && (a.alerts.length > 0 || a.gaps.length > 0) && (
         <section>
-          <h3>Стоит дополнить</h3>
+          <h3>{ui('Стоит дополнить')}</h3>
           {a.alerts.map((x) => <p key={x} className="alert">
-            ⚠ Признак возможного угрожающего состояния ({t(RED_FLAGS, x)}) — не откладывайте
-            обращение за помощью.</p>)}
+            ⚠ {ui('Признак возможного угрожающего состояния')} ({t(RED_FLAGS, x)}) {ui('— не откладывайте обращение за помощью.')}</p>)}
           {a.gaps.length > 0 &&
-            <p className="muted">Рассказ пока неполон: {a.gaps.map((g) => t(SECTIONS, g).toLocaleLowerCase()).join(', ')}.
-            Быстрее всего — пройти опрос.</p>}
+            <p className="muted">{ui('Рассказ пока неполон:')} {a.gaps.map((g) => t(SECTIONS, g).toLocaleLowerCase()).join(', ')}.{' '}
+            {ui('Быстрее всего — пройти опрос.')}</p>}
         </section>
       )}
 
@@ -212,9 +212,8 @@ export default function Episode() {
         if (!w.tests?.length) return null
         return (
           <section>
-            <h3>Рекомендованные анализы</h3>
-            <p className="muted">ИИ предлагает сдать для уточнения. Загрузите
-            результаты ниже — они войдут в диагноз.</p>
+            <h3>{ui('Рекомендованные анализы')}</h3>
+            <p className="muted">{ui('ИИ предлагает сдать для уточнения. Загрузите результаты ниже — они войдут в диагноз.')}</p>
             <ul className="cards">
               {w.tests.map((x, i) => (
                 <li key={i} className="card">
@@ -230,34 +229,32 @@ export default function Episode() {
       {/* анализы ещё подбираются (шина обрабатывает событие после подтверждения) */}
       {!workup && workupPending && (
         <section>
-          <h3>Рекомендованные анализы</h3>
-          <p className="muted parsing">ИИ подбирает анализы по анамнезу…</p>
+          <h3>{ui('Рекомендованные анализы')}</h3>
+          <p className="muted parsing">{ui('ИИ подбирает анализы по анамнезу…')}</p>
         </section>
       )}
 
       <section>
-        <h3>Диагноз (оценка ИИ)</h3>
+        <h3>{ui('Диагноз (оценка ИИ)')}</h3>
         <div className="inline">
           {/* диагноз по неполному анамнезу вводит в заблуждение — сначала опрос */}
           <button onClick={evaluate} disabled={evaluating || !a || a.gaps.length > 0}>
-            {evaluating ? 'ИИ анализирует…' : (ddx ? 'Пересчитать диагноз' : 'Диагноз')}
+            {evaluating ? ui('ИИ анализирует…') : (ddx ? ui('Пересчитать диагноз') : ui('Диагноз'))}
           </button>
           <span className="muted">
             {a && a.gaps.length > 0
-              ? 'станет доступно после сбора анамнеза — пройдите опрос'
-              : 'анамнез и оригиналы загруженных документов уйдут ИИ одной задачей'}
+              ? ui('станет доступно после сбора анамнеза — пройдите опрос')
+              : ui('анамнез и оригиналы загруженных документов уйдут ИИ одной задачей')}
           </span>
         </div>
         {/* мягкое предупреждение о неполноте: рекомендованы анализы, но документов нет */}
         {workup && (workup.value as unknown as Workup).tests?.length > 0 && docs.length === 0 &&
-          <p className="muted">Рекомендованные анализы ещё не загружены — оценка
-          будет менее точной.</p>}
+          <p className="muted">{ui('Рекомендованные анализы ещё не загружены — оценка будет менее точной.')}</p>}
         {ddx && (() => {
           const v = ddx.value as unknown as Ddx
           return (
             <div className="card resume">
-              {v.urgent && <p className="alert">⚠ Данные указывают на возможное угрожающее
-                состояние — не откладывайте обращение за помощью.</p>}
+              {v.urgent && <p className="alert">{ui('⚠ Данные указывают на возможное угрожающее состояние — не откладывайте обращение за помощью.')}</p>}
               <ol className="ddx">
                 {v.assessments.map((x, i) => (
                   <li key={i}>
@@ -268,8 +265,7 @@ export default function Episode() {
                 ))}
               </ol>
               {v.note && <p className="muted">{v.note}</p>}
-              <p className="muted disclaimer">Предварительная оценка ИИ — не диагноз
-              и не заменяет осмотр врача. Обсудите результат со специалистом.</p>
+              <p className="muted disclaimer">{ui('Предварительная оценка ИИ — не диагноз и не заменяет осмотр врача. Обсудите результат со специалистом.')}</p>
             </div>
           )
         })()}
@@ -278,13 +274,13 @@ export default function Episode() {
       {/* жалобы вносятся опросом (анамнез) — ручного ввода кодов нет */}
       {symptoms.length > 0 && (
         <section>
-          <h3>Жалобы</h3>
+          <h3>{ui('Жалобы')}</h3>
           <ul className="cards">
             {symptoms.map((s) => (
               <li key={s.id} className="card">
                 <b>{s.name || symNames[s.code] || s.code}</b>
                 {(s.value as { status?: string }).status === 'absent' &&
-                  <span className="muted"> — отсутствует (значимо)</span>}
+                  <span className="muted"> {ui('— отсутствует (значимо)')}</span>}
                 <span className="muted"> · {String((s.value as { source?: string }).source ?? '')}</span>
               </li>
             ))}
@@ -293,14 +289,13 @@ export default function Episode() {
       )}
 
       <section>
-        <h3>Документы</h3>
-        <p className="muted">Результаты анализов и обследований. Читаются ИИ при
-        нажатии «Диагноз» (оригиналы), не разбираются при загрузке.</p>
+        <h3>{ui('Документы')}</h3>
+        <p className="muted">{ui('Результаты анализов и обследований. Читаются ИИ при нажатии «Диагноз» (оригиналы), не разбираются при загрузке.')}</p>
         <form className="inline" onSubmit={upload}>
           <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-          <input placeholder="название" value={docName}
+          <input placeholder={ui('название')} value={docName}
                  onChange={(e) => setDocName(e.target.value)} />
-          <button type="submit" disabled={!file}>Загрузить</button>
+          <button type="submit" disabled={!file}>{ui('Загрузить')}</button>
         </form>
         <ul className="cards">
           {docs.map((d) => (
@@ -315,7 +310,7 @@ export default function Episode() {
               const v = f.value as { kind?: string; text?: string; value?: string; unit?: string }
               return (
                 <li key={f.id} className="card find">
-                  <span className="chip state">ИИ</span> <b>{f.code}</b>
+                  <span className="chip state">{ui('ИИ')}</span> <b>{f.code}</b>
                   {v.kind && <span className="muted"> · {v.kind}</span>}
                   {v.text && <div className="muted">{v.text}</div>}
                   {v.value && <div>{v.value} {v.unit ?? ''}</div>}

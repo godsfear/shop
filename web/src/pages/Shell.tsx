@@ -5,6 +5,18 @@ import {
 } from '../api'
 import { useAuth } from '../auth'
 import { loadMeta } from '../ui'
+import { getLang, setLang, ui } from '../i18n'
+
+// Переключатель языка: показывает, НА ЧТО переключить; смена перезагружает
+// страницу (данные перезапрашиваются с новым Accept-Language)
+export function LangSwitch({ className = '' }: { className?: string }) {
+  const other = getLang() === 'ru' ? 'en' : 'ru'
+  return (
+    <button className={`ghost ${className}`} onClick={() => setLang(other)}>
+      {other.toUpperCase()}
+    </button>
+  )
+}
 
 // Плашка «подтвердите почту»: код из письма; без подтверждения нельзя
 // запрашивать чужие карты (контроль регистрируемых).
@@ -18,16 +30,16 @@ function ConfirmBanner({ onDone }: { onDone: () => void }) {
   }
   const resend = async () => {
     setMsg('')
-    try { await resendConfirm(); setMsg('код отправлен повторно') }
+    try { await resendConfirm(); setMsg(ui('код отправлен повторно')) }
     catch (e) { setMsg((e as Error).message) }
   }
   return (
     <div className="confirm-banner">
-      <span>Подтвердите почту — код в письме.</span>
-      <input placeholder="код из письма" value={code} inputMode="numeric"
+      <span>{ui('Подтвердите почту — код в письме.')}</span>
+      <input placeholder={ui('код из письма')} value={code} inputMode="numeric"
              onChange={(e) => setCode(e.target.value)} />
-      <button onClick={submit} disabled={!code.trim()}>Подтвердить</button>
-      <button className="ghost" onClick={resend}>Выслать снова</button>
+      <button onClick={submit} disabled={!code.trim()}>{ui('Подтвердить')}</button>
+      <button className="ghost" onClick={resend}>{ui('Выслать снова')}</button>
       {msg && <span className="msg-note">{msg}</span>}
     </div>
   )
@@ -60,9 +72,9 @@ export default function Shell() {
           try {
             await enroll()          // учётка старше автовыпуска — довыпустить ключи
             await openSession()
-          } catch (e2) { setStatus('не удалось открыть карту: ' + (e2 as Error).message); return }
+          } catch (e2) { setStatus(ui('не удалось открыть карту:') + ' ' + (e2 as Error).message); return }
         } else {
-          setStatus('нет связи с сервером: ' + (e as Error).message)
+          setStatus(ui('нет связи с сервером:') + ' ' + (e as Error).message)
           return
         }
       }
@@ -76,23 +88,24 @@ export default function Shell() {
   return (
     <div className="app">
       <header>
-        <NavLink to="/" className="brand" end>здоровье</NavLink>
+        <NavLink to="/" className="brand" end>{ui('здоровье')}</NavLink>
         <nav className="topnav">
-          <NavLink to="/" end>Сегодня</NavLink>
-          <NavLink to="/profile">Моя карта</NavLink>
-          <NavLink to="/access">Доступы</NavLink>
-          <NavLink to="/patients">Доверили мне</NavLink>
+          <NavLink to="/" end>{ui('Сегодня')}</NavLink>
+          <NavLink to="/profile">{ui('Моя карта')}</NavLink>
+          <NavLink to="/access">{ui('Доступы')}</NavLink>
+          <NavLink to="/patients">{ui('Доверили мне')}</NavLink>
         </nav>
-        <button className="ghost right" onClick={logout}>Выйти</button>
+        <LangSwitch className="right" />
+        <button className="ghost" onClick={logout}>{ui('Выйти')}</button>
       </header>
       {care && (
         <div className="care-banner">
-          Карта пациента …{care.link_id.slice(-6)} — доступ по согласию
-          <button className="ghost" onClick={leaveCare}>Выйти из карты</button>
+          {ui('Карта пациента')} …{care.link_id.slice(-6)} {ui('— доступ по согласию')}
+          <button className="ghost" onClick={leaveCare}>{ui('Выйти из карты')}</button>
         </div>
       )}
       {!confirmed && <ConfirmBanner onDone={() => setConfirmed(true)} />}
-      <main>{ready ? <Outlet /> : <p className="muted">{status || 'открываю сессию…'}</p>}</main>
+      <main>{ready ? <Outlet /> : <p className="muted">{status || ui('открываю сессию…')}</p>}</main>
     </div>
   )
 }
