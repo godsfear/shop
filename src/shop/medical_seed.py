@@ -18,19 +18,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import tables
 
 # 11-слотовая схема разбора жалобы (OPQRST/SOCRATES + расширение).
-# label — вопрос пациенту как есть: человеческим языком, без мед. жаргона.
+# label — вопрос пациенту как есть: человеческим языком, без мед. жаргона;
+# short — короткая подпись слота для развёрнутого анамнеза (эпизод, врач).
 SYMPTOM_SCHEMA = [
-    {"code": "onset",       "label": "Когда это началось — и как: внезапно или постепенно?"},
-    {"code": "site",        "label": "Где именно ощущается? Опишите место"},
-    {"code": "character",   "label": "На что похоже ощущение — ноет, жжёт, давит, колет?"},
-    {"code": "severity",    "label": "Насколько сильно, по шкале от 0 до 10?"},
-    {"code": "time",        "label": "Как меняется со временем — постоянно, приступами, лучше или хуже?"},
-    {"code": "provocation", "label": "Что это вызывает или усиливает?"},
-    {"code": "palliation",  "label": "Что облегчает? Что уже пробовали?"},
-    {"code": "radiation",   "label": "Отдаёт ли куда-то ещё — в руку, спину, ногу?"},
-    {"code": "associations", "label": "Что ещё появилось одновременно с этим?"},
-    {"code": "impact",      "label": "Мешает ли это спать, работать, заниматься обычными делами?"},
-    {"code": "previous",    "label": "Случалось ли такое раньше? Чем тогда закончилось?"},
+    {"code": "onset",       "short": "начало",
+     "label": "Когда это началось — и как: внезапно или постепенно?"},
+    {"code": "site",        "short": "локализация",
+     "label": "Где именно ощущается? Опишите место"},
+    {"code": "character",   "short": "характер",
+     "label": "На что похоже ощущение — ноет, жжёт, давит, колет?"},
+    {"code": "severity",    "short": "интенсивность",
+     "label": "Насколько сильно, по шкале от 0 до 10?"},
+    {"code": "time",        "short": "динамика",
+     "label": "Как меняется со временем — постоянно, приступами, лучше или хуже?"},
+    {"code": "provocation", "short": "что провоцирует",
+     "label": "Что это вызывает или усиливает?"},
+    {"code": "palliation",  "short": "что облегчает",
+     "label": "Что облегчает? Что уже пробовали?"},
+    {"code": "radiation",   "short": "иррадиация",
+     "label": "Отдаёт ли куда-то ещё — в руку, спину, ногу?"},
+    {"code": "associations", "short": "сопутствующие",
+     "label": "Что ещё появилось одновременно с этим?"},
+    {"code": "impact",      "short": "влияние на жизнь",
+     "label": "Мешает ли это спать, работать, заниматься обычными делами?"},
+    {"code": "previous",    "short": "ранее случалось",
+     "label": "Случалось ли такое раньше? Чем тогда закончилось?"},
 ]
 
 # слоты локализации/характера боли — неуместны для нелокализованных жалоб
@@ -238,6 +250,13 @@ SLOTS_EN = {
     "impact":      "Does it interfere with sleep, work, daily activities?",
     "previous":    "Has this happened before? How did it end then?",
 }
+SLOT_SHORT_EN = {
+    "onset": "onset", "site": "location", "character": "character",
+    "severity": "severity", "time": "time course", "provocation": "triggers",
+    "palliation": "relief", "radiation": "radiation",
+    "associations": "associated", "impact": "impact on life",
+    "previous": "previous episodes",
+}
 EPISODE_STATES_EN = {"anamnesis": "history taking", "diagnosis": "diagnosis",
                      "treatment": "treatment", "remission": "remission",
                      "recovered": "recovered"}
@@ -394,6 +413,8 @@ async def _seed_translations(db: AsyncSession, ids: dict, entity_ids: dict) -> N
         await tr("category", ids[code], "name", name_en)
     for code, text_en in SLOTS_EN.items():
         await tr("category", ids["symptom"], f"slot.{code}", text_en)
+    for code, text_en in SLOT_SHORT_EN.items():
+        await tr("category", ids["symptom"], f"slot_short.{code}", text_en)
     # метки эпизодных FSM — на каждом виде эпизода (meta читает по-категорийно)
     for kind in ("illness", "injury"):
         for code, label in EPISODE_STATES_EN.items():

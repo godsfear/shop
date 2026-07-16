@@ -189,7 +189,7 @@ export interface DictItem { code: string; name: string }
 export const dictionary = (concept: string) => req<DictItem[]>(`/me/dictionary/${concept}`)
 
 // подписи доменных кодов (единый источник — БД), см. ui.ts/loadMeta
-export type Meta = Record<'concepts' | 'kinds' | 'states' | 'events' | 'red_flags',
+export type Meta = Record<'concepts' | 'kinds' | 'states' | 'events' | 'red_flags' | 'slots',
   Record<string, string>>
 export const meta = () => req<Meta>('/me/meta')
 

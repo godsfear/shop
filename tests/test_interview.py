@@ -72,7 +72,8 @@ async def test_main():
     assert set(m['kinds']) == {'illness', 'injury'}
     assert m['red_flags']['acs'] == 'острый коронарный синдром'
     assert m['concepts']['medication'] == 'Лекарства'
-    print('[ok] /me/meta: подписи состояний/событий/концептов/флагов из сида')
+    assert m['slots']['onset'] == 'начало' and m['slots']['severity'] == 'интенсивность'
+    print('[ok] /me/meta: подписи состояний/событий/концептов/флагов/слотов из сида')
 
     # то же на en: переводы из Translation (Accept-Language -> lang)
     async with Sess() as s:
@@ -85,6 +86,7 @@ async def test_main():
     assert me['red_flags']['acs'] == 'acute coronary syndrome'
     assert me['concepts']['medication'] == 'Medications'
     assert {'code': 'headache', 'name': 'Headache'} in d
+    assert me['slots']['site'] == 'location'
     print('[ok] /me/meta + словарь на en: переводы из Translation')
 
     # словарь скрывает не соответствующее полу владельца (пациент — мужчина)

@@ -14,7 +14,7 @@ interface Ddx {
 }
 interface WorkupTest { code?: string; test: string; reason: string; self?: boolean }
 interface Workup { tests: WorkupTest[] }
-import { EVENTS, RED_FLAGS, SECTIONS, STATES, t } from '../ui'
+import { EVENTS, RED_FLAGS, SECTIONS, SLOTS, STATES, t } from '../ui'
 import { ui } from '../i18n'
 
 // Таймлайн жизненного цикла: полный маршрут из fsm.states, текущее — акцентом
@@ -264,7 +264,31 @@ export default function Episode() {
             <h3>{ui('Анамнез (резюме опроса)')}</h3>
             <div className="card resume">
               <p><b>{ui('Главная жалоба:')}</b> {nm(v.chief_complaint ?? '')}</p>
-              <p><b>{ui('Симптомы:')}</b> {Object.keys(v.symptoms ?? {}).map(nm).join(', ') || '—'}</p>
+              {/* развёрнутый анамнез: каждый симптом раскрывается в слоты OPQRST */}
+              <p><b>{ui('Симптомы:')}</b></p>
+              {Object.entries(v.symptoms ?? {}).map(([c, slots]) => {
+                const sl = (slots ?? {}) as Record<string, unknown>
+                const fmt = (s: string) => {
+                  const val = sl[s]
+                  if (Array.isArray(val)) return val.length ? val.map(nm).join(', ') : '—'
+                  if (s === 'severity') return `${val}/10`
+                  return String(val)
+                }
+                const answered = Object.keys(SLOTS).filter((s) => sl[s] !== undefined)
+                return (
+                  <details key={c} className="log">
+                    <summary>{nm(c)}</summary>
+                    <ul className="rows">
+                      {answered.map((s) => (
+                        <li key={s} className="row-link">
+                          <span className="muted">{t(SLOTS, s)}</span>
+                          <span>{fmt(s)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )
+              })}
               {(v.negatives?.length ?? 0) > 0 &&
                 <p><b>{ui('Отрицания:')}</b> {v.negatives!.map(nm).join(', ')}</p>}
               <p><b>{ui('Обзор систем:')}</b> {positive.length === 0

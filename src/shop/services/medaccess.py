@@ -167,11 +167,15 @@ class MedAccessService:
         tr = {} if self.lang == BASE_LANG else \
             await resolve(self.session, 'category', ids, self.lang)
         out: dict[str, dict] = {'concepts': {}, 'kinds': {}, 'states': {},
-                                'events': {}, 'red_flags': {}}
+                                'events': {}, 'red_flags': {}, 'slots': {}}
         for c in cats:
             name = tr.get((c.id, 'name'), c.name)
             out['concepts'][c.code] = name
             v = c.value or {}
+            # короткие подписи слотов анамнеза (развёрнутое резюме у эпизода)
+            for s in (v.get('schema') or []):
+                out['slots'][s['code']] = tr.get(
+                    (c.id, f"slot_short.{s['code']}"), s.get('short', s['code']))
             fsm = v.get('fsm') or {}
             if fsm and v.get('required'):
                 out['kinds'][c.code] = name
