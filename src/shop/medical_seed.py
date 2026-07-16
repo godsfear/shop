@@ -36,7 +36,7 @@ SYMPTOM_SCHEMA = [
 # слоты локализации/характера боли — неуместны для нелокализованных жалоб
 _LOCALIZED_SLOTS = {"site", "character", "radiation"}
 # нелокализованные (системные) жалобы: нет «где», «на что похоже», «отдаёт ли»
-SYSTEMIC_SYMPTOMS = {"dizziness", "nausea", "fever", "weakness", "cough", "dyspnea"}
+SYSTEMIC_SYMPTOMS = {"dizziness", "nausea", "fever", "chills", "weakness", "cough", "dyspnea"}
 
 
 def symptom_slots(code: str) -> list[str]:
@@ -155,7 +155,9 @@ DICTIONARY = {
     "symptom": [
         ("headache", "Головная боль"), ("cough", "Кашель"),
         ("chest_pain", "Боль в груди"), ("dyspnea", "Одышка"),
-        ("fever", "Лихорадка"), ("nausea", "Тошнота"),
+        # «лихорадка» — жаргон, пациент читает неоднозначно (озноб?)
+        ("fever", "Повышенная температура (жар)"), ("chills", "Озноб"),
+        ("nausea", "Тошнота"),
         ("dizziness", "Головокружение"), ("rash", "Сыпь"),
         ("numbness", "Онемение"), ("weakness", "Слабость"),
     ],
@@ -245,7 +247,8 @@ RED_FLAGS_EN = {"acs": "acute coronary syndrome"}
 DICTIONARY_EN = {
     "symptom": {
         "headache": "Headache", "cough": "Cough", "chest_pain": "Chest pain",
-        "dyspnea": "Shortness of breath", "fever": "Fever", "nausea": "Nausea",
+        "dyspnea": "Shortness of breath", "fever": "Fever (high temperature)",
+        "chills": "Chills", "nausea": "Nausea",
         "dizziness": "Dizziness", "rash": "Rash", "numbness": "Numbness",
         "weakness": "Weakness",
     },
@@ -341,16 +344,17 @@ async def seed_medical(db: AsyncSession) -> dict[str, uuid.UUID]:
     for kind, items in DICTIONARY.items():
         kind_id = ids[kind]
         for code, name in items:
-            exists = (await db.execute(select(tables.Entity.id).where(
+            row = (await db.execute(select(tables.Entity).where(
                 tables.Entity.category == kind_id,
-                tables.Entity.code == code))).scalar_one_or_none()
-            if exists is None:
+                tables.Entity.code == code))).scalars().first()
+            if row is None:
                 row = tables.Entity(category=kind_id, code=code, name=name,
                                     table="category", objectid=root.id)
                 db.add(row)
                 await db.flush()
-                exists = row.id
-            entity_ids[(kind, code)] = exists
+            elif row.name != name:
+                row.name = name     # подпись изменилась — сид истина и для словаря
+            entity_ids[(kind, code)] = row.id
 
     await _seed_translations(db, ids, entity_ids)
     await db.commit()
