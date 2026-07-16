@@ -34,7 +34,7 @@ class OperationService:
                      creator: uuid.UUID | None = None) -> tables.Operation:
         if data.debit == data.credit:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='дебет и кредит — один и тот же счёт')
+                                detail='same_account')
         rows = (await self.session.execute(
             select(tables.Account.id, tables.Account.currency)
             .where(tables.Account.id.in_((data.debit, data.credit))))).all()
@@ -42,21 +42,19 @@ class OperationService:
         for side, account_id in (('debit', data.debit), ('credit', data.credit)):
             if account_id not in currencies:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                    detail=f'счёт {side} не найден')
+                                    detail=f'account_not_found: {side}')
         if currencies[data.debit] == currencies[data.credit]:
             # одна валюта: суммы сторон обязаны совпадать
             if data.amount_cr is not None and data.amount_cr != data.amount_db:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                    detail='счета в одной валюте: amount_cr должен '
-                                           'совпадать с amount_db (или не указываться)')
+                                    detail='same_currency_amounts')
             amount_cr = data.amount_db
         else:
             # кросс-валютная: сумма в валюте кредита обязательна (курс фиксирует
             # вызывающий; сверка со справочником Rate — на его стороне)
             if data.amount_cr is None:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                    detail='кросс-валютная проводка: укажите amount_cr — '
-                                           'сумму в валюте кредит-счёта')
+                                    detail='amount_cr_required')
             amount_cr = data.amount_cr
         operation = tables.Operation(**data.model_dump(exclude={'amount_cr'}),
                                      amount_cr=amount_cr, creator=creator)
@@ -78,7 +76,7 @@ class OperationService:
             select(tables.Account.id).where(tables.Account.id == account_id))
         ).scalar_one_or_none()
         if exists is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='счёт не найден')
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='account_not_found')
         value = (await self.session.execute(
             select(tables.Balance.value).where(tables.Balance.account == account_id))
         ).scalar_one_or_none()

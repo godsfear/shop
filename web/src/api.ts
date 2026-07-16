@@ -1,5 +1,7 @@
 // Тонкая обёртка над бэкенд-API (/api/v1). JWT из localStorage в Authorization.
 // Псевдоним нигде не фигурирует — сервер скоупит по сессии/мосту.
+import { errText } from './i18n'
+
 const BASE = '/api/v1'
 
 export interface Episode {
@@ -61,7 +63,8 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
       const j = await res.json()
       detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)
     } catch { /* тело не JSON */ }
-    throw new ApiError(res.status, detail)
+    // detail — код ошибки (контракт бэка), подпись — словарь i18n
+    throw new ApiError(res.status, errText(detail))
   }
   if (res.status === 204) return undefined as T
   const ct = res.headers.get('content-type') || ''

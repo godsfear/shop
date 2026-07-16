@@ -20,7 +20,7 @@ from shop.models.user import SignUp, UserCreate, UserUpdate
 
 _auth_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
-    detail='Incorrect username or password',
+    detail='wrong_login_or_password',
     headers={'WWW-Authenticate': 'Bearer'},
 )
 
@@ -70,7 +70,7 @@ class UserService:
         if 'contact' in values:
             values['contact'] = {k: v for k, v in values['contact'].items() if v is not None}
         if not values:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Нет полей для обновления')
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='no_fields_to_update')
         user = await versioned_update(self.session, User, user_id, values)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)

@@ -27,7 +27,7 @@ class CurrencyService(CachedCrudService):
     async def update_by_code(self, flt: CurrencyFilter, currency_data: CurrencyUpdate) -> tables.Currency:
         if flt.category is None or flt.code is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='Для обновления по коду нужны category и code')
+                                detail='category_and_code_required')
         cid = (await self.session.execute(
             select(tables.Currency.id).where(
                 tables.Currency.category == flt.category,

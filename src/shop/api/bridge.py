@@ -25,7 +25,7 @@ def _b64(value: str, what: str) -> bytes:
         return base64.b64decode(value, validate=True)
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f'{what}: некорректный base64') from None
+                            detail=f'bad_base64: {what}') from None
 
 
 @router.post('/link', response_model=LinkOut, status_code=status.HTTP_201_CREATED)

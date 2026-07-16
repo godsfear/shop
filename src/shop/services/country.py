@@ -32,7 +32,7 @@ class CountryService(CachedCrudService):
         if flt.name is not None:
             conditions.append(func.lower(Country.name) == flt.name.lower())
         if not conditions:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Пустой фильтр')
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='empty_filter')
 
         async def load():
             res = await self.session.execute(select(Country).where(*conditions))

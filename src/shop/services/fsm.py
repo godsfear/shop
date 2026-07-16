@@ -53,7 +53,7 @@ def _machine_class(config: dict) -> type[FSMMixin]:
             name = spec.get(role)
             if isinstance(name, str) and name not in _handlers:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                    detail=f"обработчик '{name}' не зарегистрирован (@fsm_handler)")
+                                    detail=f'fsm_handler_missing: {name}')
     try:
         return type('CategoryFSM', (FSMMixin,), {
             'states': tuple(config['states']),
@@ -63,7 +63,7 @@ def _machine_class(config: dict) -> type[FSMMixin]:
         })
     except (KeyError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            detail=f'некорректная конфигурация машины состояний: {e}')
+                            detail=f'fsm_config_invalid: {e}')
 
 
 def _table_class(name: str) -> type:
@@ -73,7 +73,7 @@ def _table_class(name: str) -> type:
     cls = _tables_by_name.get(name)
     if cls is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"таблицы '{name}' не существует")
+                            detail=f'table_unknown: {name}')
     return cls
 
 
@@ -101,14 +101,16 @@ class FSMService:
         context = context or {}
         if reserved := {'event', 'self'} & set(context):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                detail=f'зарезервированные ключи context: {sorted(reserved)}')
+                                detail=f'fsm_context_reserved: {sorted(reserved)}')
         config = await self._config(table, objectid, lock=True)
         row = await self._current_row(table, objectid)
         machine = self._machine(config, table, objectid, row)
         try:
             new_state = machine.trigger(event, **context)
-        except TransitionError as e:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        except TransitionError:
+            # текст исключения (рус.) — для логов/тестов; API отдаёт код
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail=f'fsm_transition_invalid: {event}')
         if row is not None:
             row.ends = datetime.now(timezone.utc)
             # закрыть старое состояние ДО вставки нового: uq_property_active_state
@@ -144,16 +146,16 @@ class FSMService:
             q = q.with_for_update()
         obj = (await self.session.execute(q)).scalar_one_or_none()
         if obj is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='объект не найден')
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='object_not_found')
         category_id = getattr(obj, 'category', None)
         if category_id is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='у объекта нет категории — машина состояний не определена')
+                                detail='no_category_fsm')
         category = await self.session.get(tables.Category, category_id)
         config = (category.value or {}).get('fsm') if category else None
         if not config:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='категория объекта не определяет машину состояний (value.fsm)')
+                                detail='no_fsm_config')
         return config
 
     async def _current_row(self, table: str, objectid: uuid.UUID) -> tables.Property | None:

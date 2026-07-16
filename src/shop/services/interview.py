@@ -72,7 +72,7 @@ class InterviewService:
             cats = await medical_concepts(self.session)
             if 'interview' not in cats:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                    detail="концепт 'interview' не найден — прогоните medical_seed")
+                                    detail='seed_missing: interview')
             row = tables.Entity(category=cats['interview'], code='interview',
                                 name='Опрос (анамнез)', table='entity',
                                 objectid=episode_id, creator=creator)
@@ -103,7 +103,7 @@ class InterviewService:
         handler = getattr(self, f'_on_{st}', None)
         if handler is None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                detail=f"интервью в состоянии '{st}' — ответы не принимаются")
+                                detail=f'interview_closed: {st}')
         st = await handler(row, progress, body, episode_id, pseudonym, creator)
         await versioned_update(self.session, tables.Property, prow.id, {'value': progress})
         await self.session.commit()
@@ -124,16 +124,16 @@ class InterviewService:
         [codes] — связанные симптомы уходят в очередь (рекурсивное дерево жалоб)."""
         if progress.get('current') is None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                detail='нет текущего симптома')
+                                detail='no_current_symptom')
         slot_seq = _slots(progress)                # применимые слоты этой жалобы
         slot = slot_seq[progress['slot']]
         value = body.get('value')
         if value is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=f"нужен ответ на слот '{slot}' (поле value)")
+                                detail=f'slot_answer_required: {slot}')
         if slot == 'severity' and not (isinstance(value, (int, float)) and 0 <= value <= 10):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='интенсивность — число 0–10')
+                                detail='severity_range')
         sym = await self._symptom_property(episode_id, progress['current'])
         slots = {**sym.value.get('slots', {}), slot: value}
         await versioned_update(self.session, tables.Property, sym.id,
@@ -173,7 +173,7 @@ class InterviewService:
         system = systems[progress['ros_idx']]
         if body.get('positive') and not body.get('symptoms'):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='позитивная система требует кодов симптомов (symptoms)')
+                                detail='ros_symptoms_required')
         found = [c for c in (body.get('symptoms') or []) if body.get('positive')]
         progress['ros'] = {**progress.get('ros', {}),
                            system: found if found else 'clear'}
@@ -197,7 +197,7 @@ class InterviewService:
         if body.get('confirmed'):
             if not await self._section_known(section, pseudonym):
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                    detail='подтверждать нечего — секция в карте пуста')
+                                    detail='section_empty')
         else:
             await self._write_section(section, body.get('items') or [], pseudonym, creator)
         progress['section_idx'] += 1
@@ -214,7 +214,7 @@ class InterviewService:
         section = body.get('section')
         if section not in gaps:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=f'ожидается заполнение пробела из {gaps}')
+                                detail=f'gap_expected: {gaps}')
         await self._write_section(section, body.get('items') or [], pseudonym, creator)
         return await self._maybe_summary(row, episode_id, pseudonym, creator)
 
@@ -229,7 +229,7 @@ class InterviewService:
             return 'symptom'
         if not body.get('confirmed'):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail="нужно {'confirmed': true} либо {'more': [codes]}")
+                                detail='confirm_or_more_required')
         # подтверждённое резюме фиксируется на эпизоде — итоговый документ опроса
         self.session.add(tables.Property(
             table='entity', objectid=episode_id, code=SUMMARY, creator=creator,
@@ -244,8 +244,7 @@ class InterviewService:
         """Экстренная ветка: опрос прерван. {'resume': true} — продолжить."""
         if not body.get('resume'):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                detail='интервью прервано красным флагом — экстренный протокол; '
-                                       "продолжение: {'resume': true}")
+                                detail='interview_emergency')
         progress.pop('alerts', None)
         await self.fsm.trigger('entity', row.id, commit=False, event='resume', creator=creator)
         return 'symptom'
@@ -342,7 +341,7 @@ class InterviewService:
             await self.session.flush()
         if row is None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                detail=f"симптом '{code}' не заведён на эпизоде")
+                                detail=f'symptom_not_found: {code}')
         return row
 
     async def _section_known(self, section: str, pseudonym) -> list[str]:
@@ -361,10 +360,10 @@ class InterviewService:
         cats = await medical_concepts(self.session)
         if section not in cats:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=f"неизвестная секция '{section}'")
+                                detail=f'section_unknown: {section}')
         if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='items — список объектов')
+                                detail='items_list_required')
         rows = items or [{'code': 'none', 'status': 'absent'}]
         for item in rows:
             code = item.get('code') or 'unspecified'
@@ -387,7 +386,7 @@ class InterviewService:
         code = body.get('symptom')
         if not code or not isinstance(code, str):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='нужен код симптома (поле symptom)')
+                                detail='symptom_code_required')
         return code
 
     async def _interview(self, episode_id) -> tables.Entity | None:
@@ -403,7 +402,7 @@ class InterviewService:
         row = await self._interview(episode_id)
         if row is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                detail='интервью не открыто — POST /interview')
+                                detail='interview_not_open')
         return row
 
     async def _progress(self, interview_id) -> tables.Property:
@@ -413,5 +412,5 @@ class InterviewService:
             tables.Property.code == PROGRESS))).scalars().first()
         if row is None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                detail='прогресс интервью потерян')
+                                detail='interview_progress_lost')
         return row

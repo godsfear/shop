@@ -27,8 +27,7 @@ async def open_session(svc: MedAccessService = Depends(),
     сессию НЕ использует — link_id/key_id передаются в каждом запросе."""
     if body is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail='делегированный доступ не использует сессию — '
-                                   'передавайте link_id/key_id в каждом запросе')
+                            detail='delegated_no_session')
     return {'expires_in': await svc.open_session()}
 
 

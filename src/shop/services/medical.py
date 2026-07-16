@@ -48,7 +48,7 @@ class MedicalService:
         """{gaps: [пустые секции], alerts: [сработавшие флаги]} по эпизоду."""
         episode = await self.session.get(tables.Entity, episode_id)
         if episode is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='эпизод не найден')
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='episode_not_found')
         category = await self.session.get(tables.Category, episode.category) \
             if episode.category else None
         cfg = (category.value or {}) if category else {}
@@ -73,10 +73,10 @@ class MedicalService:
         if flags := cfg.get('red_flags', ()):
             if missing := [n for n in flags if n not in _redflags]:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                    detail=f'красный флаг без обработчика (@redflag_handler): {missing}')
+                                    detail=f'redflag_handler_missing: {missing}')
             if (symptom_id := cat_id.get('symptom')) is None:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                    detail="концепт 'symptom' не найден — прогоните medical_seed")
+                                    detail='seed_missing: symptom')
             symptoms = (await self.session.execute(select(tables.Property).where(
                 tables.Property.table == 'entity',
                 tables.Property.objectid == episode_id,

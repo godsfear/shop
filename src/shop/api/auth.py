@@ -23,14 +23,14 @@ async def rate_limit(request: Request) -> None:
     if not await get_cache().hit(f'auth:{ip}', settings.auth_rate_limit,
                                  settings.auth_rate_window_s):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                            detail='слишком много попыток — повторите позже')
+                            detail='too_many_attempts')
 
 
 def _prop(email: str | None, phone: str | None) -> str:
     prop = email or phone
     if not prop:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail='Нужен email или phone')
+                            detail='contact_required')
     return prop
 
 
@@ -51,7 +51,7 @@ async def confirm_email(body: ConfirmCode, service: UserService = Depends(),
     """Подтверждение почты кодом из письма (без него нельзя запрашивать чужие карты)."""
     if not await check_confirm(payload.sub, body.code):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail='код неверен или истёк — запросите новый')
+                            detail='confirm_code_invalid')
     return await service.confirm(payload.sub)
 
 
@@ -63,7 +63,7 @@ async def resend_confirm(service: UserService = Depends(),
     email = user.contact.email
     if not email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail='в профиле нет email')
+                            detail='no_email_in_profile')
     await request_confirm(service.session, payload.sub, email)
     await service.session.commit()
 

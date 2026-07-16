@@ -119,18 +119,18 @@ class MedAccessService:
         link = await self._owner_link(person_id)
         if link is None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                detail='медицинский мост не выпущен — сначала /me/enroll')
+                                detail='enroll_required')
         try:
             pseudonym = await self.bridge.resolve(link.id, self._patient_key(),
                                                   str(self.payload.sub))
         except (PolicyError, KeyServiceError):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                detail='нет доступа к своему мосту (ключ пациента)')
+                                detail='own_bridge_denied')
         # Redis здесь — хранилище сессии, а не кэш: молчаливый no-op означал бы
         # 200 «сессия открыта» и сплошные 401 на каждом следующем запросе
         if not await get_cache().set(self._key(), str(pseudonym), settings.medsession_ttl_s):
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                                detail='хранилище сессий недоступно — повторите позже')
+                                detail='session_store_unavailable')
         return settings.medsession_ttl_s
 
     def _patient_key(self) -> str:
@@ -141,7 +141,7 @@ class MedAccessService:
             tables.User.id == self.payload.sub))).scalar_one_or_none()
         if person is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail='пользователь не найден')
+                                detail='user_not_found')
         return person
 
     async def _owner_link(self, person_id: uuid.UUID) -> tables.Link | None:
@@ -255,7 +255,7 @@ class MedAccessService:
         cached = await get_cache().get(self._key())
         if cached is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail='нет активной сессии доступа к медданным — откройте сессию')
+                                detail='medsession_required')
         return uuid.UUID(cached)
 
     def _key(self) -> str:
@@ -268,12 +268,12 @@ class MedAccessService:
             return await self._session_pseudonym()
         if self.key_id is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='при доступе по link_id нужен key_id')
+                                detail='key_id_required')
         try:
             return await self.bridge.resolve(self.link_id, self.key_id, str(self.payload.sub))
         except PolicyError:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                detail='нет доступа к этому мосту (ACL ключа)')
+                                detail='bridge_denied')
 
     # --- данные: скоуп — псевдоним (сессии или моста) ---
     async def properties(self, category: uuid.UUID | None = None,
@@ -294,7 +294,7 @@ class MedAccessService:
         pseudonym = await self._resolve()
         row = await self.session.get(tables.Property, property_id)
         if row is None or row.table != 'pseudonym' or row.objectid != pseudonym:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='запись не найдена')
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='record_not_found')
         return row
 
     async def update_property(self, property_id: uuid.UUID, value: dict) -> tables.Property:
@@ -335,7 +335,7 @@ class MedAccessService:
         category = await self.session.get(tables.Category, data.category)
         if category is None or not (category.value or {}).get('fsm'):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='категория не является эпизодным концептом (нет value.fsm)')
+                                detail='not_episode_concept')
         return await EntityService(session=self.session).create(
             EntityCreate(category=data.category, code=data.code, name=data.name,
                          table='pseudonym', objectid=pseudonym),
@@ -347,7 +347,7 @@ class MedAccessService:
         pseudonym = await self._resolve()
         ep = await self.session.get(tables.Entity, episode_id)
         if ep is None or ep.table != 'pseudonym' or ep.objectid != pseudonym:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='эпизод не найден')
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='episode_not_found')
         return pseudonym
 
     async def episode_properties(self, episode_id: uuid.UUID,

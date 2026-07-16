@@ -224,3 +224,94 @@ const EN: Record<string, string> = {
 // Перевод строки хрома: ru — как есть, иначе словарь (фолбэк — русский ключ,
 // чтобы недостающий перевод был виден, а не падал)
 export const ui = (s: string): string => (getLang() === 'ru' ? s : (EN[s] ?? s))
+
+// ---------------------------------------------------------------- ошибки API
+// Бэк отдаёт detail = snake_case-код (иногда 'код: параметр') — контракт,
+// не текст. Подписи кодов — здесь: [ru, en]; неизвестный код показываем как есть.
+const ERRORS: Record<string, [string, string]> = {
+  // аутентификация/учётка
+  invalid_token: ['сессия истекла — войдите заново', 'session expired — sign in again'],
+  wrong_login_or_password: ['неверный email или пароль', 'wrong email or password'],
+  too_many_attempts: ['слишком много попыток — повторите позже', 'too many attempts — try again later'],
+  contact_required: ['нужен email или телефон', 'email or phone required'],
+  confirm_code_invalid: ['код неверен или истёк — запросите новый', 'code is wrong or expired — request a new one'],
+  no_email_in_profile: ['в профиле нет email', 'no email in the profile'],
+  own_account_only: ['можно менять только свою учётную запись', 'you can only edit your own account'],
+  user_not_found: ['пользователь не найден', 'user not found'],
+  no_fields_to_update: ['нет полей для обновления', 'no fields to update'],
+  role_required: ['недостаточно прав', 'insufficient permissions'],
+  auth_required: ['нужна аутентификация', 'authentication required'],
+  // медкарта: сессия/мост/доступ
+  enroll_required: ['медицинский мост не выпущен', 'medical bridge is not issued yet'],
+  own_bridge_denied: ['нет доступа к своему мосту', 'no access to your own bridge'],
+  session_store_unavailable: ['хранилище сессий недоступно — повторите позже', 'session store unavailable — try again later'],
+  medsession_required: ['сессия карты истекла — обновите страницу', 'record session expired — refresh the page'],
+  key_id_required: ['при доступе по link_id нужен key_id', 'key_id is required with link_id'],
+  bridge_denied: ['нет доступа к этой карте', 'no access to this record'],
+  link_not_found: ['мост не найден', 'bridge not found'],
+  access_not_found: ['доступ не найден или отозван', 'access not found or revoked'],
+  escrow_revoke_forbidden: ['escrow-копию отозвать нельзя', 'the escrow copy cannot be revoked'],
+  manager_only: ['управлять доступами может владелец или управляющий', 'only the owner or a manager can manage access'],
+  delegated_no_session: ['делегированный доступ не использует сессию', 'delegated access does not use a session'],
+  record_not_found: ['запись не найдена', 'record not found'],
+  episode_not_found: ['эпизод не найден', 'episode not found'],
+  not_episode_concept: ['категория не является эпизодным концептом', 'category is not an episode concept'],
+  // согласия
+  email_confirm_required: ['подтвердите почту, чтобы запрашивать доступ', 'confirm your email to request access'],
+  subject_not_found: ['субъект не найден', 'subject not found'],
+  identity_subject_only: ['согласия применимы только к identity-субъектам', 'consents apply to identity subjects only'],
+  consent_exists: ['запрос или согласие уже существует', 'a request or consent already exists'],
+  manage_exists: ['у получателя уже есть manage-доступ', 'the grantee already has manage access'],
+  consent_required: ['нет доступа: требуется согласие владельца', 'no access: owner consent required'],
+  owner_decision_only: ['решает владелец данных или управляющий', 'only the owner or a manager decides'],
+  manager_assign_forbidden: ['назначать управляющего может владелец', 'only the owner can assign a manager'],
+  wrong_status: ['недопустимый статус запроса', 'invalid request status'],
+  // FSM/эпизод
+  fsm_transition_invalid: ['переход недопустим из текущего состояния', 'transition not allowed from the current state'],
+  object_not_found: ['объект не найден', 'object not found'],
+  no_category_fsm: ['у объекта нет категории с машиной состояний', 'the object has no category with a state machine'],
+  no_fsm_config: ['категория не определяет машину состояний', 'the category defines no state machine'],
+  table_unknown: ['таблица не существует', 'no such table'],
+  fsm_handler_missing: ['обработчик FSM не зарегистрирован', 'FSM handler is not registered'],
+  fsm_config_invalid: ['некорректная конфигурация машины состояний', 'invalid state machine configuration'],
+  fsm_context_reserved: ['зарезервированные ключи context', 'reserved context keys'],
+  redflag_handler_missing: ['красный флаг без обработчика', 'red flag without a handler'],
+  seed_missing: ['справочник не прогнан (medical_seed)', 'reference seed is missing (medical_seed)'],
+  // интервью
+  interview_not_open: ['интервью не открыто', 'the interview is not open'],
+  interview_closed: ['интервью завершено — ответы не принимаются', 'the interview is over — answers are not accepted'],
+  interview_emergency: ['опрос прерван красным флагом — экстренный протокол', 'interview paused by a red flag — emergency protocol'],
+  interview_progress_lost: ['прогресс интервью потерян', 'interview progress lost'],
+  no_current_symptom: ['нет текущего симптома', 'no current symptom'],
+  slot_answer_required: ['нужен ответ на вопрос', 'an answer is required'],
+  severity_range: ['интенсивность — число от 0 до 10', 'severity is a number from 0 to 10'],
+  ros_symptoms_required: ['укажите симптомы для позитивной системы', 'positive system requires symptom codes'],
+  section_empty: ['подтверждать нечего — секция пуста', 'nothing to confirm — the section is empty'],
+  section_unknown: ['неизвестная секция', 'unknown section'],
+  items_list_required: ['items — список объектов', 'items must be a list of objects'],
+  symptom_code_required: ['нужен код симптома', 'a symptom code is required'],
+  symptom_not_found: ['симптом не заведён на эпизоде', 'the symptom is not on the episode'],
+  gap_expected: ['ожидается заполнение пробела', 'a gap fill is expected'],
+  confirm_or_more_required: ['подтвердите резюме или добавьте симптомы', 'confirm the summary or add symptoms'],
+  // прочее ядро
+  empty_filter: ['пустой фильтр', 'empty filter'],
+  category_and_code_required: ['нужны category и code', 'category and code are required'],
+  locale_unknown: ['локаль не заведена', 'locale is not registered'],
+  bad_base64: ['некорректный base64', 'invalid base64'],
+  bad_recipient_type: ['недопустимый тип получателя', 'invalid recipient type'],
+  same_account: ['дебет и кредит — один и тот же счёт', 'debit and credit are the same account'],
+  account_not_found: ['счёт не найден', 'account not found'],
+  same_currency_amounts: ['счета в одной валюте: amount_cr должен совпадать', 'same currency: amount_cr must match'],
+  amount_cr_required: ['кросс-валютная проводка: укажите amount_cr', 'cross-currency entry: amount_cr required'],
+}
+
+// Код (или 'код: параметр') -> локализованный текст; неизвестное — как есть
+export const errText = (detail: string): string => {
+  const i = detail.indexOf(':')
+  const code = (i < 0 ? detail : detail.slice(0, i)).trim()
+  const param = i < 0 ? '' : detail.slice(i + 1).trim()
+  const m = ERRORS[code]
+  if (!m) return detail
+  const msg = m[getLang() === 'ru' ? 0 : 1]
+  return param ? `${msg} (${param})` : msg
+}

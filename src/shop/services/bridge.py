@@ -180,7 +180,7 @@ class BridgeService:
         """
         if recipient_type not in (GROUP, USER, OWNER):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=f"недопустимый тип получателя '{recipient_type}'")
+                                detail=f'bad_recipient_type: {recipient_type}')
         link = await self._get_link(link_id)
         await self._ensure_manager(link, payload)
         access = tables.Access(
@@ -222,8 +222,7 @@ class BridgeService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         if access.recipient_type == ESCROW:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='escrow-копию отозвать нельзя — '
-                                       'break-glass должен работать всегда')
+                                detail='escrow_revoke_forbidden')
         await versioned_expire(self.session, tables.Access, access_id)
         emit(self.session, TOPIC_ACCESS, {
             'action': 'revoke', 'subject_table': link.table,
@@ -237,7 +236,7 @@ class BridgeService:
         link = (await self.session.execute(
             select(tables.Link).where(tables.Link.id == link_id))).scalar_one_or_none()
         if link is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='мост не найден')
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='link_not_found')
         return link
 
     async def _ensure_manager(self, link: tables.Link,
@@ -247,12 +246,11 @@ class BridgeService:
         доверенное лицо персоны) или администратор."""
         if payload is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                detail='нужна аутентификация')
+                                detail='auth_required')
         if not await is_subject_manager(self.session, link.table,
                                         link.objectid, payload):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                detail='управлять доступами может владелец данных, '
-                                       'управляющий или администратор')
+                                detail='manager_only')
 
     async def _link_and_access(self, link_id: uuid.UUID,
                                key_id: str) -> tuple[tables.Link, tables.Access]:
@@ -264,7 +262,7 @@ class BridgeService:
             ))).scalar_one_or_none()
         if access is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                detail='доступ не найден (нет копии DEK или отозван)')
+                                detail='access_not_found')
         return link, access
 
 

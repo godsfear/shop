@@ -72,14 +72,14 @@ class ConsentService:
             tables.User.id == payload.sub))).scalar_one_or_none()
         if not confirmed:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                detail='подтвердите почту, чтобы запрашивать доступ к чужим данным')
+                                detail='email_confirm_required')
         domain = (await self.session.execute(select(tables.ObjectRegistry.domain).where(
             tables.ObjectRegistry.id == data.subject_id))).scalar_one_or_none()
         if domain is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='субъект не найден')
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='subject_not_found')
         if domain != tables.Domain.IDENTITY:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='согласия применимы только к identity-субъектам')
+                                detail='identity_subject_only')
         row = tables.Consent(table=data.subject_table, objectid=data.subject_id,
                              grantee=payload.sub, scope=data.scope,
                              status=REQUESTED, reason=data.reason)
@@ -89,7 +89,7 @@ class ConsentService:
         except IntegrityError:
             await self.session.rollback()
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                detail='живой запрос или согласие уже существует') from None
+                                detail='consent_exists') from None
         self._emit(row, REQUESTED)
         await self.session.commit()
         return row
@@ -202,8 +202,7 @@ class ConsentService:
         """
         if not await is_subject_manager(self.session, subject_table, subject_id, payload):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                detail='назначать управляющего может владелец, '
-                                       'действующий управляющий или администратор')
+                                detail='manager_assign_forbidden')
         row = await self.bootstrap_manage(subject_table, subject_id, grantee,
                                           reason='назначение управляющего')
         await self.session.commit()
@@ -227,7 +226,7 @@ class ConsentService:
         except IntegrityError:
             await self.session.rollback()
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                detail='у получателя уже есть живой manage-доступ') from None
+                                detail='manage_exists') from None
         self._emit(row, APPROVED)
         return row
 
@@ -244,7 +243,7 @@ class ConsentService:
         if not write and await self.check(subject_table, subject_id, payload.sub, scope):
             return
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail='нет доступа: требуется согласие владельца')
+                            detail='consent_required')
 
     async def _get_pending(self, consent_id: uuid.UUID, payload: TokenPayload,
                            expected: str) -> tables.Consent:
@@ -254,10 +253,10 @@ class ConsentService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         if not await is_subject_manager(self.session, row.table, row.objectid, payload):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                detail='решает владелец данных, управляющий или администратор')
+                                detail='owner_decision_only')
         if row.status != expected:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                detail=f"ожидался статус '{expected}', сейчас '{row.status}'")
+                                detail=f'wrong_status: {expected}/{row.status}')
         return row
 
     async def _sync_medical_acl(self, row: tables.Consent, action: str) -> None:

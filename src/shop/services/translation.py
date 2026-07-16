@@ -120,5 +120,5 @@ class TranslationService:
                 func.lower(tables.Language.iso) == iso.lower()))).scalar_one_or_none()
         if language is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=f"локаль '{iso}' не заведена в справочнике Language")
+                                detail=f'locale_unknown: {iso}')
         return language

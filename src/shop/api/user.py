@@ -15,7 +15,7 @@ router = APIRouter(prefix='/user', tags=['user'])
 def _self_or_admin(user_id: uuid.UUID, payload: TokenPayload) -> None:
     if payload.sub != user_id and settings.admin_role not in payload.roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail='можно менять только свою учётную запись')
+                            detail='own_account_only')
 
 
 # каталог и поиск пользователей — только админ: любой залогиненный не должен
@@ -33,7 +33,7 @@ async def find_user_by_contact(contact: Contact, service: UserService = Depends(
                                payload: TokenPayload = Depends(require_roles(settings.admin_role))):
     prop = contact.email or contact.phone
     if not prop:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Нужен email или phone')
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='contact_required')
     found = await service.get_by_contact(prop)
     if found is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)

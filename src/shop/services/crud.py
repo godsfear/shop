@@ -52,7 +52,7 @@ class CrudService:
         values = data.model_dump(exclude_unset=True)
         if not values:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail='Нет полей для обновления')
+                                detail='no_fields_to_update')
         row = await versioned_update(self.session, self.table, row_id, values)
         if row is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -69,7 +69,7 @@ class CrudService:
     async def _where(self, conditions: list) -> list:
         """Тело find: пустой фильтр -> 400, иначе выборка активных строк."""
         if not conditions:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Пустой фильтр')
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='empty_filter')
         res = await self.session.execute(select(self.table).where(and_(*conditions)))
         return list(res.scalars().all())
 
@@ -123,5 +123,5 @@ class CachedCrudService(CrudService):
     async def _cached_where(self, suffix: str, conditions: list) -> list:
         """Кэшируемый find (список активных строк)."""
         if not conditions:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Пустой фильтр')
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='empty_filter')
         return await self._cached_list(suffix, lambda: self._where(conditions))

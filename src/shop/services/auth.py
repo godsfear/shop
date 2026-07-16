@@ -22,7 +22,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f'{settings.api_prefix}/auth/signi
 
 _credentials_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
-    detail='Could not validate credentials',
+    detail='invalid_token',
     headers={'WWW-Authenticate': 'Bearer'},
 )
 
@@ -94,7 +94,7 @@ def require_roles(*required: str):
     def checker(payload: TokenPayload = Depends(get_token_payload)) -> TokenPayload:
         if not set(required) & set(payload.roles):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                detail=f'требуется одна из ролей: {", ".join(required)}')
+                                detail=f'role_required: {", ".join(required)}')
         return payload
     return checker
 
