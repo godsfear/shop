@@ -54,10 +54,16 @@ SYSTEMIC_SYMPTOMS = {"dizziness", "nausea", "fever", "chills", "weakness", "coug
 # dictionary() скрывает несоответствующие владельцу (кесарево у мужчины)
 SEX_SPECIFIC = {"c_section": False}
 
-# показатели «в моменте» — уместны в дневнике симптомов эпизода
-# (температура/давление/пульс меняются за часы; вес — за дни болезни;
-# рост — нет, он только в профиле «Моей карты»)
-MOMENTARY_VITALS = {"temperature", "blood_pressure", "pulse", "weight"}
+# где уместен показатель: profile («Моя карта», постоянные данные) и/или
+# diary (дневник симптомов эпизода, замеры в моменте). Рост — только профиль;
+# температура вне болезни не нужна — только дневник; неуказанные коды — везде.
+VITAL_SCOPES = {
+    "height": {"profile"},
+    "weight": {"profile", "diary"},
+    "blood_pressure": {"profile", "diary"},
+    "pulse": {"profile", "diary"},
+    "temperature": {"diary"},
+}
 
 
 def symptom_slots(code: str) -> list[str]:

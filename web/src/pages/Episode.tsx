@@ -96,7 +96,8 @@ export default function Episode() {
     Promise.all([dictionary('symptom'), dictionary('system')]).then(([a, b]) =>
       setSymNames(Object.fromEntries([...a, ...b].map((x) => [x.code, x.name])))).catch(() => {})
     // дневник — только показатели «в моменте» (рост и т.п. живут в «Моей карте»)
-    dictionary('vital').then((d) => setDiaryDict(d.filter((x) => x.momentary))).catch(() => {})
+    dictionary('vital').then((d) =>
+      setDiaryDict(d.filter((x) => x.scopes?.includes('diary')))).catch(() => {})
   }, [])
   // перезагрузка данных, когда стали известны концепты (нужен id категории симптома)
   useEffect(() => { if (id) reload() }, [id, cs['symptom']])

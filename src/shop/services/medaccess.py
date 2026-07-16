@@ -24,7 +24,7 @@ from ..versioning import versioned_expire, versioned_update
 from ..cache import get_cache
 from ..database import db_helper
 from ..keyservice import KeyServiceError, PolicyError
-from ..medical_seed import MOMENTARY_VITALS, SEX_SPECIFIC, medical_concepts
+from ..medical_seed import SEX_SPECIFIC, VITAL_SCOPES, medical_concepts
 from ..models.auth import TokenPayload
 from ..models.entity import EntityCreate, EntityUpdate
 from ..models.medical import EpisodeIn, MedPropertyIn
@@ -201,9 +201,9 @@ class MedAccessService:
             await resolve(self.session, 'entity', [r[0] for r in rows], self.lang)
         items = [{'code': code, 'name': tr.get((eid, 'name'), name)}
                  for eid, code, name in rows]
-        if concept_code == 'vital':   # дневнику эпизода — только «в моменте»
+        if concept_code == 'vital':   # области применения: profile и/или diary
             for i in items:
-                i['momentary'] = i['code'] in MOMENTARY_VITALS
+                i['scopes'] = sorted(VITAL_SCOPES.get(i['code'], {'profile', 'diary'}))
         # owner-режим: скрыть не соответствующее полу владельца (кесарево у
         # мужчины). Слой B (link_id) — пол пациента не раскрыт, показываем всё.
         if self.link_id is None:

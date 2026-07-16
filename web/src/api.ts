@@ -185,7 +185,8 @@ export const interviewAnswer = (id: string, body: Record<string, unknown>) =>
   req<InterviewView>(`/me/episodes/${id}/interview/answer`, json(body))
 
 // --- справочники концептов (reference): чипы выбора ---
-export interface DictItem { code: string; name: string; momentary?: boolean }
+// scopes (только vital): где уместен показатель — profile и/или diary
+export interface DictItem { code: string; name: string; scopes?: string[] }
 export const dictionary = (concept: string) => req<DictItem[]>(`/me/dictionary/${concept}`)
 
 // подписи доменных кодов (единый источник — БД), см. ui.ts/loadMeta

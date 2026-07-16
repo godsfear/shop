@@ -24,7 +24,12 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
   const names = new Map(dict.map((d) => [d.code, d.name]))
 
   const load = () => listProperties(cid).then(setItems).catch((e) => setErr(e.message))
-  useEffect(() => { dictionary(concept).then(setDict).catch(() => {}); load() }, [cid])
+  useEffect(() => {
+    // vital: в карте — только профильные показатели (температура — дневник эпизода)
+    dictionary(concept).then((d) =>
+      setDict(vital ? d.filter((x) => x.scopes?.includes('profile')) : d)).catch(() => {})
+    load()
+  }, [cid])
 
   const add = async () => {
     setErr('')
