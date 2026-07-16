@@ -74,6 +74,19 @@ async def test_main():
     assert m['concepts']['medication'] == 'Лекарства'
     print('[ok] /me/meta: подписи состояний/событий/концептов/флагов из сида')
 
+    # то же на en: переводы из Translation (Accept-Language -> lang)
+    async with Sess() as s:
+        svc_en = _svc(s, ks, payload)
+        svc_en.lang = 'en'
+        me = await svc_en.meta()
+        d = await svc_en.dictionary('symptom')
+    assert me['states']['anamnesis'] == 'history taking'
+    assert me['kinds'] == {'illness': 'Illness', 'injury': 'Injury'}
+    assert me['red_flags']['acs'] == 'acute coronary syndrome'
+    assert me['concepts']['medication'] == 'Medications'
+    assert {'code': 'headache', 'name': 'Headache'} in d
+    print('[ok] /me/meta + словарь на en: переводы из Translation')
+
     async def episode(code):
         async with Sess() as s:
             ep = await _svc(s, ks, payload).open_episode(
@@ -207,6 +220,16 @@ async def test_main():
         v = await ask(eidz, {'value': 3 if slot == 'severity' else 'ответ'})
     assert 'onset' in seen and not ({'site', 'character', 'radiation'} & set(seen)), seen
     print('[ok] нелокализованная жалоба: слоты site/character/radiation пропущены')
+
+    # ===== Сценарий A4: вопрос слота на en (Translation поверх схемы сида)
+    eide = await episode('ep-en')
+    async with Sess() as s:
+        svc_en = _svc(s, ks, payload)
+        svc_en.lang = 'en'
+        await svc_en.interview_open(eide)
+        r = await svc_en.interview_answer(eide, {'symptom': 'headache'})
+    assert r['question']['ask'].startswith('When did it start'), r['question']
+    print('[ok] вопрос слота интервью переведён (en)')
 
     # ================= Сценарий B: красный флаг прерывает опрос ============
     eid2 = await episode('ep-acs')

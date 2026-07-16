@@ -31,6 +31,7 @@ from .. import tables
 from .evaluate import request_workup
 from .fsm import FSMService
 from .medical import MedicalService
+from .translation import BASE_LANG, resolve
 
 PROGRESS = 'progress'
 SUMMARY = 'summary'
@@ -50,8 +51,10 @@ class InterviewService:
     """Драйвер опроса. Ворота эпизода (владение псевдонимом) — на вызывающем
     (MedAccessService), сюда приходят уже проверенные episode_id/pseudonym."""
 
-    def __init__(self, session=Depends(db_helper.scoped_session_dependency)):
+    def __init__(self, session=Depends(db_helper.scoped_session_dependency),
+                 lang: str = BASE_LANG):
         self.session = session
+        self.lang = lang            # язык вопросов и ИИ-ответов (см. medaccess)
         self.fsm = FSMService(session=session)
 
     # ------------------------------------------------------------------ #
@@ -233,7 +236,7 @@ class InterviewService:
             value={**(await self._summary(episode_id, progress, pseudonym)),
                    'confirmed': True}))
         # анамнез собран -> ИИ рекомендует анализы (в очередь, той же транзакцией)
-        request_workup(self.session, episode_id, pseudonym)
+        request_workup(self.session, episode_id, pseudonym, lang=self.lang)
         await self.fsm.trigger('entity', row.id, commit=False, event='confirm', creator=creator)
         return 'confirmed'
 
@@ -256,8 +259,13 @@ class InterviewService:
             out['question'] = {'ask': 'Главная жалоба', 'field': 'symptom'}
         elif st == 'symptom':
             slot = _slots(progress)[progress['slot']]
+            ask = _LABELS[slot]
+            if self.lang != BASE_LANG:   # перевод вопроса слота (Translation)
+                cid = (await medical_concepts(self.session))['symptom']
+                tr = await resolve(self.session, 'category', [cid], self.lang)
+                ask = tr.get((cid, f'slot.{slot}'), ask)
             out['question'] = {'symptom': progress['current'], 'slot': slot,
-                               'ask': _LABELS[slot], 'field': 'value'}
+                               'ask': ask, 'field': 'value'}
         elif st == 'ros':
             systems = await self._systems()
             out['question'] = {'system': systems[progress['ros_idx']],

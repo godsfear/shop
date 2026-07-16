@@ -35,7 +35,7 @@ _DDX_PROMPT = (
     'приложенным документам (результаты анализов/обследований) предложи '
     'ранжированный список возможных состояний (differential diagnosis). Это '
     'ПРЕДПОЛОЖЕНИЯ для обсуждения с врачом, не диагноз. likelihood — субъективная '
-    'вероятность 0..1, по убыванию. rationale — короткое обоснование по-русски со '
+    'вероятность 0..1, по убыванию. rationale — короткое обоснование со '
     'ссылкой на конкретные данные (в т.ч. значения из документов). urgent=true, если '
     'данные указывают на угрожающее состояние, требующее немедленной помощи.'
 )
@@ -64,8 +64,15 @@ _WORKUP_PROMPT = (
     'Ты — система поддержки принятия клинических решений. По собранному анамнезу '
     'предложи, какие анализы и обследования стоит сдать пациенту, чтобы уточнить '
     'предположительный диагноз. Только обоснованное, по убыванию важности. test — '
-    'название анализа/обследования по-русски; reason — зачем (что подтвердит/исключит).'
+    'название анализа/обследования; reason — зачем (что подтвердит/исключит).'
 )
+
+
+def _lang_note(lang: str) -> str:
+    """Язык ответа задаётся при генерации (не переводом постфактум — решение
+    владельца: переводы ИИ-текстов хуже прямой генерации)."""
+    return (f' Все текстовые поля ответа (condition, rationale, test, reason, note) '
+            f'пиши на языке с кодом ISO 639-1 "{lang}".')
 _WORKUP_SCHEMA = {
     'type': 'OBJECT',
     'properties': {
@@ -86,16 +93,19 @@ _WORKUP_SCHEMA = {
 
 
 def request_evaluate(session: AsyncSession, episode_id: uuid.UUID,
-                     pseudonym: uuid.UUID, age: int | None, sex: str | None) -> None:
-    """Диагноз в очередь — вызывать в транзакции (за воротами эпизода)."""
+                     pseudonym: uuid.UUID, age: int | None, sex: str | None,
+                     lang: str = 'ru') -> None:
+    """Диагноз в очередь — вызывать в транзакции (за воротами эпизода).
+    lang — язык генерации ответа (консумер работает вне запроса)."""
     emit(session, TOPIC_EVALUATE, {'episode': str(episode_id), 'pseudonym': str(pseudonym),
-                                   'age': age, 'sex': sex})
+                                   'age': age, 'sex': sex, 'lang': lang})
 
 
 def request_workup(session: AsyncSession, episode_id: uuid.UUID,
-                   pseudonym: uuid.UUID) -> None:
+                   pseudonym: uuid.UUID, lang: str = 'ru') -> None:
     """Рекомендацию анализов в очередь — авто после сбора анамнеза (интервью)."""
-    emit(session, TOPIC_WORKUP, {'episode': str(episode_id), 'pseudonym': str(pseudonym)})
+    emit(session, TOPIC_WORKUP, {'episode': str(episode_id), 'pseudonym': str(pseudonym),
+                                 'lang': lang})
 
 
 async def _bundle(session: AsyncSession, episode_id: uuid.UUID,
@@ -179,7 +189,8 @@ async def _evaluate(session: AsyncSession, payload: dict) -> None:
               'urgent': False, 'note': 'заглушка без ИИ'}
     if settings.google_api_key:
         try:
-            result = await _gemini(_DDX_PROMPT, _DDX_SCHEMA, bundle, docs)
+            result = await _gemini(_DDX_PROMPT + _lang_note(payload.get('lang', 'ru')),
+                                   _DDX_SCHEMA, bundle, docs)
             result['assessments'] = sorted(result.get('assessments', []),
                                            key=lambda a: -a.get('likelihood', 0))
         except Exception as e:  # noqa: BLE001 — сбой ИИ не должен ронять консумер
@@ -200,7 +211,8 @@ async def _workup(session: AsyncSession, payload: dict) -> None:
     result = {'tests': [], 'note': 'заглушка без ИИ'}
     if settings.google_api_key:
         try:
-            result = await _gemini(_WORKUP_PROMPT, _WORKUP_SCHEMA, bundle)
+            result = await _gemini(_WORKUP_PROMPT + _lang_note(payload.get('lang', 'ru')),
+                                   _WORKUP_SCHEMA, bundle)
         except Exception as e:  # noqa: BLE001
             logger.warning('workup: Gemini недоступен (%r) — заглушка', e)
     await _upsert(session, episode_id, WORKUP_CODE,

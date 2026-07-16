@@ -15,7 +15,7 @@ import uuid
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, Header, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -40,6 +40,7 @@ from ..services.fsm import FSMService
 from ..services.interview import InterviewService
 from ..services.medical import MedicalService
 from ..services.property import PropertyService
+from ..services.translation import BASE_LANG, primary_language, resolve
 from ..settings import settings
 from .. import tables
 
@@ -90,10 +91,13 @@ class MedAccessService:
                  bridge: BridgeService = Depends(),
                  payload: TokenPayload = Depends(get_token_payload),
                  link_id: Annotated[uuid.UUID | None, Query()] = None,
-                 key_id: Annotated[str | None, Query()] = None):
+                 key_id: Annotated[str | None, Query()] = None,
+                 accept_language: Annotated[str | None, Header()] = None):
         self.session = session
         self.bridge = bridge
         self.payload = payload
+        # язык ответов (подписи, вопросы, ИИ): Accept-Language -> первичный тег
+        self.lang = primary_language(accept_language)
         # Слой B (врач/близкий): link_id/key_id — query-параметры КАЖДОГО запроса,
         # резолвятся в _resolve; продевать их через сигнатуры методов не нужно
         self.link_id = link_id
@@ -154,21 +158,29 @@ class MedAccessService:
         """Подписи доменных кодов для UI: {concepts, kinds, states, events, red_flags},
         каждый — {код: подпись}. Единый источник — справочное дерево (сид):
         правка подписи в БД видна фронту без правки кода.
-        kinds — концепты-эпизоды (определяют fsm+required): чипы «болезнь/травма»."""
+        kinds — концепты-эпизоды (определяют fsm+required): чипы «болезнь/травма».
+        Язык — self.lang (Accept-Language): переводы из Translation поверх
+        базовых (ru) подписей, фолбэк lang -> en -> базовое."""
         ids = list((await medical_concepts(self.session)).values())
         cats = (await self.session.execute(select(tables.Category)
                 .where(tables.Category.id.in_(ids)))).scalars()
+        tr = {} if self.lang == BASE_LANG else \
+            await resolve(self.session, 'category', ids, self.lang)
         out: dict[str, dict] = {'concepts': {}, 'kinds': {}, 'states': {},
                                 'events': {}, 'red_flags': {}}
         for c in cats:
-            out['concepts'][c.code] = c.name
+            name = tr.get((c.id, 'name'), c.name)
+            out['concepts'][c.code] = name
             v = c.value or {}
             fsm = v.get('fsm') or {}
             if fsm and v.get('required'):
-                out['kinds'][c.code] = c.name
-            out['states'].update(fsm.get('state_labels') or {})
-            out['events'].update(fsm.get('event_labels') or {})
-            out['red_flags'].update(v.get('red_flag_labels') or {})
+                out['kinds'][c.code] = name
+            for prefix, group, labels in (
+                    ('state', 'states', fsm.get('state_labels')),
+                    ('event', 'events', fsm.get('event_labels')),
+                    ('red_flag', 'red_flags', v.get('red_flag_labels'))):
+                for code, base in (labels or {}).items():
+                    out[group][code] = tr.get((c.id, f'{prefix}.{code}'), base)
         return out
 
     async def dictionary(self, concept_code: str) -> list[dict]:
@@ -177,10 +189,17 @@ class MedAccessService:
         cid = (await medical_concepts(self.session)).get(concept_code)
         if cid is None:
             return []
-        rows = (await self.session.execute(select(tables.Entity.code, tables.Entity.name)
-                .where(tables.Entity.category == cid)
-                .order_by(tables.Entity.name))).all()
-        return [{'code': code, 'name': name} for code, name in rows]
+        rows = (await self.session.execute(
+            select(tables.Entity.id, tables.Entity.code, tables.Entity.name)
+            .where(tables.Entity.category == cid)
+            .order_by(tables.Entity.name))).all()
+        tr = {} if self.lang == BASE_LANG else \
+            await resolve(self.session, 'entity', [r[0] for r in rows], self.lang)
+        items = [{'code': code, 'name': tr.get((eid, 'name'), name)}
+                 for eid, code, name in rows]
+        # порядок — по подписи на языке ответа (для system порядок обхода
+        # задаёт бэк интервью, здесь только представление)
+        return sorted(items, key=lambda i: i['name'])
 
     async def access_log(self, limit: int = 100) -> list[dict]:
         """Журнал доступов к моей карте — владельцу для прозрачности.
@@ -386,23 +405,23 @@ class MedAccessService:
                 bd = person.birthdate
                 age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
                 sex = 'м' if person.sex else 'ж'
-        request_evaluate(self.session, episode_id, pseudonym, age, sex)
+        request_evaluate(self.session, episode_id, pseudonym, age, sex, lang=self.lang)
         await self.session.commit()
         return {'queued': True}
 
     # --- интервью (сбор анамнеза по протоколу) — за теми же воротами эпизода ---
     async def interview_open(self, episode_id: uuid.UUID) -> dict:
         pseudonym = await self._gate_episode(episode_id)
-        return await InterviewService(session=self.session).open(
+        return await InterviewService(session=self.session, lang=self.lang).open(
             episode_id, pseudonym, creator=self.payload.sub)
 
     async def interview_state(self, episode_id: uuid.UUID) -> dict:
         pseudonym = await self._gate_episode(episode_id)
-        return await InterviewService(session=self.session).state(episode_id, pseudonym)
+        return await InterviewService(session=self.session, lang=self.lang).state(episode_id, pseudonym)
 
     async def interview_answer(self, episode_id: uuid.UUID, body: dict) -> dict:
         pseudonym = await self._gate_episode(episode_id)
-        return await InterviewService(session=self.session).answer(
+        return await InterviewService(session=self.session, lang=self.lang).answer(
             episode_id, pseudonym, body, creator=self.payload.sub)
 
     # --- документы/анализы: блоб (FileStore) + метаданные Data + очередь на ИИ-разбор ---

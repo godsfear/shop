@@ -207,6 +207,92 @@ DICTIONARY = {
 }
 
 
+# ------------------------------------------------------------------ en-переводы
+# Английские подписи справочного дерева (Translation, язык en).
+# Базовые поля (name, метки в value) — ru; фолбэк: lang -> en -> базовое.
+CONCEPTS_EN = {
+    "symptom": "Symptoms", "medication": "Medications", "allergy": "Allergies",
+    "heredity": "Family history", "risk_factor": "Risk factors",
+    "vital": "Vitals", "chronic": "Chronic conditions", "blood": "Blood type",
+    "vaccination": "Vaccinations", "illness": "Illness", "injury": "Injury",
+    "surgery": "Surgeries/hospitalizations", "social": "Social history",
+    "system": "Body system", "document": "Document", "analysis": "Test",
+    "interview": "Interview (anamnesis)",
+}
+SLOTS_EN = {
+    "onset":       "When did it start — and how: suddenly or gradually?",
+    "site":        "Where exactly do you feel it? Describe the spot",
+    "character":   "What does it feel like — aching, burning, pressing, stabbing?",
+    "severity":    "How bad is it, on a scale from 0 to 10?",
+    "time":        "How does it change over time — constant, in attacks, better or worse?",
+    "provocation": "What brings it on or makes it worse?",
+    "palliation":  "What relieves it? What have you already tried?",
+    "radiation":   "Does it spread anywhere — to an arm, back, leg?",
+    "associations": "What else appeared along with it?",
+    "impact":      "Does it interfere with sleep, work, daily activities?",
+    "previous":    "Has this happened before? How did it end then?",
+}
+EPISODE_STATES_EN = {"anamnesis": "history taking", "diagnosis": "diagnosis",
+                     "treatment": "treatment", "remission": "remission",
+                     "recovered": "recovered"}
+EPISODE_EVENTS_EN = {"diagnose": "Make a diagnosis", "treat": "Start treatment",
+                     "recover": "Recovery", "remit": "Remission", "relapse": "Relapse"}
+INTERVIEW_STATES_EN = {"complaint": "chief complaint", "symptom": "symptoms",
+                       "ros": "review of systems", "history": "life history",
+                       "completeness": "completeness", "summary": "summary",
+                       "confirmed": "confirmed", "emergency": "emergency"}
+RED_FLAGS_EN = {"acs": "acute coronary syndrome"}
+DICTIONARY_EN = {
+    "symptom": {
+        "headache": "Headache", "cough": "Cough", "chest_pain": "Chest pain",
+        "dyspnea": "Shortness of breath", "fever": "Fever", "nausea": "Nausea",
+        "dizziness": "Dizziness", "rash": "Rash", "numbness": "Numbness",
+        "weakness": "Weakness",
+    },
+    "medication": {
+        "aspirin": "Aspirin", "paracetamol": "Paracetamol", "ibuprofen": "Ibuprofen",
+        "amoxicillin": "Amoxicillin", "omeprazole": "Omeprazole",
+    },
+    "allergy": {
+        "penicillin": "Penicillin", "pollen": "Pollen", "nuts": "Nuts",
+        "lactose": "Lactose", "insect_sting": "Insect stings",
+    },
+    "vital": {
+        "height": "Height", "weight": "Weight",
+        "blood_pressure": "Blood pressure", "pulse": "Pulse",
+    },
+    "chronic": {
+        "hypertension": "Hypertension", "diabetes2": "Type 2 diabetes",
+        "asthma": "Asthma", "ihd": "Coronary artery disease",
+        "gastritis": "Gastritis", "migraine": "Migraine",
+    },
+    "heredity": {
+        "diabetes_family": "Diabetes in the family",
+        "hypertension_family": "Hypertension in the family",
+        "cancer_family": "Cancer in the family",
+        "heart_family": "Heart attack/stroke in the family",
+    },
+    "surgery": {
+        "appendectomy": "Appendectomy", "cholecystectomy": "Cholecystectomy",
+        "c_section": "C-section", "hospitalization": "Hospitalization",
+    },
+    "social": {
+        "smoking": "Smoking", "alcohol": "Alcohol",
+        "occupational": "Occupational hazards", "stress": "Chronic stress",
+        "sedentary": "Sedentary work",
+    },
+    "risk_factor": {
+        "obesity": "Excess weight", "inactivity": "Physical inactivity",
+        "travel": "Recent travel", "infection_contact": "Contact with infections",
+    },
+    "system": {
+        "neuro": "Nervous", "cardio": "Cardiovascular", "resp": "Respiratory",
+        "gi": "Gastrointestinal", "gu": "Genitourinary", "endo": "Endocrine",
+        "msk": "Musculoskeletal", "skin": "Skin", "psych": "Psychiatric",
+    },
+}
+
+
 async def _get_category(db: AsyncSession, parent: uuid.UUID | None, code: str):
     q = select(tables.Category).where(tables.Category.code == code)
     q = q.where(tables.Category.category == parent) if parent is not None \
@@ -251,6 +337,7 @@ async def seed_medical(db: AsyncSession) -> dict[str, uuid.UUID]:
             await db.flush()
         ids[code] = cat.id
 
+    entity_ids: dict[tuple[str, str], uuid.UUID] = {}
     for kind, items in DICTIONARY.items():
         kind_id = ids[kind]
         for code, name in items:
@@ -258,7 +345,57 @@ async def seed_medical(db: AsyncSession) -> dict[str, uuid.UUID]:
                 tables.Entity.category == kind_id,
                 tables.Entity.code == code))).scalar_one_or_none()
             if exists is None:
-                db.add(tables.Entity(category=kind_id, code=code, name=name,
-                                     table="category", objectid=root.id))
+                row = tables.Entity(category=kind_id, code=code, name=name,
+                                    table="category", objectid=root.id)
+                db.add(row)
+                await db.flush()
+                exists = row.id
+            entity_ids[(kind, code)] = exists
+
+    await _seed_translations(db, ids, entity_ids)
     await db.commit()
     return ids
+
+
+async def _seed_translations(db: AsyncSession, ids: dict, entity_ids: dict) -> None:
+    """Языки ru/en + английские переводы дерева (идемпотентно; сид — истина)."""
+    langs = {}
+    for iso, name in (("ru", "Русский"), ("en", "English")):
+        row = (await db.execute(select(tables.Language).where(
+            tables.Language.iso == iso))).scalars().first()
+        if row is None:
+            row = tables.Language(code=iso, iso=iso, name=name)
+            db.add(row)
+            await db.flush()
+        langs[iso] = row.id
+    en = langs["en"]
+
+    async def tr(table: str, objectid: uuid.UUID, field: str, content: str) -> None:
+        row = (await db.execute(select(tables.Translation).where(
+            tables.Translation.table == table,
+            tables.Translation.objectid == objectid,
+            tables.Translation.field == field,
+            tables.Translation.language == en))).scalars().first()
+        if row is None:
+            db.add(tables.Translation(table=table, objectid=objectid,
+                                      field=field, language=en, content=content))
+        elif row.content != content:
+            row.content = content
+
+    for code, name_en in CONCEPTS_EN.items():
+        await tr("category", ids[code], "name", name_en)
+    for code, text_en in SLOTS_EN.items():
+        await tr("category", ids["symptom"], f"slot.{code}", text_en)
+    # метки эпизодных FSM — на каждом виде эпизода (meta читает по-категорийно)
+    for kind in ("illness", "injury"):
+        for code, label in EPISODE_STATES_EN.items():
+            await tr("category", ids[kind], f"state.{code}", label)
+        for code, label in EPISODE_EVENTS_EN.items():
+            await tr("category", ids[kind], f"event.{code}", label)
+    for code, label in INTERVIEW_STATES_EN.items():
+        await tr("category", ids["interview"], f"state.{code}", label)
+    for code, label in RED_FLAGS_EN.items():
+        await tr("category", ids["illness"], f"red_flag.{code}", label)
+    for kind, items in DICTIONARY_EN.items():
+        for code, name_en in items.items():
+            await tr("entity", entity_ids[(kind, code)], "name", name_en)
