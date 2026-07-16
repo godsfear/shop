@@ -193,6 +193,12 @@ export type Meta = Record<'concepts' | 'kinds' | 'states' | 'events' | 'red_flag
   Record<string, string>>
 export const meta = () => req<Meta>('/me/meta')
 
+// --- диагноз и лечение ---
+export const setDiagnosis = (id: string, text: string, source = 'manual') =>
+  req<void>(`/me/episodes/${id}/diagnosis`, json({ text, source }))
+export const startTreatment = (id: string, items: { code?: string; name: string }[]) =>
+  req<void>(`/me/episodes/${id}/treatment`, json({ items }))
+
 // --- симптомы/находки эпизода ---
 export const episodeProperties = (id: string, category?: string) =>
   req<MedProperty[]>(`/me/episodes/${id}/properties` + (category ? `?category=${category}` : ''))

@@ -26,9 +26,11 @@ from .. import tables
 
 TOPIC_EVALUATE = 'episode.evaluate'
 TOPIC_WORKUP = 'episode.workup'
+TOPIC_PLAN = 'episode.plan'
 DDX_CODE = 'ddx'
 WORKUP_CODE = 'workup'
-_INTERNAL_CODES = {DDX_CODE, WORKUP_CODE, 'state'}
+PLAN_CODE = 'plan'
+_INTERNAL_CODES = {DDX_CODE, WORKUP_CODE, PLAN_CODE, 'state'}
 
 _DDX_PROMPT = (
     'Ты — система поддержки принятия клинических решений. По анамнезу, '
@@ -77,6 +79,38 @@ _WORKUP_PROMPT = (
 )
 
 
+_PLAN_PROMPT = (
+    'Ты — система поддержки принятия клинических решений. Пациенту установлен '
+    'диагноз (поле diagnosis в данных). По диагнозу и анамнезу предложи '
+    'ранжированный план назначений по убыванию важности: немедикаментозные меры, '
+    'безрецептурные средства, контрольные обследования. Рецептурные препараты '
+    'упоминай только с prescription=true — их назначает врач. Это ПРЕДЛОЖЕНИЯ '
+    'для обсуждения с врачом, не назначение. code — стабильный id (латиница, '
+    'snake_case, повторяемо при пересчёте); name — название назначения; '
+    'reason — зачем и как применять; prescription=true, если нужен врач/рецепт.'
+)
+_PLAN_SCHEMA = {
+    'type': 'OBJECT',
+    'properties': {
+        'items': {
+            'type': 'ARRAY',
+            'items': {
+                'type': 'OBJECT',
+                'properties': {
+                    'code': {'type': 'STRING'},
+                    'name': {'type': 'STRING'},
+                    'reason': {'type': 'STRING'},
+                    'prescription': {'type': 'BOOLEAN'},
+                },
+                'required': ['code', 'name', 'reason', 'prescription'],
+            },
+        },
+        'note': {'type': 'STRING'},
+    },
+    'required': ['items'],
+}
+
+
 def _lang_note(lang: str) -> str:
     """Язык ответа задаётся при генерации (не переводом постфактум — решение
     владельца: переводы ИИ-текстов хуже прямой генерации)."""
@@ -117,6 +151,13 @@ def request_workup(session: AsyncSession, episode_id: uuid.UUID,
     """Рекомендацию анализов в очередь — авто после сбора анамнеза (интервью)."""
     emit(session, TOPIC_WORKUP, {'episode': str(episode_id), 'pseudonym': str(pseudonym),
                                  'lang': lang})
+
+
+def request_plan(session: AsyncSession, episode_id: uuid.UUID, pseudonym: uuid.UUID,
+                 diagnosis: str, lang: str = 'ru') -> None:
+    """План назначений в очередь — авто после установки диагноза."""
+    emit(session, TOPIC_PLAN, {'episode': str(episode_id), 'pseudonym': str(pseudonym),
+                               'diagnosis': diagnosis, 'lang': lang})
 
 
 async def _bundle(session: AsyncSession, episode_id: uuid.UUID,
@@ -213,6 +254,28 @@ async def _evaluate(session: AsyncSession, payload: dict) -> None:
                   {**result, 'source': 'ai', 'model': settings.gemini_model,
                    'docs': len(docs)})
     # commit — за вызывающим (process_one / консумер шины)
+
+
+# --------------------------------------------------------- план назначений
+@outbox_handler(TOPIC_PLAN)
+async def _plan(session: AsyncSession, payload: dict) -> None:
+    episode_id = uuid.UUID(payload['episode'])
+    pseudonym = uuid.UUID(payload['pseudonym'])
+    diagnosis = payload['diagnosis']
+    bundle = await _bundle(session, episode_id, pseudonym)
+    bundle['diagnosis'] = diagnosis
+
+    result = {'items': [], 'note': 'заглушка без ИИ'}
+    if settings.google_api_key:
+        try:
+            result = await _gemini(_PLAN_PROMPT + _lang_note(payload.get('lang', 'ru')),
+                                   _PLAN_SCHEMA, bundle)
+        except Exception as e:  # noqa: BLE001
+            logger.warning('plan: Gemini недоступен (%r) — заглушка', e)
+    # diagnosis в value — фронт понимает, для какого диагноза этот план
+    await _upsert(session, episode_id, PLAN_CODE,
+                  {**result, 'source': 'ai', 'model': settings.gemini_model,
+                   'diagnosis': diagnosis})
 
 
 # --------------------------------------------------------- рекомендация анализов

@@ -3,7 +3,7 @@
 import datetime
 import uuid
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .property import forbid_state_code
 
@@ -40,6 +40,22 @@ class _MedOut(BaseModel):
 
 class MedPropertyOut(_MedOut):
     value: dict
+
+
+class DiagnosisIn(BaseModel):
+    """Установленный диагноз: вручную или выбор из ИИ-вариантов (ddx)."""
+    text: str = Field(min_length=2, max_length=500)
+    source: str = 'manual'          # manual | ddx
+
+
+class TreatmentItem(BaseModel):
+    code: str | None = None         # стабильный id из плана ИИ (если выбран оттуда)
+    name: str = Field(min_length=1, max_length=500)
+
+
+class TreatmentIn(BaseModel):
+    """Назначения при старте лечения: выбранные из плана ИИ и/или свои."""
+    items: list[TreatmentItem] = Field(min_length=1)
 
 
 class EpisodeIn(BaseModel):

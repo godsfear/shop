@@ -124,6 +124,22 @@ const EN: Record<string, string> = {
     'Test and exam results. Read by the AI when you press “Diagnosis” (originals); not parsed on upload.',
   'Загрузить': 'Upload',
   'ИИ': 'AI',
+  'Выберите вариант ИИ или впишите диагноз, поставленный врачом.':
+    'Pick an AI option or type the diagnosis made by your doctor.',
+  'диагноз': 'diagnosis',
+  'выбран из вариантов ИИ': 'picked from AI options',
+  'внесён вручную': 'entered manually',
+  'Назначения (рекомендация ИИ)': 'Treatment plan (AI recommendation)',
+  'ИИ подбирает назначения по диагнозу…': 'The AI is preparing a treatment plan…',
+  'Отранжированы по важности. Нажмите «Начать лечение», чтобы выбрать из них и/или добавить назначения врача.':
+    'Ranked by importance. Press “Start treatment” to pick from them and/or add your doctor’s orders.',
+  'нужно назначение врача': 'requires a doctor’s prescription',
+  'Назначения ИИ — предложения для обсуждения с врачом. Не начинайте приём рецептурных препаратов без назначения врача.':
+    'AI suggestions are for discussion with a doctor. Do not start prescription medication without a doctor’s order.',
+  'добавить своё назначение': 'add your own item',
+  'Начать лечение': 'Start treatment',
+  'Лечение': 'Treatment',
+  'начато': 'started',
   'Дневник симптомов': 'Symptom diary',
   'Замеры в моменте — температура, давление, пульс. Уйдут ИИ в диагноз вместе с анамнезом.':
     'Momentary readings — temperature, blood pressure, pulse. They feed the AI diagnosis along with the history.',

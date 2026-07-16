@@ -27,13 +27,13 @@ from ..keyservice import KeyServiceError, PolicyError
 from ..medical_seed import SEX_SPECIFIC, VITAL_SCOPES, medical_concepts
 from ..models.auth import TokenPayload
 from ..models.entity import EntityCreate, EntityUpdate
-from ..models.medical import EpisodeIn, MedPropertyIn
+from ..models.medical import DiagnosisIn, EpisodeIn, MedPropertyIn, TreatmentIn
 from ..models.property import PropertyCreate, PropertyFilter
 from ..services.auth import get_token_payload
 from ..services.bridge import BridgeService
 from ..services.consent import APPROVED, MEDICAL, _until_alive
 from ..services.entity import EntityService
-from ..services.evaluate import request_evaluate
+from ..services.evaluate import _upsert, request_evaluate, request_plan
 from ..services.extract import request_extract
 from ..services.files import FileStore
 from ..services.fsm import FSMService
@@ -424,6 +424,37 @@ class MedAccessService:
         request_evaluate(self.session, episode_id, pseudonym, age, sex, lang=self.lang)
         await self.session.commit()
         return {'queued': True}
+
+    async def set_diagnosis(self, episode_id: uuid.UUID, body: DiagnosisIn) -> dict:
+        """Установить диагноз: свойство + переход FSM + план назначений от ИИ —
+        одной транзакцией. Повторная установка обновляет диагноз (версионно)
+        и пересчитывает план."""
+        pseudonym = await self._gate_episode(episode_id)
+        await _upsert(self.session, episode_id, 'diagnosis',
+                      {'text': body.text, 'source': body.source})
+        fsm = FSMService(session=self.session)
+        st = await fsm.state('entity', episode_id)
+        if 'diagnose' in st['available']:
+            await fsm.trigger('entity', episode_id, 'diagnose',
+                              creator=self.payload.sub, commit=False)
+        request_plan(self.session, episode_id, pseudonym, body.text, lang=self.lang)
+        await self.session.commit()
+        return {'queued': True}
+
+    async def start_treatment(self, episode_id: uuid.UUID, body: TreatmentIn) -> dict:
+        """Начать лечение: зафиксировать назначения (выбор из плана ИИ и/или
+        свои) + переход FSM одной транзакцией."""
+        await self._gate_episode(episode_id)
+        await _upsert(self.session, episode_id, 'treatment',
+                      {'items': [i.model_dump(exclude_none=True) for i in body.items],
+                       'source': 'patient'})
+        fsm = FSMService(session=self.session)
+        st = await fsm.state('entity', episode_id)
+        if 'treat' in st['available']:
+            await fsm.trigger('entity', episode_id, 'treat',
+                              creator=self.payload.sub, commit=False)
+        await self.session.commit()
+        return {'ok': True}
 
     # --- интервью (сбор анамнеза по протоколу) — за теми же воротами эпизода ---
     async def interview_open(self, episode_id: uuid.UUID) -> dict:

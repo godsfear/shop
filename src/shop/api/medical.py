@@ -8,6 +8,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
 
 from ..models.medical import (SessionOpen, MedPropertyIn, MedPropertyOut,
+                               DiagnosisIn, TreatmentIn,
                                EpisodeIn, EpisodeOut, EpisodeRename, Transition, DataOut)
 from ..services.medaccess import MedAccessService
 
@@ -186,6 +187,21 @@ async def episode_evaluate(episode_id: uuid.UUID, svc: MedAccessService = Depend
     """Поставить ИИ-оценку в очередь; результат — Property(code='ddx') на эпизоде.
     Предположения для обсуждения с врачом, НЕ диагноз."""
     return await svc.evaluate(episode_id)
+
+
+@router.post('/episodes/{episode_id}/diagnosis', status_code=status.HTTP_202_ACCEPTED)
+async def episode_diagnosis(episode_id: uuid.UUID, body: DiagnosisIn,
+                            svc: MedAccessService = Depends()):
+    """Установить диагноз (вручную или выбор из ddx): свойство + переход FSM;
+    ИИ асинхронно готовит план назначений — Property(code='plan')."""
+    return await svc.set_diagnosis(episode_id, body)
+
+
+@router.post('/episodes/{episode_id}/treatment', status_code=status.HTTP_201_CREATED)
+async def episode_treatment(episode_id: uuid.UUID, body: TreatmentIn,
+                            svc: MedAccessService = Depends()):
+    """Начать лечение: зафиксировать назначения (из плана ИИ и/или свои) + переход FSM."""
+    return await svc.start_treatment(episode_id, body)
 
 
 # --- документы/анализы: загрузка (-> блоб + метаданные + ИИ-разбор), список ---

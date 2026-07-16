@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import {
   getEpisode, renameEpisode, episodeHistory, episodeState, transition, assess,
   episodeProperties, listDocuments, uploadDocument, concepts, dictionary,
-  evaluateEpisode, addEpisodeProperty,
+  evaluateEpisode, addEpisodeProperty, setDiagnosis, startTreatment,
   type Episode as Ep, type FsmState, type Assess, type MedProperty, type Doc,
   type Concepts, type StateLog, type DictItem,
 } from '../api'
@@ -14,6 +14,8 @@ interface Ddx {
 }
 interface WorkupTest { code?: string; test: string; reason: string; self?: boolean }
 interface Workup { tests: WorkupTest[] }
+interface PlanItem { code?: string; name: string; reason?: string; prescription?: boolean }
+interface Plan { items: PlanItem[]; note?: string; diagnosis?: string }
 import { EVENTS, RED_FLAGS, SECTIONS, SLOTS, STATES, UNITS, t } from '../ui'
 import { ui } from '../i18n'
 
@@ -60,6 +62,17 @@ export default function Episode() {
 
   // результаты, внесённые пациентом вручную (самостоятельные пробы и т.п.)
   const [results, setResults] = useState<MedProperty[]>([])
+  // установленный диагноз, план назначений ИИ и зафиксированное лечение
+  const [diagProp, setDiagProp] = useState<MedProperty | null>(null)
+  const [plan, setPlan] = useState<MedProperty | null>(null)
+  const [treatProp, setTreatProp] = useState<MedProperty | null>(null)
+  const [diagOpen, setDiagOpen] = useState(false)
+  const [diagText, setDiagText] = useState('')
+  const [planPending, setPlanPending] = useState(false)
+  const [treatOpen, setTreatOpen] = useState(false)
+  const [treatPicked, setTreatPicked] = useState<string[]>([])   // коды из плана ИИ
+  const [treatLines, setTreatLines] = useState<string[]>([])     // свои назначения
+  const [treatFree, setTreatFree] = useState('')
   // дневник симптомов: замеры в моменте (температура/давление/пульс)
   const [diary, setDiary] = useState<MedProperty[]>([])
   const [diaryDict, setDiaryDict] = useState<DictItem[]>([])
@@ -83,6 +96,9 @@ export default function Episode() {
       const sum = props.find((p) => p.code === 'summary') ?? null
       setSummary(sum)
       setHasSummary(sum !== null)                             // интервью подтверждено
+      setDiagProp(props.find((p) => p.code === 'diagnosis') ?? null)
+      setPlan(props.find((p) => p.code === 'plan') ?? null)
+      setTreatProp(props.find((p) => p.code === 'treatment') ?? null)
       setDocs(await listDocuments(id))
       setLog(await episodeHistory(id))
       setA(await assess(id))
@@ -118,6 +134,50 @@ export default function Episode() {
     })()
     return () => { stop = true }
   }, [hasSummary, workup, id])
+
+  // план назначений генерится в фоне после установки диагноза — опрашиваем,
+  // пока не придёт план именно для текущего текста диагноза
+  useEffect(() => {
+    const dText = (diagProp?.value as { text?: string } | undefined)?.text
+    if (!dText) return
+    if (plan && (plan.value as unknown as Plan).diagnosis === dText) return
+    let stop = false
+    setPlanPending(true)
+    ;(async () => {
+      for (let i = 0; i < 10 && !stop; i++) {
+        await new Promise((r) => setTimeout(r, 2500))
+        const p = (await episodeProperties(id)).find((x) => x.code === 'plan')
+        if (p && (p.value as unknown as Plan).diagnosis === dText) { setPlan(p); break }
+      }
+      if (!stop) setPlanPending(false)
+    })()
+    return () => { stop = true }
+  }, [diagProp, plan, id])
+
+  const saveDiag = async (source: string) => {
+    setErr('')
+    try {
+      await setDiagnosis(id, diagText.trim(), source)
+      setDiagOpen(false); setDiagText('')
+      await reload()
+    } catch (e) { setErr((e as Error).message) }
+  }
+
+  const saveTreatment = async () => {
+    setErr('')
+    const items = [
+      ...((plan?.value as unknown as Plan)?.items ?? [])
+        .filter((x) => x.code && treatPicked.includes(x.code))
+        .map((x) => ({ code: x.code, name: x.name })),
+      ...treatLines.map((name) => ({ name })),
+    ]
+    if (!items.length) return
+    try {
+      await startTreatment(id, items)
+      setTreatOpen(false); setTreatPicked([]); setTreatLines([]); setTreatFree('')
+      await reload()
+    } catch (e) { setErr((e as Error).message) }
+  }
 
   const fire = async (event: string) => {
     setErr('')
@@ -243,12 +303,78 @@ export default function Episode() {
             <Link to={`/episode/${id}/interview`}><button>{ui('Пройти опрос (анамнез)')}</button></Link>}
           {fsm && fsm.state !== 'anamnesis' &&
             <Link to={`/episode/${id}/interview`} className="muted">{ui('интервью')}</Link>}
+          {/* diagnose/treat — не голые переходы: открывают формы диагноза/назначений */}
           {fsm?.available.map((ev) => (
             <button key={ev} className={fsm.state === 'anamnesis' ? 'ghost' : ''}
-                    onClick={() => fire(ev)}>{t(EVENTS, ev)}</button>
+                    onClick={() => ev === 'diagnose'
+                      ? (setDiagText((diagProp?.value as { text?: string })?.text ?? ''), setDiagOpen(true))
+                      : ev === 'treat' ? setTreatOpen(true) : fire(ev)}>
+              {t(EVENTS, ev)}
+            </button>
           ))}
           {fsm && fsm.available.length === 0 && <span className="muted">{ui('маршрут завершён')}</span>}
         </div>
+
+        {/* форма диагноза: выбрать вариант ИИ (ddx) или вписать свой */}
+        {diagOpen && (() => {
+          const opts = ((ddx?.value as unknown as Ddx)?.assessments ?? [])
+            .slice(0, 5).map((a) => a.condition)
+          return (
+            <div className="answer">
+              {opts.length > 0 && (
+                <div className="inline">
+                  {opts.map((c) => (
+                    <button key={c} type="button"
+                            className={'chip pick' + (diagText === c ? ' on' : '')}
+                            onClick={() => setDiagText(c)}>{c}</button>
+                  ))}
+                </div>
+              )}
+              <p className="muted">{ui('Выберите вариант ИИ или впишите диагноз, поставленный врачом.')}</p>
+              <div className="inline">
+                <input value={diagText} autoFocus placeholder={ui('диагноз')}
+                       onChange={(e) => setDiagText(e.target.value)} />
+                <button onClick={() => saveDiag(opts.includes(diagText) ? 'ddx' : 'manual')}
+                        disabled={!diagText.trim()}>{ui('Сохранить')}</button>
+                <button className="ghost" onClick={() => setDiagOpen(false)}>{ui('Отмена')}</button>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* форма назначений: чипы из плана ИИ (мультивыбор) + свои строки */}
+        {treatOpen && (() => {
+          const items = ((plan?.value as unknown as Plan)?.items ?? []).filter((x) => x.code)
+          const toggle = (c: string) => setTreatPicked(treatPicked.includes(c)
+            ? treatPicked.filter((x) => x !== c) : [...treatPicked, c])
+          return (
+            <div className="answer">
+              {items.length > 0 && (
+                <div className="inline">
+                  {items.map((x) => (
+                    <button key={x.code} type="button"
+                            className={'chip pick' + (treatPicked.includes(x.code!) ? ' on' : '')}
+                            onClick={() => toggle(x.code!)}>{x.name}</button>
+                  ))}
+                </div>
+              )}
+              {treatLines.map((l, i) => <p key={i} className="muted">+ {l}</p>)}
+              <div className="inline">
+                <input placeholder={ui('добавить своё назначение')} value={treatFree}
+                       onChange={(e) => setTreatFree(e.target.value)} />
+                <button type="button" className="ghost" disabled={!treatFree.trim()}
+                        onClick={() => { setTreatLines([...treatLines, treatFree.trim()]); setTreatFree('') }}>+</button>
+              </div>
+              <div className="inline">
+                <button onClick={saveTreatment}
+                        disabled={!treatPicked.length && !treatLines.length}>
+                  {ui('Начать лечение')}
+                </button>
+                <button className="ghost" onClick={() => setTreatOpen(false)}>{ui('Отмена')}</button>
+              </div>
+            </div>
+          )
+        })()}
         {log.length > 0 && (
           <details className="log">
             <summary>{ui('Журнал')} ({log.length})</summary>
@@ -424,6 +550,69 @@ export default function Episode() {
           )
         })()}
       </section>
+
+      {/* установленный диагноз (вручную/из ddx) — не путать с ИИ-оценкой выше */}
+      {diagProp && (() => {
+        const v = diagProp.value as { text?: string; source?: string }
+        return (
+          <section>
+            <h3>{ui('Диагноз')}</h3>
+            <div className="card resume">
+              <b>{v.text}</b>
+              <p className="muted">{v.source === 'ddx' ? ui('выбран из вариантов ИИ') : ui('внесён вручную')}
+                {' · '}{new Date(diagProp.begins).toLocaleDateString()}</p>
+            </div>
+          </section>
+        )
+      })()}
+
+      {/* план назначений от ИИ — генерится после установки диагноза */}
+      {diagProp && !treatProp && planPending &&
+        (!plan || (plan.value as unknown as Plan).diagnosis !== (diagProp.value as { text?: string }).text) && (
+        <section>
+          <h3>{ui('Назначения (рекомендация ИИ)')}</h3>
+          <p className="muted parsing">{ui('ИИ подбирает назначения по диагнозу…')}</p>
+        </section>
+      )}
+      {plan && (() => {
+        const v = plan.value as unknown as Plan
+        if (!v.items?.length) return null
+        return (
+          <section>
+            <h3>{ui('Назначения (рекомендация ИИ)')}</h3>
+            <p className="muted">{ui('Отранжированы по важности. Нажмите «Начать лечение», чтобы выбрать из них и/или добавить назначения врача.')}</p>
+            <ul className="cards">
+              {v.items.map((x, i) => (
+                <li key={i} className="card">
+                  <b>{i + 1}. {x.name}</b>
+                  {x.prescription && <span className="chip state"> {ui('нужно назначение врача')}</span>}
+                  <div className="muted">{x.reason}</div>
+                </li>
+              ))}
+            </ul>
+            {v.note && <p className="muted">{v.note}</p>}
+            <p className="muted disclaimer">{ui('Назначения ИИ — предложения для обсуждения с врачом. Не начинайте приём рецептурных препаратов без назначения врача.')}</p>
+          </section>
+        )
+      })()}
+
+      {/* зафиксированное лечение (выбор пациента) */}
+      {treatProp && (() => {
+        const items = (treatProp.value as { items?: { name: string }[] }).items ?? []
+        return (
+          <section>
+            <h3>{ui('Лечение')}</h3>
+            <ul className="rows">
+              {items.map((x, i) => (
+                <li key={i} className="row-link">
+                  <span>{x.name}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="muted">{ui('начато')} · {new Date(treatProp.begins).toLocaleDateString()}</p>
+          </section>
+        )
+      })()}
 
       {/* жалобы вносятся опросом (анамнез) — ручного ввода кодов нет */}
       {symptoms.length > 0 && (
