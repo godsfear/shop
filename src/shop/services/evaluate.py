@@ -128,7 +128,10 @@ async def _bundle(session: AsyncSession, episode_id: uuid.UUID,
     names = {v: k for k, v in cats.items()}
 
     def rows_to_list(rows):
-        return [{'concept': names.get(p.category), 'code': p.code, **(p.value or {})}
+        # at — время записи: дневник симптомов (температура/давление в моменте)
+        # без отметок времени теряет смысл, ИИ видит динамику
+        return [{'concept': names.get(p.category), 'code': p.code,
+                 'at': p.begins.isoformat(timespec='minutes'), **(p.value or {})}
                 for p in rows if p.code not in _INTERNAL_CODES
                 and (p.value or {}).get('source') != 'ai']
 

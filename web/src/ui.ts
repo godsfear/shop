@@ -23,3 +23,10 @@ export const loadMeta = () => loading ??= meta().then((m) => {
 }).catch(() => { loading = null })
 
 export const t = (dict: Record<string, string>, code: string) => dict[code] ?? code
+
+// единицы показателей (vital) — «Моя карта» и дневник симптомов эпизода;
+// подпись локализуется через ui() в момент записи
+export const UNITS: Record<string, string> = {
+  height: 'см', weight: 'кг', blood_pressure: 'мм рт. ст.', pulse: 'уд/мин',
+  temperature: '°C',
+}

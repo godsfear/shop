@@ -121,6 +121,10 @@ const EN: Record<string, string> = {
     'Test and exam results. Read by the AI when you press “Diagnosis” (originals); not parsed on upload.',
   'Загрузить': 'Upload',
   'ИИ': 'AI',
+  'Дневник симптомов': 'Symptom diary',
+  'Замеры в моменте — температура, давление, пульс. Уйдут ИИ в диагноз вместе с анамнезом.':
+    'Momentary readings — temperature, blood pressure, pulse. They feed the AI diagnosis along with the history.',
+  '— параметр —': '— parameter —',
   // интервью
   'Что беспокоит больше всего? Это станет главной жалобой.':
     'What bothers you most? This becomes the chief complaint.',

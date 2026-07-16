@@ -4,16 +4,13 @@ import {
   propertyHistory, updateProperty,
   type Concepts, type DictItem, type MedProperty,
 } from '../api'
-import { SECTIONS, t } from '../ui'
+import { SECTIONS, UNITS, t } from '../ui'
 import { ui } from '../i18n'
 
 // Разделы «Моей карты» в порядке показа; vital — особый (значение+история)
 const PROFILE_SECTIONS = ['vital', 'chronic', 'medication', 'allergy',
                           'surgery', 'heredity', 'social', 'risk_factor',
                           'blood', 'vaccination']
-const UNITS: Record<string, string> = {
-  height: 'см', weight: 'кг', blood_pressure: 'мм рт. ст.', pulse: 'уд/мин',
-}
 
 function Section({ concept, cid }: { concept: string; cid: string }) {
   const [items, setItems] = useState<MedProperty[]>([])

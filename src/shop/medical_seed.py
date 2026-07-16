@@ -189,6 +189,7 @@ DICTIONARY = {
     "vital": [
         ("height", "Рост"), ("weight", "Вес"),
         ("blood_pressure", "Давление"), ("pulse", "Пульс"),
+        ("temperature", "Температура"),   # дневник симптомов на эпизоде
     ],
     "chronic": [
         ("hypertension", "Гипертония"), ("diabetes2", "Сахарный диабет 2 типа"),
@@ -286,6 +287,7 @@ DICTIONARY_EN = {
     "vital": {
         "height": "Height", "weight": "Weight",
         "blood_pressure": "Blood pressure", "pulse": "Pulse",
+        "temperature": "Temperature",
     },
     "chronic": {
         "hypertension": "Hypertension", "diabetes2": "Type 2 diabetes",

@@ -5,7 +5,7 @@ import {
   episodeProperties, listDocuments, uploadDocument, concepts, dictionary,
   evaluateEpisode, addEpisodeProperty,
   type Episode as Ep, type FsmState, type Assess, type MedProperty, type Doc,
-  type Concepts, type StateLog,
+  type Concepts, type StateLog, type DictItem,
 } from '../api'
 
 interface Ddx {
@@ -14,7 +14,7 @@ interface Ddx {
 }
 interface WorkupTest { code?: string; test: string; reason: string; self?: boolean }
 interface Workup { tests: WorkupTest[] }
-import { EVENTS, RED_FLAGS, SECTIONS, SLOTS, STATES, t } from '../ui'
+import { EVENTS, RED_FLAGS, SECTIONS, SLOTS, STATES, UNITS, t } from '../ui'
 import { ui } from '../i18n'
 
 // Таймлайн жизненного цикла: полный маршрут из fsm.states, текущее — акцентом
@@ -60,6 +60,11 @@ export default function Episode() {
 
   // результаты, внесённые пациентом вручную (самостоятельные пробы и т.п.)
   const [results, setResults] = useState<MedProperty[]>([])
+  // дневник симптомов: замеры в моменте (температура/давление/пульс)
+  const [diary, setDiary] = useState<MedProperty[]>([])
+  const [diaryDict, setDiaryDict] = useState<DictItem[]>([])
+  const [dCode, setDCode] = useState('')
+  const [dVal, setDVal] = useState('')
 
   const reload = async () => {
     try {
@@ -71,6 +76,8 @@ export default function Episode() {
       setResults(props.filter((p) =>
         (p.value as { source?: string; result?: string }).source === 'patient'
         && (p.value as { result?: string }).result !== undefined))
+      setDiary(props.filter((p) => p.category === cs['vital'] && !isAi(p))
+        .sort((a, b) => b.begins.localeCompare(a.begins)))
       setDdx(props.find((p) => p.code === 'ddx') ?? null)
       setWorkup(props.find((p) => p.code === 'workup') ?? null)
       const sum = props.find((p) => p.code === 'summary') ?? null
@@ -88,6 +95,7 @@ export default function Episode() {
     // symptom + system: имена жалоб и систем (резюме анамнеза, ROS)
     Promise.all([dictionary('symptom'), dictionary('system')]).then(([a, b]) =>
       setSymNames(Object.fromEntries([...a, ...b].map((x) => [x.code, x.name])))).catch(() => {})
+    dictionary('vital').then(setDiaryDict).catch(() => {})
   }, [])
   // перезагрузка данных, когда стали известны концепты (нужен id категории симптома)
   useEffect(() => { if (id) reload() }, [id, cs['symptom']])
@@ -175,6 +183,22 @@ export default function Episode() {
   // выполнен ли рекомендованный анализ: по коду, иначе по названию
   const matches = (code: string | null, name: string | null, x: WorkupTest) =>
     (x.code != null && code === x.code) || name === x.test
+
+  // запись дневника — обычное свойство эпизода (concept=vital, source=diary):
+  // ИИ получает её в бандле с отметкой времени, отдельного носителя не нужно
+  const addDiary = async () => {
+    if (!dCode || !dVal.trim()) return
+    setErr('')
+    try {
+      const names = new Map(diaryDict.map((d) => [d.code, d.name]))
+      await addEpisodeProperty(id, {
+        category: cs['vital'], code: dCode, name: names.get(dCode),
+        value: { value: dVal.trim(), unit: ui(UNITS[dCode] ?? ''), source: 'diary' },
+      })
+      setDVal('')
+      await reload()
+    } catch (e) { setErr((e as Error).message) }
+  }
 
   const upload = async (e: FormEvent) => {
     e.preventDefault()
@@ -415,6 +439,31 @@ export default function Episode() {
           </ul>
         </section>
       )}
+
+      {/* дневник симптомов: журнал замеров в моменте в рамках эпизода */}
+      <section>
+        <h3>{ui('Дневник симптомов')}</h3>
+        <p className="muted">{ui('Замеры в моменте — температура, давление, пульс. Уйдут ИИ в диагноз вместе с анамнезом.')}</p>
+        <div className="inline">
+          <select value={dCode} onChange={(e) => setDCode(e.target.value)}>
+            <option value="">{ui('— параметр —')}</option>
+            {diaryDict.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
+          </select>
+          <input placeholder={ui('значение')} value={dVal}
+                 onChange={(e) => setDVal(e.target.value)}
+                 onKeyDown={(e) => { if (e.key === 'Enter') addDiary() }} />
+          <button onClick={addDiary} disabled={!dCode || !dVal.trim()}>{ui('Записать')}</button>
+        </div>
+        <ul className="rows">
+          {diary.map((p) => (
+            <li key={p.id} className="row-link">
+              <span>{p.name || p.code}</span>
+              <b>{String(p.value.value ?? '')} {String(p.value.unit ?? '')}</b>
+              <span className="muted">{new Date(p.begins).toLocaleString()}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section>
         <h3>{ui('Документы')}</h3>
