@@ -75,11 +75,13 @@ const json = (body: unknown, method = 'POST'): RequestInit => ({
   method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 })
 
-// --- аутентификация ---
-export async function signup(email: string, password: string, last: string,
-                             sex: boolean, birthdate: string): Promise<string> {
-  const body = { person: { name: { last }, sex, birthdate }, contact: { email }, password }
-  const r = await req<{ access_token: string }>('/auth/signup/', json(body))
+// --- аутентификация: регистрация двухшаговая (код на почту ДО создания учётки) ---
+export const signupStart = (email: string, password: string, last: string,
+                            sex: boolean, birthdate: string) =>
+  req<void>('/auth/signup/', json(
+    { person: { name: { last }, sex, birthdate }, contact: { email }, password }))
+export async function signupConfirm(email: string, code: string): Promise<string> {
+  const r = await req<{ access_token: string }>('/auth/signup/confirm/', json({ email, code }))
   return r.access_token
 }
 export async function signin(email: string, password: string): Promise<string> {
@@ -96,9 +98,6 @@ export async function signin(email: string, password: string): Promise<string> {
 export interface Me { id: string; person: string; contact: { email?: string }
                       confirmed: boolean }
 export const me = () => req<Me>('/auth/user/')
-// подтверждение почты кодом из письма
-export const confirmEmail = (code: string) => req<Me>('/auth/confirm/', json({ code }))
-export const resendConfirm = () => req<void>('/auth/confirm/resend/', { method: 'POST' })
 
 // --- согласия (consent-first доступ) ---
 export interface Consent {

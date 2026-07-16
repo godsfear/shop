@@ -39,12 +39,14 @@ async def test_main():
 
     # --- сквозная регистрация: персона встроена в signup ---
     async with Sess() as s:
+        # хеш заранее — как в проде: пароль хешируется на шаге заявки (signup),
+        # register_new_user вызывается после сверки кода
         token, _ = await UserService(session=s).register_new_user(SignUp(
             person=PersonCreate(name={'last': 'Петров'}, sex=True,
                                 birthdate=datetime.date(1990, 1, 1),
                                 birth_place=place_id),
             contact=Contact(email='petrov@x.com'),
-            password='correct-horse'))
+            password='correct-horse'), AuthService.hash_password('correct-horse'))
         signup_payload = AuthService.verify_token(token.access_token)
     async with Sess() as s:
         me = await get_current_user(payload=signup_payload, session=s)

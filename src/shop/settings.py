@@ -66,7 +66,8 @@ class Settings(BaseSettings):
     smtp_user: str = ''
     smtp_password: str = ''
     mail_from: str = 'noreply@localhost'
-    confirm_ttl_s: int = 24 * 3600         # жизнь кода подтверждения (Redis)
+    confirm_ttl_s: int = 24 * 3600         # жизнь заявки на регистрацию (Redis)
+    signup_mail_limit: int = 3             # писем с кодом на один адрес в час
     # периметр HTTP
     auth_rate_limit: int = 10              # попыток /auth/* с одного IP за окно
     auth_rate_window_s: int = 60           # окно rate limit (сек)

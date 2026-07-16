@@ -3,14 +3,16 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from fastapi import HTTPException
 
+from sqlalchemy.exc import IntegrityError
+
 from ..cache import get_cache
 from ..keyservice import get_key_service
-from ..models.auth import Challenge, KeyCredentials, Token, TokenPayload
-from ..models.user import ConfirmCode, Contact, SignUp, User
-from ..services.mailer import check_confirm, request_confirm
+from ..models.auth import Challenge, KeyCredentials, Token
+from ..models.user import Contact, SignUp, SignUpConfirm, User
+from ..services.mailer import pop_signup, request_signup
 from ..services.medaccess import enroll_patient
 from ..services.user import UserService
-from ..services.auth import get_current_user, get_token_payload
+from ..services.auth import AuthService, get_current_user
 from ..settings import settings
 
 router = APIRouter(prefix='/auth', tags=['auth'])
@@ -34,38 +36,46 @@ def _prop(email: str | None, phone: str | None) -> str:
     return prop
 
 
-@router.post('/signup/', response_model=Token, status_code=status.HTTP_201_CREATED,
+@router.post('/signup/', status_code=status.HTTP_204_NO_CONTENT,
              dependencies=[Depends(rate_limit)])
 async def sign_up(data: SignUp, service: UserService = Depends()):
-    """Регистрация: персона, учётка и ключи карты — сразу; на почту уходит код."""
-    token, user = await service.register_new_user(data)
-    # ключи выпускаются каждому при регистрации (решение владельца) —
-    # отдельного шага «завести карту» нет
-    await enroll_patient(service.session, get_key_service(), user.id, user.person)
-    return token
+    """Шаг 1 регистрации: заявка в Redis + код на почту. Учётка НЕ создаётся —
+    неподтверждённая заявка испаряется по TTL (анти-спам левыми адресами)."""
+    email = _prop(data.contact.email, None)
+    if await service.get_by_contact(email) is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail='contact_taken')
+    # троттлинг по адресу: коды на чужой ящик нельзя слать бесконечно
+    if not await get_cache().hit(f'signupmail:{email.lower()}',
+                                 settings.signup_mail_limit, 3600):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            detail='too_many_attempts')
+    pending = data.model_dump(mode='json', exclude={'password'})
+    pending['password_hash'] = AuthService.hash_password(data.password)
+    await request_signup(service.session, email, pending)
+    await service.session.commit()          # письмо — через outbox
 
 
-@router.post('/confirm/', response_model=User, dependencies=[Depends(rate_limit)])
-async def confirm_email(body: ConfirmCode, service: UserService = Depends(),
-                        payload: TokenPayload = Depends(get_token_payload)):
-    """Подтверждение почты кодом из письма (без него нельзя запрашивать чужие карты)."""
-    if not await check_confirm(payload.sub, body.code):
+@router.post('/signup/confirm/', response_model=Token,
+             status_code=status.HTTP_201_CREATED, dependencies=[Depends(rate_limit)])
+async def sign_up_confirm(body: SignUpConfirm, service: UserService = Depends()):
+    """Шаг 2: код сошёлся — создаются персона, учётка (confirmed) и ключи карты."""
+    pending = await pop_signup(body.email, body.code)
+    if pending is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail='confirm_code_invalid')
-    return await service.confirm(payload.sub)
-
-
-@router.post('/confirm/resend/', status_code=status.HTTP_204_NO_CONTENT,
-             dependencies=[Depends(rate_limit)])
-async def resend_confirm(service: UserService = Depends(),
-                         payload: TokenPayload = Depends(get_token_payload)):
-    user = await service.get_by_id(payload.sub)
-    email = user.contact.email
-    if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail='no_email_in_profile')
-    await request_confirm(service.session, payload.sub, email)
-    await service.session.commit()
+    password_hash = pending.pop('password_hash')
+    # пароль-заглушка проходит валидацию и не используется: хеш уже готов
+    signup = SignUp.model_validate({**pending, 'password': '<confirmed>'})
+    try:
+        token, user = await service.register_new_user(signup, password_hash)
+    except IntegrityError:                  # гонка двух подтверждений
+        await service.session.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail='contact_taken') from None
+    # ключи выпускаются каждому при регистрации (решение владельца)
+    await enroll_patient(service.session, get_key_service(), user.id, user.person)
+    return token
 
 
 @router.post('/signin/', response_model=Token, dependencies=[Depends(rate_limit)])

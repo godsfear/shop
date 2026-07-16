@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import {
-  ApiError, confirmEmail, enroll, getCare, me, openSession, resendConfirm, setCare,
-} from '../api'
+import { ApiError, enroll, getCare, openSession, setCare } from '../api'
 import { useAuth } from '../auth'
 import { loadMeta } from '../ui'
 import { getLang, setLang, ui } from '../i18n'
@@ -18,33 +16,6 @@ export function LangSwitch({ className = '' }: { className?: string }) {
   )
 }
 
-// Плашка «подтвердите почту»: код из письма; без подтверждения нельзя
-// запрашивать чужие карты (контроль регистрируемых).
-function ConfirmBanner({ onDone }: { onDone: () => void }) {
-  const [code, setCode] = useState('')
-  const [msg, setMsg] = useState('')
-  const submit = async () => {
-    setMsg('')
-    try { await confirmEmail(code.trim()); onDone() }
-    catch (e) { setMsg((e as Error).message) }
-  }
-  const resend = async () => {
-    setMsg('')
-    try { await resendConfirm(); setMsg(ui('код отправлен повторно')) }
-    catch (e) { setMsg((e as Error).message) }
-  }
-  return (
-    <div className="confirm-banner">
-      <span>{ui('Подтвердите почту — код в письме.')}</span>
-      <input placeholder={ui('код из письма')} value={code} inputMode="numeric"
-             onChange={(e) => setCode(e.target.value)} />
-      <button onClick={submit} disabled={!code.trim()}>{ui('Подтвердить')}</button>
-      <button className="ghost" onClick={resend}>{ui('Выслать снова')}</button>
-      {msg && <span className="msg-note">{msg}</span>}
-    </div>
-  )
-}
-
 // Каркас: открывает owner-сессию (ключи выпускаются при регистрации; 409 у
 // старых учёток лечится автоматическим довыпуском). В режиме «Пациенты» (care)
 // сессия не нужна — Слой B несёт link_id/key_id в каждом запросе.
@@ -54,12 +25,7 @@ export default function Shell() {
   const [status, setStatus] = useState('')
   const [ready, setReady] = useState(false)   // гейт: дети грузят данные по открытой сессии
   const [sessionOk, setSessionOk] = useState(false)
-  const [confirmed, setConfirmed] = useState(true)  // до ответа сервера плашку не мигаем
   const care = getCare()
-
-  useEffect(() => {
-    me().then((u) => setConfirmed(u.confirmed)).catch(() => {})
-  }, [])
 
   useEffect(() => {
     // подписи доменных кодов (/me/meta) — до рендера страниц; при ошибке коды как есть
@@ -104,7 +70,6 @@ export default function Shell() {
           <button className="ghost" onClick={leaveCare}>{ui('Выйти из карты')}</button>
         </div>
       )}
-      {!confirmed && <ConfirmBanner onDone={() => setConfirmed(true)} />}
       <main>{ready ? <Outlet /> : <p className="muted">{status || ui('открываю сессию…')}</p>}</main>
     </div>
   )

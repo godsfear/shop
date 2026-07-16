@@ -1,17 +1,18 @@
-"""Почта: подтверждение регистрации кодом. Отправка — через outbox (надёжно,
-той же транзакцией, что и регистрация).
+"""Почта: подтверждение почты кодом ДО создания учётки (анти-спам, AWS-стиль).
+
+Заявка на регистрацию целиком живёт в Redis (signup:{email}, TTL): код +
+данные формы с уже захешированным паролем. В БД до подтверждения — ничего;
+не подтвердил — заявка испарилась. Письмо — через outbox (надёжно, той же
+транзакцией, что и постановка заявки).
 
 Провайдер по приоритету: Resend (HTTP API, если задан RESEND_API_KEY) ->
-SMTP-релей (SMTP_HOST) -> лог (dev, ничего не настроено). Код живёт в Redis
-(emailconfirm:{user_id}, TTL) и генерится при запросе (signup/resend),
-консумер только доставляет письмо.
+SMTP-релей (SMTP_HOST) -> лог (dev, ничего не настроено).
 """
 import json
 import secrets
 import smtplib
 import urllib.error
 import urllib.request
-import uuid
 from asyncio import to_thread
 from email.message import EmailMessage
 
@@ -23,26 +24,35 @@ from ..outbox import emit, outbox_handler
 from ..settings import settings
 
 TOPIC_EMAIL = 'notify.email'
-_NS = 'emailconfirm'
+_NS = 'signup'
 
 
-async def request_confirm(session: AsyncSession, user_id: uuid.UUID, email: str) -> None:
-    """Генерит код, кладёт в Redis и ставит письмо в очередь (в транзакции вызывающего)."""
+async def request_signup(session: AsyncSession, email: str, pending: dict) -> None:
+    """Заявка на регистрацию: код + данные в Redis, письмо в очередь.
+    Повторная заявка на тот же адрес перезаписывает прежнюю (новый код)."""
     code = f'{secrets.randbelow(1_000_000):06d}'
-    await get_cache().set(f'{_NS}:{user_id}', code, settings.confirm_ttl_s)
+    await get_cache().set(f'{_NS}:{email.lower()}',
+                          json.dumps({'code': code, 'pending': pending}),
+                          settings.confirm_ttl_s)
     emit(session, TOPIC_EMAIL, {
         'to': email,
-        'subject': 'Код подтверждения',
-        'body': f'Ваш код подтверждения: {code}\nОн действует 24 часа.',
+        'subject': 'Код подтверждения регистрации',
+        'body': (f'Ваш код подтверждения: {code}\nОн действует 24 часа. '
+                 'Если вы не регистрировались — просто проигнорируйте это письмо.'),
     })
 
 
-async def check_confirm(user_id: uuid.UUID, code: str) -> bool:
-    saved = await get_cache().get(f'{_NS}:{user_id}')
-    if saved is None or saved != code.strip():
-        return False
-    await get_cache().delete(f'{_NS}:{user_id}')  # код одноразовый
-    return True
+async def pop_signup(email: str, code: str) -> dict | None:
+    """Сверка кода: совпал — заявка изымается (одноразово) и возвращается."""
+    key = f'{_NS}:{email.lower()}'
+    raw = await get_cache().get(key)
+    if raw is None:
+        return None
+    obj = json.loads(raw)
+    if obj.get('code') != code.strip():
+        return None
+    await get_cache().delete(key)
+    return obj['pending']
 
 
 def _send_resend(to: str, subject: str, body: str) -> None:

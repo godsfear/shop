@@ -41,8 +41,9 @@ class UserRoles(BaseModel):
     roles: list[str]
 
 
-class ConfirmCode(BaseModel):
-    """Код подтверждения почты из письма."""
+class SignUpConfirm(BaseModel):
+    """Шаг 2 регистрации: почта + код из письма (заявка — в Redis)."""
+    email: str
     code: str
 
 
