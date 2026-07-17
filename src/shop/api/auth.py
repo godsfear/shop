@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from ..cache import get_cache
 from ..keyservice import get_key_service
 from ..models.auth import Challenge, KeyCredentials, Token
-from ..models.user import Contact, SignUp, SignUpConfirm, User
+from ..models.user import Contact, SignUp, SignUpConfirm, User, password_issues
 from ..services.mailer import pop_signup, request_signup
 from ..services.medaccess import enroll_patient
 from ..services.user import UserService
@@ -42,6 +42,9 @@ async def sign_up(data: SignUp, service: UserService = Depends()):
     """Шаг 1 регистрации: заявка в Redis + код на почту. Учётка НЕ создаётся —
     неподтверждённая заявка испаряется по TTL (анти-спам левыми адресами)."""
     email = _prop(data.contact.email, None)
+    if issues := password_issues(data.password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail='weak_password: ' + ','.join(issues))
     if await service.get_by_contact(email) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                             detail='contact_taken')

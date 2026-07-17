@@ -5,6 +5,15 @@ import { useAuth } from '../auth'
 import { ui } from '../i18n'
 import { LangSwitch } from './Shell'
 
+// требования к паролю — зеркало бэковой password_issues (models/user.py):
+// \p{Ll}/\p{Lu} юникодные, как str.islower/isupper (кириллица считается)
+const PW_RULES: [string, (p: string) => boolean][] = [
+  ['не короче 8 символов', (p) => p.length >= 8],
+  ['строчную букву', (p) => /\p{Ll}/u.test(p)],
+  ['заглавную букву', (p) => /\p{Lu}/u.test(p)],
+  ['цифру', (p) => /\d/.test(p)],
+]
+
 // Регистрация в два шага (учётка создаётся только после кода из письма):
 // форма -> код на почту -> подтверждение -> токен
 export default function Register() {
@@ -19,6 +28,7 @@ export default function Register() {
   const [stage, setStage] = useState<'form' | 'code'>('form')
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
+  const pwOk = PW_RULES.every(([, ok]) => ok(password))
 
   const start = async (e: FormEvent) => {
     e.preventDefault()
@@ -54,8 +64,18 @@ export default function Register() {
           <h2>{ui('Регистрация')}</h2>
           {err && <p className="error">{err}</p>}
           <input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input type="password" placeholder={ui('пароль (≥8 символов)')} value={password}
+          <input type="password" placeholder={ui('пароль')} value={password}
                  onChange={(e) => setPassword(e.target.value)} />
+          {/* живой чек-лист: чего не хватает паролю; исчезает, когда всё ✓ */}
+          {password && !pwOk && (
+            <ul className="pw-rules">
+              {PW_RULES.map(([label, ok]) => (
+                <li key={label} className={ok(password) ? 'ok' : ''}>
+                  {ok(password) ? '✓' : '○'} {ui(label)}
+                </li>
+              ))}
+            </ul>
+          )}
           <input placeholder={ui('фамилия')} value={last} onChange={(e) => setLast(e.target.value)} />
           <label className="row">{ui('Пол')}
             <select value={sex} onChange={(e) => setSex(e.target.value)}>
@@ -66,7 +86,7 @@ export default function Register() {
           <label className="row">{ui('Дата рождения')}
             <input type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} />
           </label>
-          <button type="submit" disabled={!email.trim() || !password}>{ui('Получить код')}</button>
+          <button type="submit" disabled={!email.trim() || !pwOk}>{ui('Получить код')}</button>
           <p className="muted">{ui('Уже есть аккаунт?')} <Link to="/login">{ui('Вход')}</Link></p>
         </form>
       ) : (

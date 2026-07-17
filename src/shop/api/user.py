@@ -4,7 +4,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..models.auth import TokenPayload
-from ..models.user import Contact, User, UserUpdate, UserRoles
+from ..models.user import Contact, User, UserUpdate, UserRoles, password_issues
 from ..services.user import UserService
 from ..services.auth import get_token_payload, require_roles
 from ..settings import settings
@@ -59,6 +59,9 @@ async def update_user(user_id: uuid.UUID, user_data: UserUpdate,
                       service: UserService = Depends(),
                       payload: TokenPayload = Depends(get_token_payload)):
     _self_or_admin(user_id, payload)
+    if user_data.password and (issues := password_issues(user_data.password)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail='weak_password: ' + ','.join(issues))
     return await service.update(user_id, user_data)
 
 

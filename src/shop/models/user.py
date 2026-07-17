@@ -22,6 +22,21 @@ class UserCreate(UserBase):
     public_key: str = ''
 
 
+def password_issues(password: str) -> list[str]:
+    """Каких требований сложности не хватает — коды для 'weak_password: ...'.
+    Проверка на входе (signup/смена пароля): в заявке и БД живёт только хеш."""
+    issues = []
+    if len(password) < 8:
+        issues.append('length')
+    if not any(c.islower() for c in password):
+        issues.append('lower')
+    if not any(c.isupper() for c in password):
+        issues.append('upper')
+    if not any(c.isdigit() for c in password):
+        issues.append('digit')
+    return issues
+
+
 class SignUp(BaseModel):
     """Регистрация: персона создаётся вместе с учёткой одной транзакцией."""
     person: PersonCreate
