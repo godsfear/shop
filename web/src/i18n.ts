@@ -140,6 +140,7 @@ const EN: Record<string, string> = {
   'Начать лечение': 'Start treatment',
   'Лечение': 'Treatment',
   'начато': 'started',
+  'изменить': 'change',
   'Дневник симптомов': 'Symptom diary',
   'Замеры в моменте — температура, давление, пульс. Уйдут ИИ в диагноз вместе с анамнезом.':
     'Momentary readings — temperature, blood pressure, pulse. They feed the AI diagnosis along with the history.',

@@ -116,9 +116,11 @@ function ItemsEditor({ dict, onSubmit }: {
   const add = () => { if (free.trim()) { setLines([...lines, free.trim()]); setFree('') } }
   const submit = () => {
     const names = new Map(dict.map((d) => [d.code, d.name]))
+    // непустое поле — тоже пункт, даже если «+» не нажали (иначе ввод теряется)
+    const allLines = free.trim() ? [...lines, free.trim()] : lines
     const items = [
       ...picked.map((c) => ({ code: c })),
-      ...lines.map((l) => ({ code: l })),
+      ...allLines.map((l) => ({ code: l })),
     ]
     const label = items.length
       ? items.map((i) => names.get(i.code) ?? i.code).join(', ')
@@ -136,7 +138,7 @@ function ItemsEditor({ dict, onSubmit }: {
       </div>
       <div className="inline">
         <button onClick={submit}>
-          {picked.length || lines.length ? ui('Готово') : ui('Ничего нет')}
+          {picked.length || lines.length || free.trim() ? ui('Готово') : ui('Ничего нет')}
         </button>
       </div>
     </div>

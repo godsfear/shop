@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getEpisode, renameEpisode, episodeHistory, episodeState, transition, assess,
@@ -18,6 +18,20 @@ interface PlanItem { code?: string; name: string; reason?: string; prescription?
 interface Plan { items: PlanItem[]; note?: string; diagnosis?: string }
 import { EVENTS, RED_FLAGS, SECTIONS, SLOTS, STATES, UNITS, t } from '../ui'
 import { ui } from '../i18n'
+
+// Секция пройденного этапа сворачивается (details), текущего — раскрыта
+function Stage({ title, done, children }: {
+  title: string; done: boolean; children: ReactNode
+}) {
+  return (
+    <section>
+      <details open={!done}>
+        <summary><h3>{title}</h3></summary>
+        {children}
+      </details>
+    </section>
+  )
+}
 
 // Таймлайн жизненного цикла: полный маршрут из fsm.states, текущее — акцентом
 function Timeline({ fsm }: { fsm: FsmState }) {
@@ -85,7 +99,8 @@ export default function Episode() {
       setFsm(await episodeState(id))
       const props = await episodeProperties(id)
       setSymptoms(props.filter((p) => p.category === cs['symptom'] && !isAi(p)))
-      setFinds(props.filter((p) => isAi(p) && p.code !== 'ddx' && p.code !== 'workup'))
+      // находки ИИ из документов; служебные ИИ-свойства (ddx/workup/plan) — не находки
+      setFinds(props.filter((p) => isAi(p) && !['ddx', 'workup', 'plan'].includes(p.code)))
       setResults(props.filter((p) =>
         (p.value as { source?: string; result?: string }).source === 'patient'
         && (p.value as { result?: string }).result !== undefined))
@@ -165,11 +180,13 @@ export default function Episode() {
 
   const saveTreatment = async () => {
     setErr('')
+    // непустое поле — тоже назначение, даже если «+» не нажали
+    const lines = treatFree.trim() ? [...treatLines, treatFree.trim()] : treatLines
     const items = [
       ...((plan?.value as unknown as Plan)?.items ?? [])
         .filter((x) => x.code && treatPicked.includes(x.code))
         .map((x) => ({ code: x.code, name: x.name })),
-      ...treatLines.map((name) => ({ name })),
+      ...lines.map((name) => ({ name })),
     ]
     if (!items.length) return
     try {
@@ -178,6 +195,10 @@ export default function Episode() {
       await reload()
     } catch (e) { setErr((e as Error).message) }
   }
+
+  // этап пройден (для сворачивания секций): текущее состояние дальше по маршруту
+  const stagePassed = (s: string) =>
+    !!fsm && fsm.states.includes(s) && fsm.states.indexOf(fsm.state) > fsm.states.indexOf(s)
 
   const fire = async (event: string) => {
     setErr('')
@@ -367,7 +388,7 @@ export default function Episode() {
               </div>
               <div className="inline">
                 <button onClick={saveTreatment}
-                        disabled={!treatPicked.length && !treatLines.length}>
+                        disabled={!treatPicked.length && !treatLines.length && !treatFree.trim()}>
                   {ui('Начать лечение')}
                 </button>
                 <button className="ghost" onClick={() => setTreatOpen(false)}>{ui('Отмена')}</button>
@@ -412,8 +433,7 @@ export default function Episode() {
         const nm = (c: string) => symNames[c] ?? c
         const positive = Object.entries(v.ros ?? {}).filter(([, s]) => s !== 'clear')
         return (
-          <section>
-            <h3>{ui('Анамнез (резюме опроса)')}</h3>
+          <Stage title={ui('Анамнез (резюме опроса)')} done={stagePassed('anamnesis')}>
             <div className="card resume">
               <p><b>{ui('Главная жалоба:')}</b> {nm(v.chief_complaint ?? '')}</p>
               {/* развёрнутый анамнез: каждый симптом раскрывается в слоты OPQRST */}
@@ -447,7 +467,7 @@ export default function Episode() {
                 ? ui('без жалоб') : positive.map(([s]) => nm(s)).join(', ')}</p>
               <p className="muted">{ui('подтверждено пациентом')} · {new Date(summary.begins).toLocaleString()}</p>
             </div>
-          </section>
+          </Stage>
         )
       })()}
 
@@ -458,8 +478,7 @@ export default function Episode() {
         const w = workup.value as unknown as Workup
         if (!w.tests?.length) return null
         return (
-          <section>
-            <h3>{ui('Рекомендованные анализы')}</h3>
+          <Stage title={ui('Рекомендованные анализы')} done={stagePassed('anamnesis')}>
             <p className="muted">{ui('Отранжированы по ценности и доступности. По каждому — загрузите документ с результатом или впишите результат сами; всё войдёт в диагноз.')}</p>
             <ul className="cards">
               {w.tests.map((x, i) => {
@@ -501,7 +520,7 @@ export default function Episode() {
                 )
               })}
             </ul>
-          </section>
+          </Stage>
         )
       })()}
 
@@ -513,8 +532,7 @@ export default function Episode() {
         </section>
       )}
 
-      <section>
-        <h3>{ui('Диагноз (оценка ИИ)')}</h3>
+      <Stage title={ui('Диагноз (оценка ИИ)')} done={stagePassed('anamnesis')}>
         <div className="inline">
           {/* диагноз по неполному анамнезу вводит в заблуждение — сначала опрос */}
           <button onClick={evaluate} disabled={evaluating || !a || a.gaps.length > 0}>
@@ -549,7 +567,7 @@ export default function Episode() {
             </div>
           )
         })()}
-      </section>
+      </Stage>
 
       {/* установленный диагноз (вручную/из ddx) — не путать с ИИ-оценкой выше */}
       {diagProp && (() => {
@@ -558,7 +576,11 @@ export default function Episode() {
           <section>
             <h3>{ui('Диагноз')}</h3>
             <div className="card resume">
-              <b>{v.text}</b>
+              <b>{v.text}</b>{' '}
+              <button className="ghost small"
+                      onClick={() => { setDiagText(v.text ?? ''); setDiagOpen(true) }}>
+                {ui('изменить')}
+              </button>
               <p className="muted">{v.source === 'ddx' ? ui('выбран из вариантов ИИ') : ui('внесён вручную')}
                 {' · '}{new Date(diagProp.begins).toLocaleDateString()}</p>
             </div>
@@ -578,8 +600,7 @@ export default function Episode() {
         const v = plan.value as unknown as Plan
         if (!v.items?.length) return null
         return (
-          <section>
-            <h3>{ui('Назначения (рекомендация ИИ)')}</h3>
+          <Stage title={ui('Назначения (рекомендация ИИ)')} done={stagePassed('diagnosis')}>
             <p className="muted">{ui('Отранжированы по важности. Нажмите «Начать лечение», чтобы выбрать из них и/или добавить назначения врача.')}</p>
             <ul className="cards">
               {v.items.map((x, i) => (
@@ -592,18 +613,25 @@ export default function Episode() {
             </ul>
             {v.note && <p className="muted">{v.note}</p>}
             <p className="muted disclaimer">{ui('Назначения ИИ — предложения для обсуждения с врачом. Не начинайте приём рецептурных препаратов без назначения врача.')}</p>
-          </section>
+          </Stage>
         )
       })()}
 
       {/* зафиксированное лечение (выбор пациента) */}
       {treatProp && (() => {
-        const items = (treatProp.value as { items?: { name: string }[] }).items ?? []
+        const its = (treatProp.value as { items?: { code?: string; name: string }[] }).items ?? []
         return (
           <section>
-            <h3>{ui('Лечение')}</h3>
+            <h3>{ui('Лечение')}{' '}
+              <button className="ghost small"
+                      onClick={() => {
+                        setTreatPicked(its.filter((i) => i.code).map((i) => i.code!))
+                        setTreatLines(its.filter((i) => !i.code).map((i) => i.name))
+                        setTreatOpen(true)
+                      }}>{ui('изменить')}</button>
+            </h3>
             <ul className="rows">
-              {items.map((x, i) => (
+              {its.map((x, i) => (
                 <li key={i} className="row-link">
                   <span>{x.name}</span>
                 </li>
