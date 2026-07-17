@@ -1,0 +1,6 @@
+# Локальная разработка (по умолчанию): HTTP на :80 (маппится на localhost:8080),
+# без TLS и без ACME — токен Cloudflare не нужен.
+# Прод-конфиг с авто-HTTPS — Caddyfile.prod (выбирается через CADDYFILE в compose).
+:80 {
+	import /etc/caddy/Caddyfile.app
+}

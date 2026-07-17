@@ -1,0 +1,18 @@
+# Прод: авто-HTTPS Let's Encrypt через DNS-01 (Cloudflare API) — работает за
+# оранжевым облаком CF (валидация по TXT-записи, не по 443). Продлевается сам.
+#
+# Требуется:
+#   - CF_API_TOKEN — токен Cloudflare с правами Zone:DNS:Edit на зону medcard.cc
+#   - в панели Cloudflare: SSL/TLS mode = Full (strict)
+#   - в compose: CADDYFILE=Caddyfile.prod, проброс "80:80" и "443:443"
+#
+# Альтернатива без API-токена (origin-сертификат CF, 15 лет): убрать блок
+# acme_dns и внутри сайта добавить `tls /certs/origin.pem /certs/origin.key`.
+{
+	email {$ACME_EMAIL:admin@medcard.cc}
+	acme_dns cloudflare {$CF_API_TOKEN}
+}
+
+{$SITE_ADDRESS:medcard.cc} {
+	import /etc/caddy/Caddyfile.app
+}

@@ -1,6 +1,6 @@
 # Весь проект одной командой:  docker compose up --build
 #
-# Открыть:  http://localhost:8080        — приложение (nginx раздаёт SPA + /api)
+# Открыть:  http://localhost:8080        — приложение (Caddy раздаёт SPA + /api)
 #           http://localhost:8025        — Mailpit: письма с кодами подтверждения
 #
 # Секреты берутся из .env (JWT_SECRET обязателен); остальное имеет dev-дефолты —
@@ -105,13 +105,25 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  web:                              # nginx: SPA + reverse-proxy /api -> api:8000
+  web:                              # Caddy: SPA + reverse-proxy /api -> api:8000
     build: ./web
+    # локально Caddyfile (:80, без TLS). Прод: CADDYFILE=Caddyfile.prod +
+    # CF_API_TOKEN + проброс 80/443 ниже + Cloudflare SSL/TLS = Full (strict).
+    command: caddy run --config /etc/caddy/${CADDYFILE:-Caddyfile} --adapter caddyfile
+    environment:
+      CF_API_TOKEN: ${CF_API_TOKEN:-}           # прод: токен Cloudflare zone:DNS:edit
+      ACME_EMAIL: ${ACME_EMAIL:-admin@medcard.cc}
+      SITE_ADDRESS: ${SITE_ADDRESS:-medcard.cc}
     ports:
       - "8080:80"
+      # - "80:80"                   # прод: раскомментировать для ACME-редиректа
+      # - "443:443"                 # прод: HTTPS
+    volumes:
+      - caddy_data:/data            # сертификаты и ACME-аккаунт (переживают рестарт)
     depends_on:
       - api
     restart: unless-stopped
 
 volumes:
   pgdata:
+  caddy_data:
