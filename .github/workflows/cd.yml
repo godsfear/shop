@@ -1,0 +1,63 @@
+name: CD
+
+# Прод-выкат по тегу версии (v1.2.3) + ручной запуск с указанием версии
+# (он же откат: укажите прошлый тег). CI (ci.yml) уже прогнал тесты на коммитах
+# main — тег ставится на зелёный коммит, поэтому тут тесты не дублируем.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Тег/коммит для выката (откат: прошлый тег, напр. v0.1.0)'
+        required: true
+
+# два деплоя разом не пересекаются; текущий не прерываем на полпути
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production        # Settings → Environments → production: можно
+                                   # повесить required reviewers = ручное подтверждение
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          DEPLOY_REF: ${{ github.event.inputs.ref || github.ref_name }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true        # прерваться на первой ошибке шага
+          envs: DEPLOY_REF
+          script: |
+            set -e
+            cd /opt/apps/shop
+
+            echo "== бэкап БД перед миграциями (пер. каталог /opt/apps/backups) =="
+            mkdir -p /opt/apps/backups
+            docker compose exec -T postgres sh -c 'PGPASSWORD=$POSTGRES_PASSWORD pg_dump -U shop shop' \
+              | gzip > "/opt/apps/backups/pre-$(date +%Y%m%d-%H%M%S)-${DEPLOY_REF}.sql.gz"
+            # держим последние 14 бэкапов, остальное чистим (не забить диск VPS)
+            ls -t /opt/apps/backups/pre-*.sql.gz 2>/dev/null | tail -n +15 | xargs -r rm --
+
+            echo "== выкат ${DEPLOY_REF} =="
+            git fetch --all --tags --prune
+            git checkout --force "${DEPLOY_REF}"
+            # build не роняет прод: старые контейнеры живут, пока не соберётся новое
+            docker compose up -d --build
+
+            echo "== health-check (до минуты) =="
+            ok=0
+            for i in $(seq 1 12); do
+              if curl -fsS -o /dev/null https://medcard.cc; then ok=1; break; fi
+              echo "ещё не готово ($i)…"; sleep 5
+            done
+            [ "$ok" = 1 ] || { echo "HEALTH-CHECK НЕ ПРОШЁЛ — проверьте logs/откат"; exit 1; }
+
+            docker compose ps
+            docker image prune -f
+            echo "== выкат ${DEPLOY_REF} завершён =="
