@@ -30,13 +30,13 @@ services:
   mailpit:                          # SMTP-ловушка: письма видны на http://localhost:8025
     image: axllent/mailpit:latest
     ports:
-      - "8025:8025"
+      - "127.0.0.1:8025:8025"       # ТОЛЬКО локально: Docker публикует порты в обход ufw
     restart: unless-stopped
 
   rabbitmq:                         # шина событий; UI управления на http://localhost:15672 (guest/guest)
     image: rabbitmq:4-management-alpine
     ports:
-      - "15672:15672"
+      - "127.0.0.1:15672:15672"     # ТОЛЬКО локально (guest/guest в обход ufw пускать нельзя)
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -115,9 +115,8 @@ services:
       ACME_EMAIL: ${ACME_EMAIL:-admin@medcard.cc}
       SITE_ADDRESS: ${SITE_ADDRESS:-medcard.cc}
     ports:
-      - "8080:80"
-      # - "80:80"                   # прод: раскомментировать для ACME-редиректа
-      # - "443:443"                 # прод: HTTPS
+      - "${WEB_HTTP_PORT:-8080}:80"     # прод: WEB_HTTP_PORT=80 (ACME-редирект)
+      - "${WEB_HTTPS_PORT:-8443}:443"   # прод: WEB_HTTPS_PORT=443 (локально TLS не слушается)
     volumes:
       - caddy_data:/data            # сертификаты и ACME-аккаунт (переживают рестарт)
     depends_on:
