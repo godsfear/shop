@@ -39,16 +39,16 @@ jobs:
             set -e
             cd /opt/apps/shop
 
-            echo "== бэкап БД перед миграциями (пер. каталог /opt/apps/backups) =="
-            mkdir -p /opt/apps/backups
-            docker compose exec -T postgres sh -c 'PGPASSWORD=$POSTGRES_PASSWORD pg_dump -U shop shop' \
-              | gzip > "/opt/apps/backups/pre-$(date +%Y%m%d-%H%M%S)-${DEPLOY_REF}.sql.gz"
-            # держим последние 14 бэкапов, остальное чистим (не забить диск VPS)
-            ls -t /opt/apps/backups/pre-*.sql.gz 2>/dev/null | tail -n +15 | xargs -r rm --
-
-            echo "== выкат ${DEPLOY_REF} =="
+            echo "== получаем версию ${DEPLOY_REF} =="
             git fetch --all --tags --prune
             git checkout --force "${DEPLOY_REF}"
+
+            # бэкап ДО миграций (их прогоняет `up`), тем же скриптом, что и cron.
+            # checkout раньше бэкапа — чтобы взять скрипт выкатываемой версии.
+            echo "== бэкап БД перед миграциями =="
+            bash ops/backup.sh "pre-${DEPLOY_REF}"
+
+            echo "== сборка и запуск =="
             # build не роняет прод: старые контейнеры живут, пока не соберётся новое
             docker compose up -d --build
 
