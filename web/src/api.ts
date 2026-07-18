@@ -19,7 +19,8 @@ export interface Doc {
 export interface Assess { gaps: string[]; alerts: string[] }
 export interface FsmState { state: string; available: string[]; states: string[] }
 export type Concepts = Record<string, string>
-export interface Grant { link_id: string; key_id: string }
+// patient — имя владельца карты (сервер раскрывает только по одобренному согласию)
+export interface Grant { link_id: string; key_id: string; patient?: string | null }
 
 export class ApiError extends Error {
   status: number
@@ -76,10 +77,11 @@ const json = (body: unknown, method = 'POST'): RequestInit => ({
 })
 
 // --- аутентификация: регистрация двухшаговая (код на почту ДО создания учётки) ---
-export const signupStart = (email: string, password: string, last: string,
+export const signupStart = (email: string, password: string,
+                            last: string, first: string,
                             sex: boolean, birthdate: string) =>
   req<void>('/auth/signup/', json(
-    { person: { name: { last }, sex, birthdate }, contact: { email }, password }))
+    { person: { name: { last, first }, sex, birthdate }, contact: { email }, password }))
 export async function signupConfirm(email: string, code: string): Promise<string> {
   const r = await req<{ access_token: string }>('/auth/signup/confirm/', json({ email, code }))
   return r.access_token
@@ -108,9 +110,12 @@ export interface Consent {
 export const consentIncoming = () => req<Consent[]>('/consent/incoming')
 export const consentMine = () => req<Consent[]>('/consent/mine')
 export const consentGranted = () => req<Consent[]>('/consent/granted')
-export const consentRequest = (subjectId: string, reason: string) =>
+// reason — необязательное дополнение (должность/клиника): имя запрашивающего
+// сервер подставляет сам из профиля (анти-спуфинг)
+export const consentRequest = (subjectId: string, reason?: string) =>
   req<Consent>('/consent/request', json({
-    subject_table: 'person', subject_id: subjectId, scope: 'medical', reason }))
+    subject_table: 'person', subject_id: subjectId, scope: 'medical',
+    reason: reason || null }))
 export const consentApprove = (id: string, until: string | null) =>
   req<Consent>(`/consent/${id}/approve`, json({ until }))
 export const consentDeny = (id: string) => req<Consent>(`/consent/${id}/deny`, json({}))

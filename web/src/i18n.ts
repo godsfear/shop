@@ -38,6 +38,7 @@ const EN: Record<string, string> = {
   'заглавную букву': 'an uppercase letter',
   'цифру': 'a digit',
   'фамилия': 'last name',
+  'имя': 'first name',
   'Пол': 'Sex',
   'муж': 'male',
   'жен': 'female',
@@ -225,9 +226,10 @@ const EN: Record<string, string> = {
   'Владелец карты сообщает вам код доступа со страницы «Доступы» и сам одобряет запрос — и может отозвать его в любой момент.':
     'The record owner gives you the access code from their “Access” page and approves the request — and can revoke it at any time.',
   'код доступа владельца': "owner's access code",
-  'представьтесь (видно пациенту)': 'introduce yourself (visible to the patient)',
+  'должность, клиника — по желанию': 'role, clinic — optional',
+  'Пациент увидит ваши имя и фамилию из профиля.':
+    'The patient will see your first and last name from your profile.',
   'Запросить': 'Request',
-  'запрос доступа': 'access request',
   'Запрос отправлен — ждёт решения пациента.': "Request sent — awaiting the patient's decision.",
   'Мои запросы': 'My requests',
   'запрос': 'request',

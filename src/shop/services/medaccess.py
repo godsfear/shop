@@ -249,7 +249,11 @@ class MedAccessService:
 
     async def grants(self) -> list[dict]:
         """Слой B, дискавери: чужие медкарты, доступные мне по одобренным согласиям.
-        [{link_id, key_id}] — эти параметры передаются в каждом запросе /me/*."""
+        [{link_id, key_id, patient}] — параметры передаются в каждом запросе /me/*.
+
+        patient — имя владельца карты: раскрывается ТОЛЬКО по одобренному
+        согласию (до одобрения врач видит лишь код — иначе перебор кодов
+        позволял бы узнавать имена)."""
         consents = (await self.session.execute(select(tables.Consent).where(
             tables.Consent.grantee == self.payload.sub,
             tables.Consent.scope == MEDICAL,
@@ -260,8 +264,13 @@ class MedAccessService:
             owner = (await self.session.execute(select(tables.User.id).where(
                 tables.User.person == c.objectid))).scalars().first()
             link = await self._owner_link(c.objectid)
-            if owner is not None and link is not None:
-                out.append({'link_id': link.id, 'key_id': f'patient:{owner}'})
+            if owner is None or link is None:
+                continue
+            name = (await self.session.execute(select(tables.Person.name).where(
+                tables.Person.id == c.objectid))).scalar_one_or_none() or {}
+            patient = ' '.join(filter(None, [name.get('last'), name.get('first')]))
+            out.append({'link_id': link.id, 'key_id': f'patient:{owner}',
+                        'patient': patient or None})
         return out
 
     async def close_session(self) -> None:

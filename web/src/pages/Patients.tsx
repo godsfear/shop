@@ -34,7 +34,8 @@ export default function Patients() {
     e.preventDefault()
     setErr(''); setSent(false)
     try {
-      await consentRequest(code.trim(), reason.trim() || ui('запрос доступа'))
+      // имя запрашивающего сервер подставит сам; reason — только дополнение
+      await consentRequest(code.trim(), reason.trim() || undefined)
       setCode(''); setReason(''); setSent(true)
       await load()
     } catch (e) { setErr((e as Error).message) }
@@ -52,11 +53,12 @@ export default function Patients() {
 
       <section>
         <h3>{ui('Запросить доступ')}</h3>
-        <p className="muted">{ui('Владелец карты сообщает вам код доступа со страницы «Доступы» и сам одобряет запрос — и может отозвать его в любой момент.')}</p>
+        <p className="muted">{ui('Владелец карты сообщает вам код доступа со страницы «Доступы» и сам одобряет запрос — и может отозвать его в любой момент.')}{' '}
+          {ui('Пациент увидит ваши имя и фамилию из профиля.')}</p>
         <form className="inline" onSubmit={request}>
           <input placeholder={ui('код доступа владельца')} value={code}
                  onChange={(e) => setCode(e.target.value)} />
-          <input placeholder={ui('представьтесь (видно пациенту)')} value={reason}
+          <input placeholder={ui('должность, клиника — по желанию')} value={reason}
                  onChange={(e) => setReason(e.target.value)} />
           <button type="submit" disabled={!code.trim()}>{ui('Запросить')}</button>
         </form>
@@ -85,7 +87,8 @@ export default function Patients() {
           {grants.map((g) => (
             <li key={g.link_id} className="card">
               <div className="inline">
-                <span>{ui('Карта пациента')} <span className="muted">…{g.link_id.slice(-6)}</span></span>
+                {/* имя раскрыто согласием; фолбэк на хвост id — старые учётки без имени */}
+                <span><b>{g.patient || ui('Карта пациента') + ' …' + g.link_id.slice(-6)}</b></span>
                 <button onClick={() => open(g)}>{ui('Открыть карту')}</button>
               </div>
             </li>

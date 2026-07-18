@@ -22,6 +22,7 @@ export default function Register() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [last, setLast] = useState('')
+  const [first, setFirst] = useState('')
   const [sex, setSex] = useState('true')
   const [birthdate, setBirthdate] = useState('1990-01-01')
   const [code, setCode] = useState('')
@@ -34,7 +35,7 @@ export default function Register() {
     e.preventDefault()
     setErr(''); setMsg('')
     try {
-      await signupStart(email, password, last, sex === 'true', birthdate)
+      await signupStart(email, password, last.trim(), first.trim(), sex === 'true', birthdate)
       setStage('code')
     } catch (e) { setErr((e as Error).message) }
   }
@@ -51,7 +52,7 @@ export default function Register() {
   const resend = async () => {
     setErr(''); setMsg('')
     try {
-      await signupStart(email, password, last, sex === 'true', birthdate)
+      await signupStart(email, password, last.trim(), first.trim(), sex === 'true', birthdate)
       setMsg(ui('код отправлен повторно'))
     } catch (e) { setErr((e as Error).message) }
   }
@@ -77,6 +78,7 @@ export default function Register() {
             </ul>
           )}
           <input placeholder={ui('фамилия')} value={last} onChange={(e) => setLast(e.target.value)} />
+          <input placeholder={ui('имя')} value={first} onChange={(e) => setFirst(e.target.value)} />
           <label className="row">{ui('Пол')}
             <select value={sex} onChange={(e) => setSex(e.target.value)}>
               <option value="true">{ui('муж')}</option>
@@ -86,7 +88,10 @@ export default function Register() {
           <label className="row">{ui('Дата рождения')}
             <input type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} />
           </label>
-          <button type="submit" disabled={!email.trim() || !pwOk}>{ui('Получить код')}</button>
+          {/* имя/фамилия обязательны: ими врач представляется пациенту и наоборот */}
+          <button type="submit" disabled={!email.trim() || !pwOk || !last.trim() || !first.trim()}>
+            {ui('Получить код')}
+          </button>
           <p className="muted">{ui('Уже есть аккаунт?')} <Link to="/login">{ui('Вход')}</Link></p>
         </form>
       ) : (

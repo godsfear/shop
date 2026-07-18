@@ -66,7 +66,10 @@ export default function Shell() {
       </header>
       {care && (
         <div className="care-banner">
-          {ui('Карта пациента')} …{care.link_id.slice(-6)} {ui('— доступ по согласию')}
+          {care.patient
+            ? <>{ui('Карта пациента')}: <b>{care.patient}</b></>
+            : <>{ui('Карта пациента')} …{care.link_id.slice(-6)}</>}
+          {' '}{ui('— доступ по согласию')}
           <button className="ghost" onClick={leaveCare}>{ui('Выйти из карты')}</button>
         </div>
       )}

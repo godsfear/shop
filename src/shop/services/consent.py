@@ -80,9 +80,17 @@ class ConsentService:
         if domain != tables.Domain.IDENTITY:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                                 detail='identity_subject_only')
+        # представление — из профиля запрашивающего (анти-спуфинг: клиенту нельзя
+        # доверять называться чужим именем); свободный текст — только дополнение
+        name = (await self.session.execute(
+            select(tables.Person.name)
+            .join(tables.User, tables.User.person == tables.Person.id)
+            .where(tables.User.id == payload.sub))).scalar_one_or_none() or {}
+        who = ' '.join(filter(None, [name.get('last'), name.get('first')]))
+        reason = f'{who} — {data.reason}' if (who and data.reason) else (who or data.reason)
         row = tables.Consent(table=data.subject_table, objectid=data.subject_id,
                              grantee=payload.sub, scope=data.scope,
-                             status=REQUESTED, reason=data.reason)
+                             status=REQUESTED, reason=reason)
         self.session.add(row)
         try:
             await self.session.flush()
