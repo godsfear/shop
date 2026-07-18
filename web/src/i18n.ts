@@ -145,6 +145,15 @@ const EN: Record<string, string> = {
   'Лечение': 'Treatment',
   'начато': 'started',
   'изменить': 'change',
+  'Направления': 'Referrals',
+  'Направления на анализы и исследования. Загрузить может пациент или врач с доступом; ИИ их не читает.':
+    'Referrals for tests and investigations. The patient or a doctor with access can upload them; the AI does not read them.',
+  'Рецепты': 'Prescriptions',
+  'Рецепты на препараты. Загрузить может пациент или врач с доступом; ИИ их не читает.':
+    'Medication prescriptions. The patient or a doctor with access can upload them; the AI does not read them.',
+  'Открыть': 'Open',
+  'Печать': 'Print',
+  'Загрузка…': 'Uploading…',
   'Дневник симптомов': 'Symptom diary',
   'Замеры в моменте — температура, давление, пульс. Уйдут ИИ в диагноз вместе с анамнезом.':
     'Momentary readings — temperature, blood pressure, pulse. They feed the AI diagnosis along with the history.',

@@ -507,6 +507,27 @@ class MedAccessService:
         await self.session.commit()
         return data
 
+    async def document_content(self, data_id: uuid.UUID) -> tuple[bytes, str, str]:
+        """Содержимое документа: (байты, mime, имя).
+
+        Ворота — принадлежность носителю, а НЕ только id документа: иначе
+        перебор id отдавал бы чужие файлы. Эпизод проверяем _gate_episode
+        (владение псевдонимом), документы на псевдониме — сверкой скоупа."""
+        row = await self.session.get(tables.Data, data_id)
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                detail='record_not_found')
+        if row.table == 'entity':
+            await self._gate_episode(row.objectid)
+        elif row.objectid != await self._resolve():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                detail='record_not_found')
+        blob = await FileStore(session=self.session).get(row.hash)
+        if blob is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                detail='record_not_found')
+        return blob, row.media_type or 'application/octet-stream', row.name or row.code
+
     async def documents(self, episode_id: uuid.UUID | None = None) -> list[tables.Data]:
         table, objectid = await self._scope(episode_id)
         return list((await self.session.execute(select(tables.Data).where(

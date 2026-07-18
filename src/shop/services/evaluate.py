@@ -185,13 +185,23 @@ async def _bundle(session: AsyncSession, episode_id: uuid.UUID,
     return {'episode': rows_to_list(ep), 'patient': rows_to_list(pat)}
 
 
+# документы «на руки пациенту» (направления, рецепты): ИИ их не читает —
+# это выданные врачом бумаги, а не входные данные для оценки
+_PATIENT_ONLY = ('referral', 'prescription')
+
+
 async def _episode_docs(session: AsyncSession, episode_id: uuid.UUID) -> list[tuple[bytes, str]]:
-    """Оригиналы документов эпизода: (байты, mime) — для мультимодального диагноза."""
+    """Оригиналы документов эпизода: (байты, mime) — для мультимодального диагноза.
+    Направления и рецепты исключены: они для пациента, не для ИИ."""
+    cats = await medical_concepts(session)
+    skip = {cats[c] for c in _PATIENT_ONLY if c in cats}
     rows = (await session.execute(select(tables.Data).where(
         tables.Data.table == 'entity', tables.Data.objectid == episode_id))).scalars().all()
     store = FileStore(session=session)
     out = []
     for d in rows:
+        if d.category in skip:
+            continue
         blob = await store.get(d.hash)
         if blob is not None:
             out.append((blob, d.media_type or 'application/pdf'))

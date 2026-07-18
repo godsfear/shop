@@ -146,6 +146,10 @@ CONCEPTS = {
     "system": ("Система организма", {}),
     "document": ("Документ", {}),
     "analysis": ("Анализ", {}),   # статус один (результат) — FSM не нужен
+    # документы «для пациента на руки»: их выдаёт врач (или грузит сам пациент),
+    # ИИ их НЕ читает — см. _episode_docs/_PATIENT_ONLY в services/evaluate.py
+    "referral": ("Направления", {}),
+    "prescription": ("Рецепты", {}),
     # процесс сбора анамнеза (anamnez.md): интервью — Entity на эпизоде со своей FSM;
     # очередь симптомов/прогресс — Property(code='progress'), см. services/interview.py
     "interview": ("Опрос (анамнез)", {
@@ -247,6 +251,7 @@ CONCEPTS_EN = {
     "vaccination": "Vaccinations", "illness": "Illness", "injury": "Injury",
     "surgery": "Surgeries/hospitalizations", "social": "Social history",
     "system": "Body system", "document": "Document", "analysis": "Test",
+    "referral": "Referrals", "prescription": "Prescriptions",
     "interview": "Interview (anamnesis)",
 }
 SLOTS_EN = {

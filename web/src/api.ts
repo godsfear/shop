@@ -214,6 +214,14 @@ export const addEpisodeProperty = (
 // --- документы ---
 export const listDocuments = (episodeId?: string) =>
   req<Doc[]>('/me/documents' + (episodeId ? `?episode_id=${episodeId}` : ''))
+// содержимое документа (направление/рецепт/анализ) — blob для просмотра и печати;
+// идёт с Authorization, поэтому просто <a href> не подойдёт
+export async function documentContent(id: string): Promise<Blob> {
+  const res = await fetch(BASE + withCare(`/me/documents/${id}/content`),
+                          { headers: authHeaders() })
+  if (!res.ok) throw new ApiError(res.status, errText(res.statusText))
+  return res.blob()
+}
 export async function uploadDocument(file: File, name: string, code: string,
                                      category?: string, episodeId?: string): Promise<Doc> {
   const fd = new FormData()

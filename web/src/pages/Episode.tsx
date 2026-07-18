@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import {
   getEpisode, renameEpisode, episodeHistory, episodeState, transition, assess,
   episodeProperties, listDocuments, uploadDocument, concepts, dictionary,
-  evaluateEpisode, addEpisodeProperty, setDiagnosis, startTreatment,
+  evaluateEpisode, addEpisodeProperty, setDiagnosis, startTreatment, documentContent,
   type Episode as Ep, type FsmState, type Assess, type MedProperty, type Doc,
   type Concepts, type StateLog, type DictItem,
 } from '../api'
@@ -33,6 +33,48 @@ function Stage({ title, done, children }: {
   )
 }
 
+// Документы «на руки» (направления, рецепты): загрузить может пациент или
+// доверенный врач; ИИ их не читает. Открываются в новой вкладке — оттуда печать.
+function HandoutDocs({ title, hint, docs, onUpload, busy }: {
+  title: string; hint: string; docs: Doc[]; busy: boolean
+  onUpload: (f: File) => void
+}) {
+  const [err, setErr] = useState('')
+  const open = async (d: Doc, print: boolean) => {
+    setErr('')
+    try {
+      const url = URL.createObjectURL(await documentContent(d.id))
+      const w = window.open(url, '_blank')
+      // печать сразу после загрузки; если браузер не дал — вкладка открыта, Ctrl+P
+      if (w && print) w.addEventListener('load', () => w.print())
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e) { setErr((e as Error).message) }
+  }
+  return (
+    <section>
+      <h3>{title}</h3>
+      <p className="muted">{hint}</p>
+      {err && <p className="error">{err}</p>}
+      {docs.length === 0 && <p className="muted">{ui('пока пусто')}</p>}
+      <ul className="rows">
+        {docs.map((d) => (
+          <li key={d.id} className="row-link">
+            <span>{d.name || d.code}</span>
+            <span className="muted">{new Date(d.begins).toLocaleDateString()}</span>
+            <button className="ghost small" onClick={() => open(d, false)}>{ui('Открыть')}</button>
+            <button className="ghost small" onClick={() => open(d, true)}>{ui('Печать')}</button>
+          </li>
+        ))}
+      </ul>
+      <label className="ghost small btn-file">
+        {busy ? ui('Загрузка…') : ui('Загрузить документ')}
+        <input type="file" hidden disabled={busy}
+               onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = '' }} />
+      </label>
+    </section>
+  )
+}
+
 // Таймлайн жизненного цикла: полный маршрут из fsm.states, текущее — акцентом
 function Timeline({ fsm }: { fsm: FsmState }) {
   const cur = fsm.states.indexOf(fsm.state)
@@ -56,6 +98,9 @@ export default function Episode() {
   const [symptoms, setSymptoms] = useState<MedProperty[]>([])
   const [finds, setFinds] = useState<MedProperty[]>([])   // находки ИИ (source=ai)
   const [docs, setDocs] = useState<Doc[]>([])
+  const [referrals, setReferrals] = useState<Doc[]>([])       // направления
+  const [prescriptions, setPrescriptions] = useState<Doc[]>([])  // рецепты
+  const [handoutBusy, setHandoutBusy] = useState(false)
   const [log, setLog] = useState<StateLog[]>([])
   const [a, setA] = useState<Assess | null>(null)
   const [err, setErr] = useState('')
@@ -114,7 +159,11 @@ export default function Episode() {
       setDiagProp(props.find((p) => p.code === 'diagnosis') ?? null)
       setPlan(props.find((p) => p.code === 'plan') ?? null)
       setTreatProp(props.find((p) => p.code === 'treatment') ?? null)
-      setDocs(await listDocuments(id))
+      const all = await listDocuments(id)
+      // документы «на руки» показываются своими секциями, а не в общем списке
+      setDocs(all.filter((d) => d.category !== cs['referral'] && d.category !== cs['prescription']))
+      setReferrals(all.filter((d) => d.category === cs['referral']))
+      setPrescriptions(all.filter((d) => d.category === cs['prescription']))
       setLog(await episodeHistory(id))
       setA(await assess(id))
     } catch (e) { setErr((e as Error).message) }
@@ -281,6 +330,16 @@ export default function Episode() {
       setDVal('')
       await reload()
     } catch (e) { setErr((e as Error).message) }
+  }
+
+  // загрузка направления/рецепта: и пациентом, и врачом по мосту (тот же эндпоинт)
+  const uploadHandout = async (concept: 'referral' | 'prescription', f: File) => {
+    setErr(''); setHandoutBusy(true)
+    try {
+      await uploadDocument(f, f.name, concept, cs[concept], id)
+      await reload()
+    } catch (e) { setErr((e as Error).message) }
+    finally { setHandoutBusy(false) }
   }
 
   const upload = async (e: FormEvent) => {
@@ -588,6 +647,13 @@ export default function Episode() {
         )
       })()}
 
+      {/* направления на анализы/исследования — выданные врачом бумаги */}
+      {diagProp && (
+        <HandoutDocs title={ui('Направления')} busy={handoutBusy} docs={referrals}
+                     hint={ui('Направления на анализы и исследования. Загрузить может пациент или врач с доступом; ИИ их не читает.')}
+                     onUpload={(f) => uploadHandout('referral', f)} />
+      )}
+
       {/* план назначений от ИИ — генерится после установки диагноза */}
       {diagProp && !treatProp && planPending &&
         (!plan || (plan.value as unknown as Plan).diagnosis !== (diagProp.value as { text?: string }).text) && (
@@ -641,6 +707,13 @@ export default function Episode() {
           </section>
         )
       })()}
+
+      {/* рецепты — выдаются при лечении */}
+      {treatProp && (
+        <HandoutDocs title={ui('Рецепты')} busy={handoutBusy} docs={prescriptions}
+                     hint={ui('Рецепты на препараты. Загрузить может пациент или врач с доступом; ИИ их не читает.')}
+                     onUpload={(f) => uploadHandout('prescription', f)} />
+      )}
 
       {/* жалобы вносятся опросом (анамнез) — ручного ввода кодов нет */}
       {symptoms.length > 0 && (

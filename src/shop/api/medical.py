@@ -4,8 +4,10 @@
 Ответы — проекция MedPropertyOut (без objectid), псевдоним не утекает."""
 import uuid
 from typing import List
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
 
 from ..models.medical import (SessionOpen, MedPropertyIn, MedPropertyOut,
                                DiagnosisIn, TreatmentIn,
@@ -222,3 +224,13 @@ async def upload_document(file: UploadFile,
 async def my_documents(svc: MedAccessService = Depends(),
                        episode_id: uuid.UUID | None = Query(None)):
     return await svc.documents(episode_id)
+
+
+@router.get('/documents/{data_id}/content')
+async def document_content(data_id: uuid.UUID, svc: MedAccessService = Depends()):
+    """Сам файл — пациенту посмотреть/распечатать (направление, рецепт, анализ).
+    inline: браузер показывает PDF/картинку, оттуда же печать."""
+    blob, media_type, name = await svc.document_content(data_id)
+    return Response(content=blob, media_type=media_type,
+                    headers={'Content-Disposition':
+                             f'inline; filename="{quote(name)}"'})
