@@ -1,6 +1,11 @@
 """API `/me/documents`: загрузка файла -> блоб (FileStore) + Data(метаданные) +
 outbox data.extract -> Property(source='ai'). Замыкает ИИ-конвейер на HTTP-слой.
-Форсит заглушку экстрактора (не ходит в Gemini). Требует Redis (сессия)."""
+Форсит заглушку экстрактора (не ходит в Gemini). Требует Redis (сессия).
+
+Отдельно закрыты два случая с ценой ошибки в медданных:
+- направления и рецепты («на руки» пациенту) НЕ попадают в бандл для ИИ;
+- содержимое документа гейтится по носителю, а не по id — перебор id
+  не отдаёт чужие файлы."""
 import datetime
 
 import pytest
@@ -16,6 +21,7 @@ from shop.models.auth import TokenPayload
 from shop.models.medical import EpisodeIn, DataOut
 from shop.models.user import UserCreate, Contact
 from shop.services.bridge import BridgeService
+from shop.services.evaluate import _episode_docs
 from shop.services.files import FileStore
 from shop.services.medaccess import MedAccessService
 from shop.services.user import UserService
@@ -128,6 +134,43 @@ async def test_main():
         n = (await s.execute(select(func.count()).select_from(t.Blob))).scalar_one()
     assert n == 2, n                              # только два наших блоба
     print('[ok] ВОРОТА: загрузка на чужой эпизод -> 404, блоб не создан')
+
+    # --- документы «на руки»: пациенту видны, в ИИ НЕ уходят ---
+    async with Sess() as s:
+        await _svc(s, ks, payload).upload_document(
+            b'%PDF referral', name='Направление на УЗИ', code='referral',
+            category=ids['referral'], media_type='application/pdf', episode_id=eid)
+        await _svc(s, ks, payload).upload_document(
+            b'%PDF prescription', name='Рецепт', code='prescription',
+            category=ids['prescription'], media_type='application/pdf', episode_id=eid)
+    async with Sess() as s:
+        docs = await _svc(s, ks, payload).documents(episode_id=eid)
+        ai_docs = await _episode_docs(s, eid)
+    assert {d.code for d in docs} == {'cbc', 'referral', 'prescription'}, docs
+    # в ИИ уходит только анализ: направление и рецепт — бумаги пациента,
+    # не входные данные для оценки (утечка медданных в модель)
+    assert len(ai_docs) == 1 and ai_docs[0][0] == blob, ai_docs
+    print('[ok] направления и рецепты видны пациенту, но НЕ уходят в ИИ')
+
+    # --- содержимое документа: своё отдаётся, чужое -> 404 ---
+    async with Sess() as s:
+        content, mime, dname = await _svc(s, ks, payload).document_content(data.id)
+    assert content == blob and mime == 'application/pdf' and dname == 'Анализ крови'
+    print('[ok] содержимое своего документа отдаётся (просмотр/печать)')
+
+    # Data на чужом эпизоде со ССЫЛКОЙ НА СУЩЕСТВУЮЩИЙ блоб: 404 обязан прийти
+    # от ворот (владение эпизодом), а не от «блоб не найден»
+    async with Sess() as s:
+        fdata = t.Data(category=ids['analysis'], code='cbc', name='Чужой анализ',
+                       table='entity', objectid=foreign_eid,
+                       hash=data.hash, algorithm=data.algorithm)
+        s.add(fdata); await s.commit()
+        fdata_id = fdata.id
+    async with Sess() as s:
+        with pytest.raises(HTTPException) as ei:
+            await _svc(s, ks, payload).document_content(fdata_id)
+        assert ei.value.status_code == 404
+    print('[ok] ВОРОТА: документ чужого эпизода -> 404 (перебор id не отдаёт файл)')
 
     await eng.dispose()
     print('\nТЕСТ ЗАГРУЗКИ ДОКУМЕНТОВ ПРОЙДЕН')
