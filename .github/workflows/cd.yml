@@ -28,8 +28,10 @@ jobs:
         env:
           DEPLOY_REF: ${{ github.event.inputs.ref || github.ref_name }}
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
+          # host/user — не секреты по сути (IP виден в DNS), поэтому берём из
+          # Variables; фолбэк на Secrets — если положите их туда
+          host: ${{ vars.SSH_HOST || secrets.SSH_HOST }}
+          username: ${{ vars.SSH_USER || secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script_stop: true        # прерваться на первой ошибке шага
           envs: DEPLOY_REF
