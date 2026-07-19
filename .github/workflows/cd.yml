@@ -12,6 +12,10 @@ on:
       ref:
         description: 'Тег/коммит для выката (откат: прошлый тег, напр. v0.1.0)'
         required: true
+      force:
+        description: 'Пропустить ворота ci-green (ЭКСТРЕННЫЙ откат на версию без зелёного CI)'
+        type: boolean
+        default: false
 
 # два деплоя разом не пересекаются; текущий не прерываем на полпути
 concurrency:
@@ -32,6 +36,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # экстренный люк: откат на версию, у которой нет зелёного CI
+          # (старые теги до введения ворот) — только руками и осознанно
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            echo "::warning::ворота ci-green пропущены вручную (force) — выкат без проверки CI"
+            exit 0
+          fi
           sha=$(git rev-parse HEAD)
           echo "коммит: $sha"
           for i in $(seq 1 30); do
