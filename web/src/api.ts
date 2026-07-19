@@ -217,6 +217,11 @@ export type Meta = Record<'concepts' | 'kinds' | 'states' | 'events' | 'red_flag
   Record<string, string>>
 export const meta = () => req<Meta>('/me/meta')
 
+// правка ответа анамнеза (опечатки) — только до постановки диагноза
+export const editAnamnesis = (id: string, symptom: string, slot: string,
+                              value: string | number) =>
+  req<void>(`/me/episodes/${id}/anamnesis`, json({ symptom, slot, value }, 'PATCH'))
+
 // --- диагноз и лечение ---
 export const setDiagnosis = (id: string, text: string, source = 'manual') =>
   req<void>(`/me/episodes/${id}/diagnosis`, json({ text, source }))

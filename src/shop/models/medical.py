@@ -42,6 +42,15 @@ class MedPropertyOut(_MedOut):
     value: dict
 
 
+class AnamnesisEdit(BaseModel):
+    """Правка ответа на слот анамнеза (опечатки) — только до постановки
+    диагноза. associations не редактируется (структурный слот — очередь
+    разбора уже отработала)."""
+    symptom: str = Field(min_length=1, max_length=100)
+    slot: str = Field(min_length=1, max_length=50)
+    value: str | int | float
+
+
 class DiagnosisIn(BaseModel):
     """Установленный диагноз: вручную или выбор из ИИ-вариантов (ddx)."""
     text: str = Field(min_length=2, max_length=500)

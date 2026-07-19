@@ -21,6 +21,7 @@ export default function Register() {
   const nav = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [password2, setPassword2] = useState('')
   const [last, setLast] = useState('')
   const [first, setFirst] = useState('')
   const [sex, setSex] = useState('true')
@@ -77,6 +78,11 @@ export default function Register() {
               ))}
             </ul>
           )}
+          {/* двойной ввод — защита от опечатки в пароле */}
+          <input type="password" placeholder={ui('повторите пароль')} value={password2}
+                 onChange={(e) => setPassword2(e.target.value)} />
+          {password2 && password2 !== password &&
+            <p className="error">{ui('пароли не совпадают')}</p>}
           <input placeholder={ui('фамилия')} value={last} onChange={(e) => setLast(e.target.value)} />
           <input placeholder={ui('имя')} value={first} onChange={(e) => setFirst(e.target.value)} />
           <label className="row">{ui('Пол')}
@@ -89,7 +95,9 @@ export default function Register() {
             <input type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} />
           </label>
           {/* имя/фамилия обязательны: ими врач представляется пациенту и наоборот */}
-          <button type="submit" disabled={!email.trim() || !pwOk || !last.trim() || !first.trim()}>
+          <button type="submit"
+                  disabled={!email.trim() || !pwOk || password2 !== password
+                            || !last.trim() || !first.trim()}>
             {ui('Получить код')}
           </button>
           <p className="muted">{ui('Уже есть аккаунт?')} <Link to="/login">{ui('Вход')}</Link></p>

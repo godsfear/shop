@@ -201,6 +201,35 @@ async def test_main():
     assert a['gaps'] == [], a
     print('[ok] assess: пробелов после интервью нет')
 
+    # ===== Правка анамнеза: до диагноза можно, резюме пересобирается ======
+    from shop.models.medical import AnamnesisEdit, DiagnosisIn
+    async with Sess() as s:
+        await _svc(s, ks, payload).edit_anamnesis(eid, AnamnesisEdit(
+            symptom='headache', slot='severity', value=7))
+    async with Sess() as s:
+        row = (await s.execute(select(t.Property).where(
+            t.Property.table == 'entity', t.Property.objectid == eid,
+            t.Property.code == 'summary'))).scalars().one()
+        assert row.value['symptoms']['headache']['severity'] == 7, row.value
+        assert row.value['confirmed'] is True
+    print('[ok] правка слота до диагноза: значение и резюме обновлены')
+
+    # associations структурный — править нельзя
+    async with Sess() as s:
+        with pytest.raises(HTTPException) as ei:
+            await _svc(s, ks, payload).edit_anamnesis(eid, AnamnesisEdit(
+                symptom='headache', slot='associations', value='x'))
+        assert ei.value.status_code == 400
+    # после диагноза анамнез зафиксирован
+    async with Sess() as s:
+        await _svc(s, ks, payload).set_diagnosis(eid, DiagnosisIn(text='Мигрень'))
+    async with Sess() as s:
+        with pytest.raises(HTTPException) as ei:
+            await _svc(s, ks, payload).edit_anamnesis(eid, AnamnesisEdit(
+                symptom='headache', slot='severity', value=2))
+        assert ei.value.status_code == 409
+    print('[ok] associations не правится; после диагноза — 409 (зафиксирован)')
+
     # ===== Сценарий A2: анамнез жизни уже в карте -> подтверждение актуальности
     eid3 = await episode('ep-confirm')
     async with Sess() as s:

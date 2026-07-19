@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, 
 from fastapi.responses import Response
 
 from ..models.medical import (SessionOpen, MedPropertyIn, MedPropertyOut,
-                               DiagnosisIn, TreatmentIn,
+                               AnamnesisEdit, DiagnosisIn, TreatmentIn,
                                EpisodeIn, EpisodeOut, EpisodeRename, Transition, DataOut)
 from ..services.medaccess import MedAccessService
 
@@ -190,6 +190,14 @@ async def episode_evaluate(episode_id: uuid.UUID, svc: MedAccessService = Depend
     """Поставить ИИ-оценку в очередь; результат — Property(code='ddx') на эпизоде.
     Предположения для обсуждения с врачом, НЕ диагноз."""
     return await svc.evaluate(episode_id)
+
+
+@router.patch('/episodes/{episode_id}/anamnesis')
+async def edit_anamnesis(episode_id: uuid.UUID, body: AnamnesisEdit,
+                         svc: MedAccessService = Depends()):
+    """Правка ответа анамнеза (опечатки) — только до постановки диагноза;
+    подтверждённое резюме пересобирается."""
+    return await svc.edit_anamnesis(episode_id, body)
 
 
 @router.post('/episodes/{episode_id}/diagnosis', status_code=status.HTTP_202_ACCEPTED)

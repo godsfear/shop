@@ -4,6 +4,7 @@ import {
   getEpisode, renameEpisode, episodeHistory, episodeState, transition, assess,
   episodeProperties, listDocuments, uploadDocument, concepts, dictionary,
   evaluateEpisode, addEpisodeProperty, setDiagnosis, startTreatment, documentContent,
+  editAnamnesis,
   type Episode as Ep, type FsmState, type Assess, type MedProperty, type Doc,
   type Concepts, type StateLog, type DictItem,
 } from '../api'
@@ -121,6 +122,20 @@ export default function Episode() {
 
   // результаты, внесённые пациентом вручную (самостоятельные пробы и т.п.)
   const [results, setResults] = useState<MedProperty[]>([])
+  // правка ответа анамнеза (до диагноза): "<symptom>|<slot>" редактируемой строки
+  const [slotEdit, setSlotEdit] = useState<string | null>(null)
+  const [slotVal, setSlotVal] = useState('')
+
+  const saveSlot = async (symptom: string, slot: string) => {
+    setErr('')
+    try {
+      await editAnamnesis(id, symptom, slot,
+                          slot === 'severity' ? Number(slotVal) : slotVal.trim())
+      setSlotEdit(null); setSlotVal('')
+      await reload()
+    } catch (e) { setErr((e as Error).message) }
+  }
+
   // установленный диагноз, план назначений ИИ и зафиксированное лечение
   const [diagProp, setDiagProp] = useState<MedProperty | null>(null)
   const [plan, setPlan] = useState<MedProperty | null>(null)
@@ -506,6 +521,9 @@ export default function Episode() {
                   return String(val)
                 }
                 const answered = Object.keys(SLOTS).filter((s) => sl[s] !== undefined)
+                // правки — только до диагноза (после — анамнез зафиксирован);
+                // associations структурный (очередь разбора) — не редактируется
+                const editable = fsm?.state === 'anamnesis'
                 return (
                   <details key={c} className="log">
                     <summary>{nm(c)}</summary>
@@ -513,7 +531,26 @@ export default function Episode() {
                       {answered.map((s) => (
                         <li key={s} className="row-link">
                           <span className="muted">{t(SLOTS, s)}</span>
-                          <span>{fmt(s)}</span>
+                          {slotEdit === `${c}|${s}` ? (
+                            <span className="inline">
+                              <input value={slotVal} autoFocus
+                                     type={s === 'severity' ? 'number' : 'text'}
+                                     onChange={(e) => setSlotVal(e.target.value)}
+                                     onKeyDown={(e) => { if (e.key === 'Enter' && slotVal.trim()) saveSlot(c, s) }} />
+                              <button className="ghost small" disabled={!slotVal.trim()}
+                                      onClick={() => saveSlot(c, s)}>{ui('Сохранить')}</button>
+                              <button className="ghost small"
+                                      onClick={() => setSlotEdit(null)}>{ui('Отмена')}</button>
+                            </span>
+                          ) : (
+                            <span>{fmt(s)}
+                              {editable && s !== 'associations' &&
+                                <button className="ghost small" title={ui('изменить')}
+                                        onClick={() => { setSlotEdit(`${c}|${s}`); setSlotVal(String(sl[s] ?? '')) }}>
+                                  ✎
+                                </button>}
+                            </span>
+                          )}
                         </li>
                       ))}
                     </ul>

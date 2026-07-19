@@ -24,11 +24,12 @@ from ..versioning import versioned_expire, versioned_update
 from ..cache import get_cache
 from ..database import db_helper
 from ..keyservice import KeyServiceError, PolicyError
-from ..medical_seed import SEX_SPECIFIC, VITAL_SCOPES, medical_concepts
+from ..medical_seed import (SEX_SPECIFIC, VITAL_SCOPES, medical_concepts,
+                            symptom_slots)
 from ..models.auth import TokenPayload
 from ..models.entity import EntityCreate, EntityUpdate
-from ..models.medical import (DiagnosisIn, EpisodeIn, MedPropertyIn,
-                              MedPropertyOut, TreatmentIn)
+from ..models.medical import (AnamnesisEdit, DiagnosisIn, EpisodeIn,
+                              MedPropertyIn, MedPropertyOut, TreatmentIn)
 from ..models.property import PropertyCreate, PropertyFilter
 from ..services.auth import get_token_payload
 from ..services.bridge import BridgeService
@@ -435,6 +436,50 @@ class MedAccessService:
         request_evaluate(self.session, episode_id, pseudonym, age, sex, lang=self.lang)
         await self.session.commit()
         return {'queued': True}
+
+    async def edit_anamnesis(self, episode_id: uuid.UUID, body: AnamnesisEdit) -> dict:
+        """Правка ответа на слот симптома (опечатки) — ТОЛЬКО до диагноза:
+        после него анамнез зафиксирован, диагноз ставился по этим данным.
+        Подтверждённое резюме пересобирается из исправленных свойств."""
+        pseudonym = await self._gate_episode(episode_id)
+        fsm = FSMService(session=self.session)
+        if (await fsm.state('entity', episode_id))['state'] != 'anamnesis':
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail='anamnesis_locked')
+        if body.slot == 'associations' or body.slot not in symptom_slots(body.symptom):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f'slot_uneditable: {body.slot}')
+        value = body.value
+        if body.slot == 'severity':
+            if not isinstance(value, (int, float)) or not 0 <= value <= 10:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                    detail='severity_range')
+        cats = await medical_concepts(self.session)
+        sym = (await self.session.execute(select(tables.Property).where(
+            tables.Property.table == 'entity',
+            tables.Property.objectid == episode_id,
+            tables.Property.category == cats.get('symptom'),
+            tables.Property.code == body.symptom))).scalars().first()
+        if sym is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                detail=f'symptom_not_found: {body.symptom}')
+        slots = {**(sym.value.get('slots') or {}), body.slot: value}
+        await versioned_update(self.session, tables.Property, sym.id,
+                               {'value': {**sym.value, 'slots': slots}})
+        # подтверждённое резюме — снимок слотов: пересобрать из исправленного
+        summary = (await self.session.execute(select(tables.Property).where(
+            tables.Property.table == 'entity',
+            tables.Property.objectid == episode_id,
+            tables.Property.code == 'summary'))).scalars().first()
+        if summary is not None:
+            svc = InterviewService(session=self.session, lang=self.lang)
+            row = await svc._interview(episode_id)
+            progress = (await svc._progress(row.id)).value
+            rebuilt = await svc._summary(episode_id, progress, pseudonym)
+            await versioned_update(self.session, tables.Property, summary.id,
+                                   {'value': {**rebuilt, 'confirmed': True}})
+        await self.session.commit()
+        return {'ok': True}
 
     async def set_diagnosis(self, episode_id: uuid.UUID, body: DiagnosisIn) -> dict:
         """Установить диагноз: свойство + переход FSM + план назначений от ИИ —
