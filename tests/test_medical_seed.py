@@ -4,7 +4,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
-from shop.medical_seed import seed_medical, SYMPTOM_SCHEMA
+from shop.medical_seed import DICTIONARY, seed_medical, SYMPTOM_SCHEMA
 
 URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
 
@@ -57,7 +57,8 @@ async def test_main():
             t.Entity.category == illness.id))).first()
     print('[ok] illness несёт fsm/required/red_flags')
 
-    # справочник читается: 10 симптомов, 5 лекарств
+    # справочник читается; размеры — из самого DICTIONARY (единый источник:
+    # пополнение сида не должно ломать тест)
     async with Sess() as s:
         n_sym = (await s.execute(select(func.count()).select_from(t.Entity).where(
             t.Entity.category == ids['symptom']))).scalar_one()
@@ -65,7 +66,8 @@ async def test_main():
             t.Entity.category == ids['medication']))).scalar_one()
         dom = (await s.execute(select(t.ObjectRegistry.domain).where(
             t.ObjectRegistry.table == 'entity').limit(1))).scalar_one()
-    assert n_sym == 10 and n_med == 5, (n_sym, n_med)
+    assert n_sym == len(DICTIONARY['symptom']), (n_sym, len(DICTIONARY['symptom']))
+    assert n_med == len(DICTIONARY['medication']), (n_med, len(DICTIONARY['medication']))
     assert dom == 'reference', dom
     print(f'[ok] справочник: симптомов={n_sym}, лекарств={n_med}, домен={dom}')
 
