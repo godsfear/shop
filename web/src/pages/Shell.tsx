@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { ApiError, enroll, getCare, openSession, setCare } from '../api'
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import {
+  ApiError, concepts, enroll, getCare, listProperties, openSession, setCare,
+} from '../api'
 import { useAuth } from '../auth'
 import { loadMeta } from '../ui'
 import { getLang, setLang, ui } from '../i18n'
@@ -25,7 +27,26 @@ export default function Shell() {
   const [status, setStatus] = useState('')
   const [ready, setReady] = useState(false)   // гейт: дети грузят данные по открытой сессии
   const [sessionOk, setSessionOk] = useState(false)
+  // подсказка «заполните карту»: показывается, пока нет роста и веса —
+  // без них ИИ-оценки (норма питания, диагноз) заметно грубее
+  const [needProfile, setNeedProfile] = useState(false)
+  const [hintHidden, setHintHidden] = useState(
+    sessionStorage.getItem('profile-hint-hidden') === '1')
   const care = getCare()
+  const location = useLocation()
+
+  useEffect(() => {
+    if (!ready || care) { setNeedProfile(false); return }
+    // перепроверка при смене страницы: заполнил рост/вес — баннер сам исчез
+    (async () => {
+      try {
+        const cs = await concepts()
+        if (!cs['vital']) return
+        const have = new Set((await listProperties(cs['vital'])).map((p) => p.code))
+        setNeedProfile(!(have.has('height') && have.has('weight')))
+      } catch { /* не мешаем работе, если проверка не удалась */ }
+    })()
+  }, [ready, care, location.pathname])
 
   useEffect(() => {
     // подписи доменных кодов (/me/meta) — до рендера страниц; при ошибке коды как есть
@@ -71,6 +92,15 @@ export default function Shell() {
             : <>{ui('Карта пациента')} …{care.link_id.slice(-6)}</>}
           {' '}{ui('— доступ по согласию')}
           <button className="ghost" onClick={leaveCare}>{ui('Выйти из карты')}</button>
+        </div>
+      )}
+      {needProfile && !hintHidden && !care && (
+        <div className="confirm-banner">
+          <span>{ui('Заполните рост и вес в «Моей карте» — ИИ будет точнее считать норму питания и оценивать здоровье.')}</span>
+          <NavLink to="/profile"><button>{ui('Заполнить')}</button></NavLink>
+          <button className="ghost" onClick={() => {
+            sessionStorage.setItem('profile-hint-hidden', '1'); setHintHidden(true)
+          }}>{ui('Позже')}</button>
         </div>
       )}
       <main>{ready ? <Outlet /> : <p className="muted">{status || ui('открываю сессию…')}</p>}</main>

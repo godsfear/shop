@@ -58,6 +58,10 @@ const EN: Record<string, string> = {
   'Доверили мне': 'Shared with me',
   'Выйти': 'Log out',
   'код из письма': 'code from the email',
+  'Заполните рост и вес в «Моей карте» — ИИ будет точнее считать норму питания и оценивать здоровье.':
+    'Add your height and weight in “My record” — the AI will estimate your nutrition target and health more accurately.',
+  'Заполнить': 'Fill in',
+  'Позже': 'Later',
   'Выслать снова': 'Resend',
   'код отправлен повторно': 'code sent again',
   'Карта пациента': 'Patient record',
