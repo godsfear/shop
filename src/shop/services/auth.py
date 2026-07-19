@@ -65,6 +65,29 @@ class AuthService:
         return Token(access_token=token)
 
     @classmethod
+    def refresh_if_stale(cls, token: str) -> str | None:
+        """Скользящая сессия: активному пользователю (любой запрос) токен
+        продлевается, когда прожил больше половины срока — иначе None.
+        Невалидный токен — тоже None: отказ делает штатный verify, здесь
+        не вмешиваемся. Итог: активный не разлогинивается, неактивный
+        истекает через jwt_expires_s, как раньше."""
+        try:
+            claims = jwt.decode(token, settings.jwt_secret,
+                                algorithms=[settings.jwt_algorithm])
+        except JWTError:
+            return None
+        now = datetime.now(timezone.utc)
+        exp = datetime.fromtimestamp(claims['exp'], tz=timezone.utc)
+        if (exp - now).total_seconds() > settings.jwt_expires_s / 2:
+            return None
+        fresh = {
+            'iat': now, 'nbf': now,
+            'exp': now + timedelta(seconds=settings.jwt_expires_s),
+            'sub': claims.get('sub'), 'roles': claims.get('roles') or [],
+        }
+        return jwt.encode(fresh, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+    @classmethod
     def verify_token(cls, token: str) -> TokenPayload:
         try:
             payload = jwt.decode(

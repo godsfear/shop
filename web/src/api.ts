@@ -56,9 +56,28 @@ function withCare(path: string): string {
   return `${path}${sep}link_id=${care.link_id}&key_id=${encodeURIComponent(care.key_id)}`
 }
 
+// скользящая сессия: активному пользователю бэк продлевает токен заголовком
+function pickupRefresh(res: Response) {
+  const fresh = res.headers.get('X-Refresh-Token')
+  if (fresh) localStorage.setItem('token', fresh)
+}
+
+// сессия истекла (401 при имевшемся токене): без пугающих ошибок — тихо
+// чистим состояние и уводим на экран входа. Формы логина/регистрации не
+// задевает: там токена нет, их 401 — «неверный пароль», не истечение.
+function authExpired(res: Response, hadToken: boolean) {
+  if (res.status !== 401 || !hadToken) return
+  localStorage.removeItem('token')
+  sessionStorage.removeItem('care')
+  if (window.location.pathname !== '/login') window.location.href = '/login'
+}
+
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
+  const hadToken = !!localStorage.getItem('token')
   const res = await fetch(BASE + withCare(path), { ...opts, headers: authHeaders(opts.headers) })
+  pickupRefresh(res)
   if (!res.ok) {
+    authExpired(res, hadToken)
     let detail: string = res.statusText
     try {
       const j = await res.json()
@@ -240,9 +259,14 @@ export const listDocuments = (episodeId?: string) =>
 // содержимое документа (направление/рецепт/анализ) — blob для просмотра и печати;
 // идёт с Authorization, поэтому просто <a href> не подойдёт
 export async function documentContent(id: string): Promise<Blob> {
+  const hadToken = !!localStorage.getItem('token')
   const res = await fetch(BASE + withCare(`/me/documents/${id}/content`),
                           { headers: authHeaders() })
-  if (!res.ok) throw new ApiError(res.status, errText(res.statusText))
+  pickupRefresh(res)
+  if (!res.ok) {
+    authExpired(res, hadToken)
+    throw new ApiError(res.status, errText(res.statusText))
+  }
   return res.blob()
 }
 export async function uploadDocument(file: File, name: string, code: string,
