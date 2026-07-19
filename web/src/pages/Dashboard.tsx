@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  listEpisodes, createEpisode, episodeState, listDocuments, concepts,
-  type Episode, type Doc, type Concepts,
+  listEpisodes, createEpisode, episodeState, listDocuments, concepts, getNutrition,
+  type Episode, type Doc, type Concepts, type Nutrition,
 } from '../api'
+import { MacroBar, localDay } from './Nutrition'
 import { KINDS, STATES, t } from '../ui'
 import { ui } from '../i18n'
 
@@ -29,6 +30,7 @@ export default function Dashboard() {
   const [cs, setCs] = useState<Concepts>({})
   const [err, setErr] = useState('')
   const [creating, setCreating] = useState(false)
+  const [nutri, setNutri] = useState<Nutrition | null>(null)
 
   const load = async () => {
     try {
@@ -52,6 +54,7 @@ export default function Dashboard() {
                ' (uv run python scripts/bootstrap_dev.py)')
     }).catch((e) => setErr((e as Error).message))
     load()
+    getNutrition(localDay()).then(setNutri).catch(() => {})
   }, [])
 
   // эпизод открывается жалобой, а не диагнозом: имени пока нет — авто по дате;
@@ -118,10 +121,27 @@ export default function Dashboard() {
         </ul>
       </section>
 
+      {/* питание: сегодняшние ккал против нормы ИИ; вся лента — на /nutrition */}
+      <section className="tile">
+        <header><h3>{ui('Питание')}</h3>
+          <Link to="/nutrition"><button className="ghost">{ui('Открыть')}</button></Link>
+        </header>
+        {nutri ? (
+          <>
+            <MacroBar label={ui('калории')} got={nutri.totals.kcal ?? 0}
+                      norm={nutri.norm?.kcal} unit={ui('ккал')} />
+            <MacroBar label={ui('белки')} got={nutri.totals.protein ?? 0}
+                      norm={nutri.norm?.protein_g} unit={ui('г')} />
+            <p className="muted">{nutri.meals.length
+              ? `${ui('приёмов сегодня')}: ${nutri.meals.length}`
+              : ui('Сфотографируйте или опишите еду — ИИ посчитает калории.')}</p>
+          </>
+        ) : <p className="muted">…</p>}
+      </section>
+
       {/* перспектива: те же плитки, данные подключатся новыми концептами ядра */}
       <section className="tile future"><header><h3>{ui('Сон')}</h3></header><p>{ui('скоро')}</p></section>
       <section className="tile future"><header><h3>{ui('Нагрузки')}</h3></header><p>{ui('скоро')}</p></section>
-      <section className="tile future"><header><h3>{ui('Питание')}</h3></header><p>{ui('скоро')}</p></section>
     </div>
   )
 }

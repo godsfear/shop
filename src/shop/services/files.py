@@ -44,3 +44,18 @@ class FileStore:
     async def exists(self, digest: str) -> bool:
         return (await self.session.execute(
             select(tables.Blob.hash).where(tables.Blob.hash == digest))).scalar_one_or_none() is not None
+
+    async def delete_unreferenced(self, digest: str) -> bool:
+        """Удаляет блоб, ТОЛЬКО если на hash не ссылается ни одна Data.
+
+        Нужен транзитным файлам (фото еды: оценили и забыли). Дедуп делает
+        безусловное удаление опасным: те же байты может держать чужой документ."""
+        referenced = (await self.session.execute(
+            select(tables.Data.id).where(tables.Data.hash == digest).limit(1))
+        ).scalar_one_or_none() is not None
+        if referenced:
+            return False
+        await self.session.execute(
+            tables.Blob.__table__.delete().where(tables.Blob.hash == digest))
+        await self.session.flush()
+        return True

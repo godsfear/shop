@@ -157,6 +157,9 @@ CONCEPTS = {
     # ИИ их НЕ читает — см. _episode_docs/_PATIENT_ONLY в services/evaluate.py
     "referral": ("Направления", {}),
     "prescription": ("Рецепты", {}),
+    # трекер питания: приёмы пищи (Property на псевдониме) + суточная норма;
+    # оценка калорийности и норма — ИИ-консумеры (services/nutrition.py)
+    "meal": ("Питание", {}),
     # процесс сбора анамнеза (anamnez.md): интервью — Entity на эпизоде со своей FSM;
     # очередь симптомов/прогресс — Property(code='progress'), см. services/interview.py
     "interview": ("Опрос (анамнез)", {
@@ -322,6 +325,7 @@ CONCEPTS_EN = {
     "surgery": "Surgeries/hospitalizations", "social": "Social history",
     "system": "Body system", "document": "Document", "analysis": "Test",
     "referral": "Referrals", "prescription": "Prescriptions",
+    "meal": "Nutrition",
     "interview": "Interview (anamnesis)",
 }
 SLOTS_EN = {

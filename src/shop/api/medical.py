@@ -2,6 +2,7 @@
 
 Псевдоним не фигурирует в путях/телах — он в Redis-сессии (см. MedAccessService).
 Ответы — проекция MedPropertyOut (без objectid), псевдоним не утекает."""
+import datetime
 import uuid
 from typing import List
 from urllib.parse import quote
@@ -218,6 +219,39 @@ async def upload_document(file: UploadFile,
     content = await file.read()
     return await svc.upload_document(content, name, code, category,
                                      file.content_type or '', episode_id)
+
+
+# --- питание: приёмы пищи (оценка ИИ по фото/описанию) и суточная норма ---
+@router.post('/meals', response_model=MedPropertyOut,
+             status_code=status.HTTP_202_ACCEPTED)
+async def add_meal(day: str = Form(...),
+                   desc: str = Form(''),
+                   file: UploadFile | None = None,
+                   svc: MedAccessService = Depends()):
+    """Приём пищи: фото и/или описание -> оценка ккал/БЖУ у ИИ (асинхронно).
+    Фото не хранится — только результат оценки. day — локальная дата клиента."""
+    try:
+        datetime.date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail='bad_day') from None
+    photo = await file.read() if file is not None else None
+    if not desc.strip() and not photo:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail='meal_input_required')
+    return await svc.add_meal(day, desc.strip(),
+                              photo, file.content_type if file else '')
+
+
+@router.get('/nutrition')
+async def nutrition(day: str = Query(...), svc: MedAccessService = Depends()):
+    """Сводка дня: норма (лениво пересчитывается ИИ) + приёмы + суммы ккал/БЖУ."""
+    try:
+        datetime.date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail='bad_day') from None
+    return await svc.nutrition(day)
 
 
 @router.get('/documents', response_model=List[DataOut])

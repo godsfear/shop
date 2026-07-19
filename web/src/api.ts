@@ -211,6 +211,29 @@ export const addEpisodeProperty = (
   id: string, p: { category?: string; code: string; name?: string; value: Record<string, unknown> },
 ) => req<MedProperty>(`/me/episodes/${id}/properties`, json(p))
 
+// --- питание: приёмы пищи (оценка ИИ) и суточная норма ---
+export interface MealItem { name: string; kcal: number; protein: number; fat: number; carbs: number }
+export interface MealValue {
+  desc?: string; day?: string; status?: string
+  items?: MealItem[]; totals?: Record<string, number>; note?: string
+}
+export interface NutritionNorm {
+  kcal?: number; protein_g?: number; fat_g?: number; carbs_g?: number
+  note?: string; date?: string; status?: string
+}
+export interface Nutrition {
+  day: string; norm: NutritionNorm | null
+  meals: MedProperty[]; totals: Record<string, number>
+}
+export const getNutrition = (day: string) => req<Nutrition>(`/me/nutrition?day=${day}`)
+export async function addMeal(day: string, desc: string, photo?: File | null): Promise<MedProperty> {
+  const fd = new FormData()
+  fd.append('day', day)
+  fd.append('desc', desc)
+  if (photo) fd.append('file', photo)
+  return req<MedProperty>('/me/meals', { method: 'POST', body: fd })
+}
+
 // --- документы ---
 export const listDocuments = (episodeId?: string) =>
   req<Doc[]>('/me/documents' + (episodeId ? `?episode_id=${episodeId}` : ''))

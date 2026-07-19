@@ -16,6 +16,7 @@ from .services import evaluate as _evaluate            # noqa: F401 — @outbox_
 from .services import mailer as _mailer                # noqa: F401 — @outbox_handler
 from .services import extract as _extract              # noqa: F401 — @outbox_handler
 from .services import notifications as _notifications  # noqa: F401 — @outbox_handler
+from .services import nutrition as _nutrition          # noqa: F401 — @outbox_handler
 from .services.bridge import pseudonym_pool_topper
 from .services.consent import consent_sweeper
 

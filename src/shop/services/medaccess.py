@@ -27,13 +27,15 @@ from ..keyservice import KeyServiceError, PolicyError
 from ..medical_seed import SEX_SPECIFIC, VITAL_SCOPES, medical_concepts
 from ..models.auth import TokenPayload
 from ..models.entity import EntityCreate, EntityUpdate
-from ..models.medical import DiagnosisIn, EpisodeIn, MedPropertyIn, TreatmentIn
+from ..models.medical import (DiagnosisIn, EpisodeIn, MedPropertyIn,
+                              MedPropertyOut, TreatmentIn)
 from ..models.property import PropertyCreate, PropertyFilter
 from ..services.auth import get_token_payload
 from ..services.bridge import BridgeService
 from ..services.consent import APPROVED, MEDICAL, _until_alive
 from ..services.entity import EntityService
 from ..services.evaluate import _upsert, request_evaluate, request_plan
+from ..services.nutrition import NORM_CODE, request_meal_estimate, request_norm
 from ..services.extract import request_extract
 from ..services.files import FileStore
 from ..services.fsm import FSMService
@@ -464,6 +466,81 @@ class MedAccessService:
                               creator=self.payload.sub, commit=False)
         await self.session.commit()
         return {'ok': True}
+
+    # --- питание: приёмы пищи (оценка ИИ) и суточная норма -----------------
+    async def add_meal(self, day: str, desc: str,
+                       photo: bytes | None, media_type: str) -> tables.Property:
+        """Приём пищи: запись со status='estimating' + задача оценки в очередь.
+        day — локальная дата клиента (YYYY-MM-DD): сутки считает пользователь,
+        не UTC. Фото — транзитный блоб, консумер удалит после оценки."""
+        pseudonym = await self._resolve()
+        cats = await medical_concepts(self.session)
+        if 'meal' not in cats:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail='seed_missing: meal')
+        prop = tables.Property(
+            table='pseudonym', objectid=pseudonym, category=cats['meal'],
+            code='meal', creator=self.payload.sub,
+            value={'desc': desc, 'day': day, 'status': 'estimating',
+                   'source': 'ai',
+                   'at': datetime.datetime.now(datetime.timezone.utc)
+                         .isoformat(timespec='minutes')})
+        self.session.add(prop)
+        await self.session.flush()
+        blob_hash = None
+        if photo:
+            blob_hash = (await FileStore(session=self.session).put(photo))['hash']
+        request_meal_estimate(self.session, prop.id, blob_hash,
+                              media_type or None, desc, lang=self.lang)
+        await self.session.commit()
+        return prop
+
+    async def nutrition(self, day: str) -> dict:
+        """Сводка дня: норма + приёмы пищи + суммы. Норма пересчитывается
+        лениво: запрошен день новее её даты — ставим задачу ИИ, а пока отдаём
+        прежние цифры со status='pending' (маркер же защищает от повторных
+        постановок при поллинге)."""
+        pseudonym = await self._resolve()
+        cats = await medical_concepts(self.session)
+        meals = [p for p in (await self.session.execute(select(tables.Property).where(
+            tables.Property.table == 'pseudonym',
+            tables.Property.objectid == pseudonym,
+            tables.Property.category == cats.get('meal')))).scalars().all()
+            if (p.value or {}).get('day') == day]
+        meals.sort(key=lambda p: p.begins, reverse=True)
+
+        norm = (await self.session.execute(select(tables.Property).where(
+            tables.Property.table == 'pseudonym',
+            tables.Property.objectid == pseudonym,
+            tables.Property.code == NORM_CODE))).scalars().first()
+        if norm is None or (norm.value or {}).get('date', '') < day:
+            age = sex = None
+            if self.link_id is None:      # identity — только сам владелец
+                person = await self.session.get(tables.Person, await self._person_id())
+                if person is not None:
+                    today = datetime.date.today()
+                    bd = person.birthdate
+                    age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+                    sex = 'м' if person.sex else 'ж'
+            request_norm(self.session, pseudonym, day, age, sex, lang=self.lang)
+            # маркер pending: прежние цифры остаются видимыми до пересчёта
+            pend = {**(norm.value if norm else {}), 'date': day, 'status': 'pending'}
+            if norm is not None:
+                norm = await versioned_update(self.session, tables.Property,
+                                              norm.id, {'value': pend})
+            else:
+                norm = tables.Property(table='pseudonym', objectid=pseudonym,
+                                       code=NORM_CODE, value=pend)
+                self.session.add(norm)
+            await self.session.commit()
+
+        done = [p.value for p in meals if p.value.get('status') == 'done']
+        totals = {k: round(sum(float((v.get('totals') or {}).get(k) or 0)
+                               for v in done), 1)
+                  for k in ('kcal', 'protein', 'fat', 'carbs')}
+        out_meal = MedPropertyOut.model_validate
+        return {'day': day, 'norm': norm.value if norm else None,
+                'meals': [out_meal(p) for p in meals], 'totals': totals}
 
     # --- интервью (сбор анамнеза по протоколу) — за теми же воротами эпизода ---
     async def interview_open(self, episode_id: uuid.UUID) -> dict:
