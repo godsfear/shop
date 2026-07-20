@@ -76,10 +76,19 @@ VITAL_SCOPES = {
 }
 
 
-def symptom_slots(code: str) -> list[str]:
-    """Слоты уточнения для жалобы. У нелокализованных (головокружение, тошнота…)
-    убраны site/character/radiation; неизвестные (свой текст) — спрашиваем всё."""
-    skip = _LOCALIZED_SLOTS if code in SYSTEMIC_SYMPTOMS else set()
+def symptom_slots(code: str, localized: bool | None = None) -> list[str]:
+    """Слоты уточнения для жалобы. Локализованные (site/character/radiation)
+    убраны у нелокализованных (системных) жалоб — «где болит» для бессонницы
+    бессмысленно.
+
+    Тип известной из справочника жалобы задан SYSTEMIC_SYMPTOMS. Для свободного
+    текста тип указывает пациент (localized): False — общее состояние (убрать
+    локализацию), True/None — локализованная (спрашиваем всё, как раньше)."""
+    if code in _KNOWN_SYMPTOMS:
+        systemic = code in SYSTEMIC_SYMPTOMS
+    else:
+        systemic = localized is False
+    skip = _LOCALIZED_SLOTS if systemic else set()
     return [s["code"] for s in SYMPTOM_SCHEMA if s["code"] not in skip]
 
 # подписи состояний/событий эпизода — фронт получает их из GET /me/meta:
@@ -315,6 +324,10 @@ DICTIONARY = {
         ("psych", "Психическая"),
     ],
 }
+
+# коды известных жалоб — тип (локализуемость) определён; свободный текст вне
+# набора получает тип от пациента (см. symptom_slots)
+_KNOWN_SYMPTOMS = {c for c, _ in DICTIONARY["symptom"]}
 
 
 # ------------------------------------------------------------------ en-переводы

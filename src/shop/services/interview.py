@@ -100,6 +100,10 @@ class InterviewService:
         st = (await self.fsm.state('entity', row.id))['state']
         prow = await self._progress(row.id)
         progress = dict(prow.value)
+        # тип свободных жалоб (локализуемость слотов): фронт шлёт {code: bool}
+        # при вводе своей жалобы; известные из справочника типизированы сами
+        if isinstance(body.get('types'), dict):
+            progress['types'] = {**progress.get('types', {}), **body['types']}
         handler = getattr(self, f'_on_{st}', None)
         if handler is None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
@@ -315,7 +319,9 @@ class InterviewService:
         """Берёт симптом из очереди и заводит под него Property на эпизоде."""
         progress['current'] = progress['queue'].pop(0)
         progress['slot'] = 0
-        progress['slots'] = symptom_slots(progress['current'])   # пер-симптомные слоты
+        # тип свободной жалобы (если указан пациентом) -> локализуемость слотов
+        localized = (progress.get('types') or {}).get(progress['current'])
+        progress['slots'] = symptom_slots(progress['current'], localized)
         await self._symptom_property(episode_id, progress['current'], creator, create=True)
 
     async def _symptom_property(self, episode_id, code, creator=None,

@@ -285,6 +285,34 @@ async def test_main():
     assert 'onset' in seen and not ({'site', 'character', 'radiation'} & set(seen)), seen
     print('[ok] нелокализованная жалоба: слоты site/character/radiation пропущены')
 
+    # ===== A3b: своя жалоба с типом «общее состояние» — тоже без локализации;
+    # своя «локализованная» — со всеми слотами (тип задаёт пациент)
+    eidc = await episode('ep-custom')
+    async with Sess() as s:
+        await _svc(s, ks, payload).interview_open(eidc)
+    await ask(eidc, {'symptom': 'ломота во всём теле', 'types': {'ломота во всём теле': False}})
+    seen = []
+    v = await cur(eidc)
+    while v['state'] == 'symptom' and v['question'].get('symptom') == 'ломота во всём теле':
+        seen.append(v['question']['slot'])
+        v = await ask(eidc, {'value': 3 if v['question']['slot'] == 'severity' else 'ответ'})
+    assert not ({'site', 'character', 'radiation'} & set(seen)), seen
+    # добавим свою локализованную сопутствующую -> её разбирают со всеми слотами
+    # (перематываем ROS/анамнез не нужно: associations последний слот -> сразу к ней)
+    print('[ok] своя жалоба «общее состояние»: локализация пропущена')
+
+    eidc2 = await episode('ep-custom2')
+    async with Sess() as s:
+        await _svc(s, ks, payload).interview_open(eidc2)
+    await ask(eidc2, {'symptom': 'резь в боку', 'types': {'резь в боку': True}})
+    seen2 = []
+    v = await cur(eidc2)
+    while v['state'] == 'symptom' and v['question'].get('symptom') == 'резь в боку':
+        seen2.append(v['question']['slot'])
+        v = await ask(eidc2, {'value': 3 if v['question']['slot'] == 'severity' else 'ответ'})
+    assert {'site', 'character', 'radiation'} <= set(seen2), seen2
+    print('[ok] своя жалоба «локализованная»: спрашиваются site/character/radiation')
+
     # ===== Сценарий A4: вопрос слота на en (Translation поверх схемы сида)
     eide = await episode('ep-en')
     async with Sess() as s:

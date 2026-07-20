@@ -60,10 +60,13 @@ function Chips({ items, picked, onToggle }: {
  * код придумывает пользователь по-русски, бэк принимает любой code). */
 function SymptomPick({ dict, multi, submitLabel, exclude = [], onSubmit }: {
   dict: DictItem[]; multi: boolean; submitLabel: string; exclude?: string[]
-  onSubmit: (codes: string[], label: string) => void
+  onSubmit: (codes: string[], label: string, types: Record<string, boolean>) => void
 }) {
   const [picked, setPicked] = useState<string[]>([])
   const [free, setFree] = useState('')
+  // тип своей жалобы: локализованная (боль в месте) или общее состояние —
+  // от него зависит, спрашивать ли «где/на что похоже/куда отдаёт»
+  const [freeLoc, setFreeLoc] = useState<boolean | null>(null)
   // не показываем уже выбранные/разобранные симптомы — иначе опрос циклится
   const avail = dict.filter((d) => !exclude.includes(d.code))
   const toggle = (code: string) => setPicked(multi
@@ -71,10 +74,13 @@ function SymptomPick({ dict, multi, submitLabel, exclude = [], onSubmit }: {
     : [code])
   const submit = () => {
     const codes = [...picked]
-    if (free.trim()) codes.push(free.trim())
+    const custom = free.trim()
+    if (custom) codes.push(custom)
     if (!codes.length) return
     const names = new Map(dict.map((d) => [d.code, d.name]))
-    onSubmit(codes, codes.map((c) => names.get(c) ?? c).join(', '))
+    // тип нужен только своей жалобе; справочные типизированы на бэке
+    onSubmit(codes, codes.map((c) => names.get(c) ?? c).join(', '),
+             custom && freeLoc !== null ? { [custom]: freeLoc } : {})
   }
   return (
     <div className="answer">
@@ -82,8 +88,22 @@ function SymptomPick({ dict, multi, submitLabel, exclude = [], onSubmit }: {
       <div className="inline">
         <input placeholder={ui('свой вариант')} value={free}
                onChange={(e) => setFree(e.target.value)} />
-        <button onClick={submit} disabled={!picked.length && !free.trim()}>{submitLabel}</button>
+        <button onClick={submit}
+                disabled={(!picked.length && !free.trim()) || (!!free.trim() && freeLoc === null)}>
+          {submitLabel}
+        </button>
       </div>
+      {/* тип своей жалобы — уточняем локализуемость, чтобы не спрашивать
+          «где болит» у бессонницы */}
+      {free.trim() && (
+        <div className="inline">
+          <span className="muted">{ui('Это:')}</span>
+          <button type="button" className={'chip pick' + (freeLoc === true ? ' on' : '')}
+                  onClick={() => setFreeLoc(true)}>{ui('боль/ощущение в месте')}</button>
+          <button type="button" className={'chip pick' + (freeLoc === false ? ' on' : '')}
+                  onClick={() => setFreeLoc(false)}>{ui('общее состояние')}</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -239,7 +259,7 @@ export default function Interview() {
         <div className="composer">
           {state === 'complaint' &&
             <SymptomPick dict={symDict} multi={false} submitLabel={ui('Это главная жалоба')}
-                         onSubmit={(codes, label) => answer({ symptom: codes[0] }, label)} />}
+                         onSubmit={(codes, label, types) => answer({ symptom: codes[0], types }, label)} />}
 
           {state === 'symptom' && q?.slot === 'severity' &&
             <Severity onSubmit={(n) => answer({ value: n }, String(n))} />}
@@ -248,7 +268,7 @@ export default function Interview() {
             <div className="answer">
               <p className="muted">{ui('Отметьте, что появилось одновременно — каждый уйдёт в разбор.')}</p>
               <SymptomPick dict={symDict} multi submitLabel={ui('Ответить')} exclude={covered}
-                           onSubmit={(codes, label) => answer({ value: codes }, label)} />
+                           onSubmit={(codes, label, types) => answer({ value: codes, types }, label)} />
               <button className="ghost" onClick={() => answer({ value: [] }, ui('ничего'))}>
                 {ui('Ничего сопутствующего')}
               </button>
@@ -275,8 +295,8 @@ export default function Interview() {
           )}
           {state === 'ros' && rosOpen &&
             <SymptomPick dict={symDict} multi submitLabel={ui('Ответить')} exclude={covered}
-                         onSubmit={(codes, label) =>
-                           answer({ positive: true, symptoms: codes }, label)} />}
+                         onSubmit={(codes, label, types) =>
+                           answer({ positive: true, symptoms: codes, types }, label)} />}
 
           {/* секция уже заполнена в карте — просим подтвердить актуальность */}
           {state === 'history' && (q?.known?.length ?? 0) > 0 && !histEdit && (
@@ -323,7 +343,7 @@ export default function Interview() {
           )}
           {state === 'summary' && moreOpen &&
             <SymptomPick dict={symDict} multi submitLabel={ui('Добавить в разбор')} exclude={covered}
-                         onSubmit={(codes, label) => answer({ more: codes }, label)} />}
+                         onSubmit={(codes, label, types) => answer({ more: codes, types }, label)} />}
 
           {state === 'emergency' && (
             <div className="answer inline">

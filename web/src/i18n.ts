@@ -27,6 +27,9 @@ const EN: Record<string, string> = {
   'Ответить': 'Answer',
   'название': 'title',
   'свой вариант': 'your own option',
+  'Это:': 'This is:',
+  'боль/ощущение в месте': 'pain/sensation in a place',
+  'общее состояние': 'a general condition',
   // вход/регистрация
   'Вход': 'Sign in',
   'Войти': 'Sign in',
