@@ -41,16 +41,23 @@ async def test_main():
     async with Sess() as s:
         # хеш заранее — как в проде: пароль хешируется на шаге заявки (signup),
         # register_new_user вызывается после сверки кода
-        token, _ = await UserService(session=s).register_new_user(SignUp(
+        token, new_user = await UserService(session=s).register_new_user(SignUp(
             person=PersonCreate(name={'last': 'Петров'}, sex=True,
                                 birthdate=datetime.date(1990, 1, 1),
                                 birth_place=place_id),
             contact=Contact(email='petrov@x.com'),
-            password='correct-horse'), AuthService.hash_password('correct-horse'))
+            password='correct-horse'), AuthService.hash_password('correct-horse'),
+            {'terms_version': 'v-test', 'terms_accepted_at': '2026-07-21T10:00:00+00:00'})
         signup_payload = AuthService.verify_token(token.access_token)
+        new_user_id = new_user.id
     async with Sess() as s:
         me = await get_current_user(payload=signup_payload, session=s)
         assert me.contact.email == 'petrov@x.com'
+    # согласие на обработку ПДн зафиксировано на учётке (юр. след)
+    async with Sess() as s:
+        row = await s.get(t.User, new_user_id)
+        assert row.terms_version == 'v-test' and row.terms_accepted_at is not None
+    print('[ok] согласие на обработку ПДн зафиксировано (версия + момент)')
     print('[ok] сквозная регистрация: Person создана внутри signup, токен валиден')
 
     # --- регистрация и содержимое токена ---

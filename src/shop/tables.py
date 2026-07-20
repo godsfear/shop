@@ -459,6 +459,11 @@ class User(Base):
     roles: Mapped[list[str]] = mapped_column(ARRAY(String), server_default=text("'{}'"))
     # почта подтверждена кодом: без этого нельзя запрашивать чужие карты
     confirmed: Mapped[bool] = mapped_column(Boolean, server_default=text('false'))
+    # согласие на обработку ПДн (включая медданные): версия документа и момент —
+    # юридический след «кто на какую редакцию согласился». NULL — учётки до ввода.
+    terms_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    terms_accepted_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
 
     __local_table_args__ = (
         Index('ix_user_contact', 'contact', postgresql_using='gin', postgresql_where=ACTIVE),

@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -42,6 +44,10 @@ async def sign_up(data: SignUp, service: UserService = Depends()):
     """Шаг 1 регистрации: заявка в Redis + код на почту. Учётка НЕ создаётся —
     неподтверждённая заявка испаряется по TTL (анти-спам левыми адресами)."""
     email = _prop(data.contact.email, None)
+    # согласие на обработку ПДн обязательно (медданные — спец. категория)
+    if not data.terms_accepted:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail='terms_required')
     if issues := password_issues(data.password):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail='weak_password: ' + ','.join(issues))
@@ -55,6 +61,9 @@ async def sign_up(data: SignUp, service: UserService = Depends()):
                             detail='too_many_attempts')
     pending = data.model_dump(mode='json', exclude={'password'})
     pending['password_hash'] = AuthService.hash_password(data.password)
+    # версию и момент согласия ставит СЕРВЕР (клиенту в юр. следе не доверяем)
+    pending['terms_version'] = settings.terms_version
+    pending['terms_accepted_at'] = datetime.now(timezone.utc).isoformat()
     await request_signup(service.session, email, pending)
     await service.session.commit()          # письмо — через outbox
 
@@ -68,10 +77,12 @@ async def sign_up_confirm(body: SignUpConfirm, service: UserService = Depends())
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail='confirm_code_invalid')
     password_hash = pending.pop('password_hash')
+    terms = {'terms_version': pending.pop('terms_version', None),
+             'terms_accepted_at': pending.pop('terms_accepted_at', None)}
     # пароль-заглушка проходит валидацию и не используется: хеш уже готов
     signup = SignUp.model_validate({**pending, 'password': '<confirmed>'})
     try:
-        token, user = await service.register_new_user(signup, password_hash)
+        token, user = await service.register_new_user(signup, password_hash, terms)
     except IntegrityError:                  # гонка двух подтверждений
         await service.session.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,

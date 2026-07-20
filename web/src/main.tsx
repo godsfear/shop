@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, RequireAuth } from './auth'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import Legal from './pages/Legal'
 import Shell from './pages/Shell'
 import Dashboard from './pages/Dashboard'
 import Episode from './pages/Episode'
@@ -21,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/legal" element={<Legal />} />
           <Route path="/" element={<RequireAuth><Shell /></RequireAuth>}>
             <Route index element={<Dashboard />} />
             <Route path="episode/:id" element={<Episode />} />

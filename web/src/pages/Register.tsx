@@ -27,6 +27,7 @@ export default function Register() {
   const [sex, setSex] = useState('true')
   const [birthdate, setBirthdate] = useState('1990-01-01')
   const [code, setCode] = useState('')
+  const [terms, setTerms] = useState(false)
   const [stage, setStage] = useState<'form' | 'code'>('form')
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
@@ -36,7 +37,7 @@ export default function Register() {
     e.preventDefault()
     setErr(''); setMsg('')
     try {
-      await signupStart(email, password, last.trim(), first.trim(), sex === 'true', birthdate)
+      await signupStart(email, password, last.trim(), first.trim(), sex === 'true', birthdate, terms)
       setStage('code')
     } catch (e) { setErr((e as Error).message) }
   }
@@ -53,7 +54,7 @@ export default function Register() {
   const resend = async () => {
     setErr(''); setMsg('')
     try {
-      await signupStart(email, password, last.trim(), first.trim(), sex === 'true', birthdate)
+      await signupStart(email, password, last.trim(), first.trim(), sex === 'true', birthdate, terms)
       setMsg(ui('код отправлен повторно'))
     } catch (e) { setErr((e as Error).message) }
   }
@@ -94,10 +95,17 @@ export default function Register() {
           <label className="row">{ui('Дата рождения')}
             <input type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} />
           </label>
+          {/* согласие на обработку ПДн обязательно (медданные — спец. категория) */}
+          <label className="row terms">
+            <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
+            <span>{ui('Я принимаю')}{' '}
+              <Link to="/legal" target="_blank">{ui('условия и согласие на обработку персональных данных')}</Link>
+            </span>
+          </label>
           {/* имя/фамилия обязательны: ими врач представляется пациенту и наоборот */}
           <button type="submit"
                   disabled={!email.trim() || !pwOk || password2 !== password
-                            || !last.trim() || !first.trim()}>
+                            || !last.trim() || !first.trim() || !terms}>
             {ui('Получить код')}
           </button>
           <p className="muted">{ui('Уже есть аккаунт?')} <Link to="/login">{ui('Вход')}</Link></p>

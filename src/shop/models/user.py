@@ -43,6 +43,9 @@ class SignUp(BaseModel):
     contact: Contact
     password: str = Field(min_length=8)
     public_key: str = ''
+    # согласие на обработку ПДн: клиент лишь подтверждает факт (True), версию
+    # и момент фиксирует сервер (нельзя доверять клиенту в юридическом следе)
+    terms_accepted: bool = False
 
 
 class UserUpdate(BaseModel):

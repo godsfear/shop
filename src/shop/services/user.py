@@ -1,6 +1,7 @@
 import base64
 import os
 import uuid
+from datetime import datetime
 from typing import List
 
 from fastapi import Depends, HTTPException, status
@@ -94,19 +95,26 @@ class UserService:
         await get_cache().delete(f'user:{user_id}')
         return user
 
-    async def register_new_user(self, signup: SignUp, password_hash: str) -> tuple[Token, User]:
+    async def register_new_user(self, signup: SignUp, password_hash: str,
+                                terms: dict | None = None) -> tuple[Token, User]:
         """Создание учётки — вызывается ПОСЛЕ подтверждения почты кодом
         (/auth/signup/confirm): пароль уже захеширован в заявке, confirmed сразу.
+        terms — {terms_version, terms_accepted_at (ISO)}: юр. след согласия,
+        версию/момент проставил сервер на шаге заявки.
         До подтверждения заявка живёт в Redis (mailer.request_signup) — в БД ничего."""
         person = tables.Person(**signup.person.model_dump())
         self.session.add(person)
         await self.session.flush()
+        terms = terms or {}
+        accepted_at = terms.get('terms_accepted_at')
         user = User(
             person=person.id,
             contact=signup.contact.model_dump(exclude_none=True),
             password_hash=password_hash,
             public_key=signup.public_key,
             confirmed=True,
+            terms_version=terms.get('terms_version'),
+            terms_accepted_at=datetime.fromisoformat(accepted_at) if accepted_at else None,
         )
         self.session.add(user)
         await self.session.flush()

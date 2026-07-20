@@ -98,9 +98,10 @@ const json = (body: unknown, method = 'POST'): RequestInit => ({
 // --- аутентификация: регистрация двухшаговая (код на почту ДО создания учётки) ---
 export const signupStart = (email: string, password: string,
                             last: string, first: string,
-                            sex: boolean, birthdate: string) =>
+                            sex: boolean, birthdate: string, termsAccepted: boolean) =>
   req<void>('/auth/signup/', json(
-    { person: { name: { last, first }, sex, birthdate }, contact: { email }, password }))
+    { person: { name: { last, first }, sex, birthdate }, contact: { email },
+      password, terms_accepted: termsAccepted }))
 export async function signupConfirm(email: string, code: string): Promise<string> {
   const r = await req<{ access_token: string }>('/auth/signup/confirm/', json({ email, code }))
   return r.access_token
