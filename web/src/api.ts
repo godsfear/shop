@@ -217,6 +217,10 @@ export type Meta = Record<'concepts' | 'kinds' | 'states' | 'events' | 'red_flag
   Record<string, string>>
 export const meta = () => req<Meta>('/me/meta')
 
+// комментарии эпизода = свойства эпизода (concept=note); удаление — эпизод-скоуп
+export const closeEpisodeProperty = (episodeId: string, propId: string) =>
+  req<MedProperty>(`/me/episodes/${episodeId}/properties/${propId}`, { method: 'DELETE' })
+
 // правка ответа анамнеза (опечатки) — только до постановки диагноза
 export const editAnamnesis = (id: string, symptom: string, slot: string,
                               value: string | number) =>

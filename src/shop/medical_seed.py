@@ -172,6 +172,9 @@ CONCEPTS = {
     # трекер питания: приёмы пищи (Property на псевдониме) + суточная норма;
     # оценка калорийности и норма — ИИ-консумеры (services/nutrition.py)
     "meal": ("Питание", {}),
+    # свободные комментарии пациента к эпизоду — доп. контекст для диагноза;
+    # это обычные свойства эпизода, попадают в ИИ-бандл (_bundle)
+    "note": ("Комментарии", {}),
     # процесс сбора анамнеза (anamnez.md): интервью — Entity на эпизоде со своей FSM;
     # очередь симптомов/прогресс — Property(code='progress'), см. services/interview.py
     "interview": ("Опрос (анамнез)", {
@@ -341,7 +344,7 @@ CONCEPTS_EN = {
     "surgery": "Surgeries/hospitalizations", "social": "Social history",
     "system": "Body system", "document": "Document", "analysis": "Test",
     "referral": "Referrals", "prescription": "Prescriptions",
-    "meal": "Nutrition",
+    "meal": "Nutrition", "note": "Comments",
     "interview": "Interview (anamnesis)",
 }
 SLOTS_EN = {

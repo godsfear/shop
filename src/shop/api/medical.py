@@ -150,6 +150,14 @@ async def add_episode_property(episode_id: uuid.UUID, body: MedPropertyIn,
     return await svc.add_episode_property(episode_id, body)
 
 
+@router.delete('/episodes/{episode_id}/properties/{property_id}',
+               response_model=MedPropertyOut)
+async def close_episode_property(episode_id: uuid.UUID, property_id: uuid.UUID,
+                                 svc: MedAccessService = Depends()):
+    """Удалить свойство эпизода (комментарий) — уходит в историю."""
+    return await svc.close_episode_property(episode_id, property_id)
+
+
 @router.get('/episodes/{episode_id}/state')
 async def episode_state(episode_id: uuid.UUID, svc: MedAccessService = Depends()):
     return await svc.episode_state(episode_id)

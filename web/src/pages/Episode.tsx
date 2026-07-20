@@ -4,7 +4,7 @@ import {
   getEpisode, renameEpisode, episodeHistory, episodeState, transition, assess,
   episodeProperties, listDocuments, uploadDocument, concepts, dictionary,
   evaluateEpisode, addEpisodeProperty, setDiagnosis, startTreatment, documentContent,
-  editAnamnesis,
+  editAnamnesis, closeEpisodeProperty,
   type Episode as Ep, type FsmState, type Assess, type MedProperty, type Doc,
   type Concepts, type StateLog, type DictItem,
 } from '../api'
@@ -136,6 +136,26 @@ export default function Episode() {
     } catch (e) { setErr((e as Error).message) }
   }
 
+  // комментарий = свойство эпизода (concept=note): уходит в ИИ-бандл диагноза
+  const addNote = async () => {
+    const text = noteText.trim()
+    if (!text) return
+    setErr('')
+    try {
+      await addEpisodeProperty(id, {
+        category: cs['note'], code: `note-${Date.now()}`,
+        value: { text, source: 'patient' },
+      })
+      setNoteText('')
+      await reload()
+    } catch (e) { setErr((e as Error).message) }
+  }
+  const removeNote = async (propId: string) => {
+    setErr('')
+    try { await closeEpisodeProperty(id, propId); await reload() }
+    catch (e) { setErr((e as Error).message) }
+  }
+
   // установленный диагноз, план назначений ИИ и зафиксированное лечение
   const [diagProp, setDiagProp] = useState<MedProperty | null>(null)
   const [plan, setPlan] = useState<MedProperty | null>(null)
@@ -152,6 +172,9 @@ export default function Episode() {
   const [diaryDict, setDiaryDict] = useState<DictItem[]>([])
   const [dCode, setDCode] = useState('')
   const [dVal, setDVal] = useState('')
+  // комментарии пациента к эпизоду (доп. контекст для диагноза)
+  const [notes, setNotes] = useState<MedProperty[]>([])
+  const [noteText, setNoteText] = useState('')
 
   const reload = async () => {
     try {
@@ -166,6 +189,8 @@ export default function Episode() {
         && (p.value as { result?: string }).result !== undefined))
       setDiary(props.filter((p) => p.category === cs['vital'] && !isAi(p))
         .sort((a, b) => b.begins.localeCompare(a.begins)))
+      setNotes(props.filter((p) => p.category === cs['note'])
+        .sort((a, b) => a.begins.localeCompare(b.begins)))
       setDdx(props.find((p) => p.code === 'ddx') ?? null)
       setWorkup(props.find((p) => p.code === 'workup') ?? null)
       const sum = props.find((p) => p.code === 'summary') ?? null
@@ -566,6 +591,32 @@ export default function Episode() {
           </Stage>
         )
       })()}
+
+      {/* комментарии пациента — доп. контекст для диагноза, что не спросил опрос
+          (напр. чего НЕ было в начале эпизода при заведении задним числом);
+          уходят в ИИ-бандл как свойства эпизода */}
+      {hasSummary && (
+        <Stage title={ui('Комментарии')} done={stagePassed('anamnesis')}>
+          <p className="muted">{ui('Дополнительная информация для диагноза, которую не спросил опрос.')}</p>
+          {notes.length > 0 && (
+            <ul className="rows">
+              {notes.map((n) => (
+                <li key={n.id} className="row-link">
+                  <span>{String((n.value as { text?: string }).text ?? '')}</span>
+                  <button className="ghost small" style={{ marginLeft: 'auto' }}
+                          onClick={() => removeNote(n.id)}>{ui('удалить')}</button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="inline">
+            <input placeholder={ui('добавить комментарий')} value={noteText}
+                   onChange={(e) => setNoteText(e.target.value)}
+                   onKeyDown={(e) => { if (e.key === 'Enter' && noteText.trim()) addNote() }} />
+            <button className="ghost small" onClick={addNote} disabled={!noteText.trim()}>+</button>
+          </div>
+        </Stage>
+      )}
 
       {/* рекомендованные анализы — ИИ ранжирует по ценности и доступности;
           по каждому можно загрузить документ или вписать результат вручную

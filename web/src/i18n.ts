@@ -137,6 +137,10 @@ const EN: Record<string, string> = {
   'Быстрее всего — пройти опрос.': 'The fastest way is the interview.',
   'Анамнез (резюме опроса)': 'History (interview summary)',
   'подтверждено пациентом': 'confirmed by the patient',
+  'Комментарии': 'Comments',
+  'Дополнительная информация для диагноза, которую не спросил опрос.':
+    'Extra information for the diagnosis that the interview did not ask about.',
+  'добавить комментарий': 'add a comment',
   'Рекомендованные анализы': 'Recommended tests',
   'Отранжированы по ценности и доступности. По каждому — загрузите документ с результатом или впишите результат сами; всё войдёт в диагноз.':
     'Ranked by value and accessibility. For each one, upload a result document or type the result yourself; everything feeds the diagnosis.',

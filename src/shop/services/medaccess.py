@@ -391,6 +391,18 @@ class MedAccessService:
                            table='entity', objectid=episode_id, value=data.value),
             creator=self.payload.sub)
 
+    async def close_episode_property(self, episode_id: uuid.UUID,
+                                     property_id: uuid.UUID) -> tables.Property:
+        """Удалить свойство эпизода (комментарий и т.п.) — ворота по эпизоду,
+        плюс запись обязана висеть именно на нём (перебор id не трогает чужое)."""
+        await self._gate_episode(episode_id)
+        row = await self.session.get(tables.Property, property_id)
+        if row is None or row.table != 'entity' or row.objectid != episode_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='record_not_found')
+        closed = await versioned_expire(self.session, tables.Property, row.id)
+        await self.session.commit()
+        return closed
+
     async def episode(self, episode_id: uuid.UUID) -> tables.Entity:
         await self._gate_episode(episode_id)
         return await self.session.get(tables.Entity, episode_id)
