@@ -220,6 +220,33 @@ async def test_main():
             await _svc(s, ks, payload).edit_anamnesis(eid, AnamnesisEdit(
                 symptom='headache', slot='associations', value='x'))
         assert ei.value.status_code == 400
+
+    # правка ПЕРЕПРОВЕРЯЕТ красные флаги: штатный acs не зависит от слотов,
+    # поэтому регистрируем тестовый флаг по значению severity
+    from shop.services.medical import redflag_handler
+
+    @redflag_handler('test_severe_headache')
+    def _test_sev(symptoms):
+        return any(p.code == 'headache'
+                   and (p.value.get('slots') or {}).get('severity', 0) >= 9
+                   for p in symptoms)
+
+    async with Sess() as s:
+        illness = (await s.execute(select(t.Category).where(
+            t.Category.code == 'illness'))).scalar_one()
+        saved_value = illness.value
+        illness.value = {**saved_value, 'red_flags': ['acs', 'test_severe_headache']}
+        await s.commit()
+    async with Sess() as s:
+        res = await _svc(s, ks, payload).edit_anamnesis(eid, AnamnesisEdit(
+            symptom='headache', slot='severity', value=9))
+    assert 'test_severe_headache' in res['alerts'], res
+    async with Sess() as s:                      # вернуть конфиг — дальше сценарий B
+        illness = (await s.execute(select(t.Category).where(
+            t.Category.code == 'illness'))).scalar_one()
+        illness.value = saved_value
+        await s.commit()
+    print('[ok] правка перепроверяет красные флаги (тревога в ответе)')
     # после диагноза анамнез зафиксирован
     async with Sess() as s:
         await _svc(s, ks, payload).set_diagnosis(eid, DiagnosisIn(text='Мигрень'))

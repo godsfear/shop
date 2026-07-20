@@ -479,7 +479,11 @@ class MedAccessService:
             await versioned_update(self.session, tables.Property, summary.id,
                                    {'value': {**rebuilt, 'confirmed': True}})
         await self.session.commit()
-        return {'ok': True}
+        # красные флаги перепроверяются по исправленным данным — правка могла
+        # как поднять тревогу, так и снять её; фронт показывает в «Стоит дополнить»
+        alerts = (await MedicalService(session=self.session)
+                  .assess(pseudonym, episode_id))['alerts']
+        return {'ok': True, 'alerts': alerts}
 
     async def set_diagnosis(self, episode_id: uuid.UUID, body: DiagnosisIn) -> dict:
         """Установить диагноз: свойство + переход FSM + план назначений от ИИ —
