@@ -10,31 +10,32 @@ import { ui } from '../i18n'
 // Этапы протокола для полосы прогресса (emergency — вне линии, плашкой)
 const FLOW = ['complaint', 'symptom', 'ros', 'history', 'completeness', 'summary', 'confirmed']
 
-interface Msg { who: 'srv' | 'me'; text: string }
+// tag — жалоба, к которой относится вопрос: рендерится жирным и цветом
+interface Msg { who: 'srv' | 'me'; text: string; tag?: string }
 type Names = Record<string, string>
 
 // ------------------------------------------------------------------ утилиты
-function srvText(v: InterviewView, names: Names): string {
+function srvMsg(v: InterviewView, names: Names): { text: string; tag?: string } {
   const q = v.question
   switch (v.state) {
     case 'complaint':
-      return ui('Что беспокоит больше всего? Это станет главной жалобой.')
+      return { text: ui('Что беспокоит больше всего? Это станет главной жалобой.') }
     case 'symptom':
-      return `${names[q?.symptom ?? ''] ?? q?.symptom}: ${q?.ask ?? ''}`
+      return { tag: names[q?.symptom ?? ''] ?? q?.symptom, text: q?.ask ?? '' }
     case 'ros':
-      return `${ui('Обзор систем')} — ${names[q?.system ?? ''] ?? q?.system}: ${ui('есть ли жалобы?')}`
+      return { text: `${ui('Обзор систем')} — ${names[q?.system ?? ''] ?? q?.system}: ${ui('есть ли жалобы?')}` }
     case 'history':
-      return `${ui('Анамнез жизни')} — ${t(SECTIONS, q?.section ?? '')}: ${ui('что отметить?')}`
+      return { text: `${ui('Анамнез жизни')} — ${t(SECTIONS, q?.section ?? '')}: ${ui('что отметить?')}` }
     case 'completeness':
-      return `${ui('Остались пробелы:')} ${(q?.gaps ?? []).map((g) => t(SECTIONS, g).toLocaleLowerCase()).join(', ')}. ${ui('Заполним?')}`
+      return { text: `${ui('Остались пробелы:')} ${(q?.gaps ?? []).map((g) => t(SECTIONS, g).toLocaleLowerCase()).join(', ')}. ${ui('Заполним?')}` }
     case 'summary':
-      return ui('Резюме собрано. Всё ли верно и полно?')
+      return { text: ui('Резюме собрано. Всё ли верно и полно?') }
     case 'emergency':
-      return ui('Признаки угрожающего состояния — опрос прерван.')
+      return { text: ui('Признаки угрожающего состояния — опрос прерван.') }
     case 'confirmed':
-      return ui('Анамнез собран и подтверждён. Спасибо!')
+      return { text: ui('Анамнез собран и подтверждён. Спасибо!') }
     default:
-      return v.state
+      return { text: v.state }
   }
 }
 
@@ -167,7 +168,7 @@ export default function Interview() {
   const show = (v: InterviewView) => {
     setView(v)
     setRosOpen(false); setMoreOpen(false); setHistEdit(false); setFree('')
-    setFeed((f) => [...f, { who: 'srv', text: srvText(v, names.current) }])
+    setFeed((f) => [...f, { who: 'srv', ...srvMsg(v, names.current) }])
     if (v.state === 'history' || v.state === 'completeness') {
       const section = v.question?.section ?? v.question?.gaps?.[0]
       if (section) dictionary(section).then((d) => { remember(d); setSecDict(d) })
@@ -225,7 +226,11 @@ export default function Interview() {
       )}
 
       <div className="feed">
-        {feed.map((m, i) => <div key={i} className={`msg ${m.who}`}>{m.text}</div>)}
+        {feed.map((m, i) => (
+          <div key={i} className={`msg ${m.who}`}>
+            {m.tag && <span className="sym-tag">{m.tag}</span>}{m.tag ? ': ' : ''}{m.text}
+          </div>
+        ))}
         <div ref={endRef} />
       </div>
       {err && <p className="error">{err}</p>}

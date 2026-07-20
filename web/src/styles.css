@@ -32,6 +32,8 @@ button:hover { filter: brightness(1.07); }
 button:disabled { opacity: .6; cursor: default; }
 button.ghost { background: transparent; color: var(--accent);
   border: 1px solid var(--line); font-weight: 600; }
+/* лента интервью: жалоба, к которой относится вопрос, — жирным и цветом */
+.msg .sym-tag { font-weight: 700; color: var(--accent); }
 /* питание: полоска «потреблено/норма» (плашка и страница) */
 .macro { display: grid; grid-template-columns: 5.5em 1fr auto; gap: 8px;
   align-items: center; margin: 4px 0; font-size: 14px; }
