@@ -30,3 +30,20 @@ export const UNITS: Record<string, string> = {
   height: 'см', weight: 'кг', blood_pressure: 'мм рт. ст.', pulse: 'уд/мин',
   temperature: '°C', glucose: 'ммоль/л',
 }
+
+// сахар: контекст замера (норма зависит от него) и подпись
+export const GLUCOSE_CTX: Record<string, string> = {
+  fasting: 'натощак', postprandial: 'после еды',
+}
+
+// пороги сахара (ммоль/л) — информационная подсказка, НЕ диагноз. Норма зависит
+// от контекста: натощак 3.9–6.1, после еды (~2ч) до 7.8; ниже 3.9 — гипогликемия.
+export function glucoseAlert(raw: string | number, ctx?: string): string {
+  const v = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.'))
+  if (!isFinite(v)) return ''
+  if (v < 3.9) return 'низкий сахар (гипогликемия)'
+  if (ctx === 'fasting' && v > 6.1) return 'высокий сахар натощак'
+  if (ctx === 'postprandial' && v > 7.8) return 'высокий сахар после еды'
+  if (!ctx && v > 7.8) return 'высокий сахар'   // без контекста — только явно высокий
+  return ''
+}

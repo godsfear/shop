@@ -228,9 +228,17 @@ const EN: Record<string, string> = {
   'Печать': 'Print',
   'Загрузка…': 'Uploading…',
   'Дневник симптомов': 'Symptom diary',
-  'Замеры в моменте — температура, давление, пульс. Уйдут ИИ в диагноз вместе с анамнезом.':
-    'Momentary readings — temperature, blood pressure, pulse. They feed the AI diagnosis along with the history.',
+  'Замеры в моменте — температура, давление, пульс, сахар. Уйдут ИИ в диагноз вместе с анамнезом.':
+    'Momentary readings — temperature, blood pressure, pulse, blood sugar. They feed the AI diagnosis along with the history.',
   '— параметр —': '— parameter —',
+  // сахар: контекст замера и предупреждения (норма зависит от контекста)
+  'без уточнения': 'unspecified',
+  'натощак': 'fasting',
+  'после еды': 'after a meal',
+  'низкий сахар (гипогликемия)': 'low blood sugar (hypoglycemia)',
+  'высокий сахар натощак': 'high fasting blood sugar',
+  'высокий сахар после еды': 'high post-meal blood sugar',
+  'высокий сахар': 'high blood sugar',
   // интервью
   'Что беспокоит больше всего? Это станет главной жалобой.':
     'What bothers you most? This becomes the chief complaint.',

@@ -17,7 +17,7 @@ interface WorkupTest { code?: string; test: string; reason: string; self?: boole
 interface Workup { tests: WorkupTest[] }
 interface PlanItem { code?: string; name: string; reason?: string; prescription?: boolean }
 interface Plan { items: PlanItem[]; note?: string; diagnosis?: string }
-import { EVENTS, RED_FLAGS, SECTIONS, SLOTS, STATES, UNITS, t } from '../ui'
+import { EVENTS, GLUCOSE_CTX, RED_FLAGS, SECTIONS, SLOTS, STATES, UNITS, glucoseAlert, t } from '../ui'
 import { ui } from '../i18n'
 
 // Секция пройденного этапа сворачивается (details), текущего — раскрыта
@@ -172,6 +172,7 @@ export default function Episode() {
   const [diaryDict, setDiaryDict] = useState<DictItem[]>([])
   const [dCode, setDCode] = useState('')
   const [dVal, setDVal] = useState('')
+  const [dCtx, setDCtx] = useState('')   // сахар: натощак/после еды (норма зависит)
   // комментарии пациента к эпизоду (доп. контекст для диагноза)
   const [notes, setNotes] = useState<MedProperty[]>([])
   const [noteText, setNoteText] = useState('')
@@ -365,9 +366,11 @@ export default function Episode() {
       const names = new Map(diaryDict.map((d) => [d.code, d.name]))
       await addEpisodeProperty(id, {
         category: cs['vital'], code: dCode, name: names.get(dCode),
-        value: { value: dVal.trim(), unit: ui(UNITS[dCode] ?? ''), source: 'diary' },
+        value: { value: dVal.trim(), unit: ui(UNITS[dCode] ?? ''), source: 'diary',
+                 // контекст замера сахара — идёт и в бандл ИИ (норма зависит от него)
+                 ...(dCode === 'glucose' && dCtx ? { context: dCtx } : {}) },
       })
-      setDVal('')
+      setDVal(''); setDCtx('')
       await reload()
     } catch (e) { setErr((e as Error).message) }
   }
@@ -823,25 +826,42 @@ export default function Episode() {
       {/* дневник симптомов: журнал замеров в моменте в рамках эпизода */}
       <section>
         <h3>{ui('Дневник симптомов')}</h3>
-        <p className="muted">{ui('Замеры в моменте — температура, давление, пульс. Уйдут ИИ в диагноз вместе с анамнезом.')}</p>
+        <p className="muted">{ui('Замеры в моменте — температура, давление, пульс, сахар. Уйдут ИИ в диагноз вместе с анамнезом.')}</p>
         <div className="inline">
-          <select value={dCode} onChange={(e) => setDCode(e.target.value)}>
+          <select value={dCode} onChange={(e) => { setDCode(e.target.value); setDCtx('') }}>
             <option value="">{ui('— параметр —')}</option>
             {diaryDict.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
           </select>
+          {/* сахар: контекст замера — норма и предупреждение зависят от него */}
+          {dCode === 'glucose' && (
+            <select value={dCtx} onChange={(e) => setDCtx(e.target.value)}>
+              <option value="">{ui('без уточнения')}</option>
+              <option value="fasting">{ui('натощак')}</option>
+              <option value="postprandial">{ui('после еды')}</option>
+            </select>
+          )}
           <input placeholder={ui('значение')} value={dVal}
                  onChange={(e) => setDVal(e.target.value)}
                  onKeyDown={(e) => { if (e.key === 'Enter') addDiary() }} />
           <button onClick={addDiary} disabled={!dCode || !dVal.trim()}>{ui('Записать')}</button>
         </div>
+        {/* живая подсказка при выходе сахара за границы (информация, не диагноз) */}
+        {dCode === 'glucose' && glucoseAlert(dVal, dCtx) &&
+          <p className="warn">⚠ {ui(glucoseAlert(dVal, dCtx))}</p>}
         <ul className="rows">
-          {diary.map((p) => (
-            <li key={p.id} className="row-link">
-              <span>{p.name || p.code}</span>
-              <b>{String(p.value.value ?? '')} {String(p.value.unit ?? '')}</b>
-              <span className="muted">{new Date(p.begins).toLocaleString()}</span>
-            </li>
-          ))}
+          {diary.map((p) => {
+            const val = p.value as { value?: unknown; unit?: unknown; context?: string }
+            const alert = p.code === 'glucose' ? glucoseAlert(String(val.value ?? ''), val.context) : ''
+            return (
+              <li key={p.id} className="row-link">
+                <span>{p.name || p.code}
+                  {val.context && <span className="muted"> · {ui(GLUCOSE_CTX[val.context] ?? '')}</span>}</span>
+                <b>{String(val.value ?? '')} {String(val.unit ?? '')}</b>
+                {alert && <span className="warn">⚠ {ui(alert)}</span>}
+                <span className="muted">{new Date(p.begins).toLocaleString()}</span>
+              </li>
+            )
+          })}
         </ul>
       </section>
 
