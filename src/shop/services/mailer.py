@@ -55,6 +55,32 @@ async def pop_signup(email: str, code: str) -> dict | None:
     return obj['pending']
 
 
+_RESET_NS = 'pwreset'
+
+
+async def request_password_reset(session: AsyncSession, email: str) -> None:
+    """Восстановление пароля: код в Redis + письмо через outbox. В отличие от
+    signup ничего в pending не кладём — новый пароль придёт в шаге confirm."""
+    code = f'{secrets.randbelow(1_000_000):06d}'
+    await get_cache().set(f'{_RESET_NS}:{email.lower()}', code, settings.confirm_ttl_s)
+    emit(session, TOPIC_EMAIL, {
+        'to': email,
+        'subject': 'Код для смены пароля',
+        'body': (f'Ваш код для смены пароля: {code}\nОн действует 24 часа. '
+                 'Если вы не запрашивали смену пароля — просто проигнорируйте это письмо.'),
+    })
+
+
+async def pop_reset(email: str, code: str) -> bool:
+    """Сверка кода восстановления: совпал — код изымается (одноразово)."""
+    key = f'{_RESET_NS}:{email.lower()}'
+    raw = await get_cache().get(key)
+    if raw is None or raw != code.strip():
+        return False
+    await get_cache().delete(key)
+    return True
+
+
 def _send_resend(to: str, subject: str, body: str) -> None:
     """Отправка через Resend HTTP API (dependency-free: тот же вызов, что и SDK).
     from обязан быть с проверенного домена; sandbox onboarding@resend.dev шлёт

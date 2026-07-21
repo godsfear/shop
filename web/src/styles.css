@@ -134,6 +134,11 @@ h2, h3 { margin: 8px 0; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
   padding: 10px 12px; }
 
+/* --- админ-статистика --- */
+.stats { width: 100%; border-collapse: collapse; }
+.stats td { padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.stats td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
 /* --- интервью: диалоговая лента --- */
 .interview .feed { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
 .msg { border: 1px solid var(--line); background: var(--card); border-radius: 12px;

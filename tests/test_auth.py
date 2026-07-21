@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 import shop.tables as t
 from shop.models.person import PersonCreate
 from shop.models.user import Contact, SignUp, UserCreate
+from shop.cache import get_cache
 from shop.services.user import UserService
 from shop.services.auth import AuthService, get_current_user, require_roles
 from shop.settings import settings
@@ -113,6 +114,33 @@ async def test_main():
         except HTTPException as e:
             assert e.status_code == 401
             print('[ok] неверный пароль: 401')
+
+    # --- восстановление пароля по коду (petrov, не тронут expire) ---
+    await get_cache().set('pwreset:petrov@x.com', '654321', 60)
+    async with Sess() as s:
+        svc = UserService(session=s)
+        try:                                  # неверный код -> 400, пароль тот же
+            await svc.reset_password('petrov@x.com', '000000', 'BrandNew1')
+            raise AssertionError('неверный код прошёл!')
+        except HTTPException as e:
+            assert e.status_code == 400
+        await svc.reset_password('petrov@x.com', '654321', 'BrandNew1')  # верный
+    async with Sess() as s:
+        svc = UserService(session=s)
+        tok = await svc.authenticate_user('petrov@x.com', 'BrandNew1')
+        assert AuthService.verify_token(tok.access_token).sub == new_user_id
+        try:                                  # старый пароль больше не работает
+            await svc.authenticate_user('petrov@x.com', 'correct-horse')
+            raise AssertionError('старый пароль ещё работает!')
+        except HTTPException as e:
+            assert e.status_code == 401
+    async with Sess() as s:                   # код одноразовый: повтор -> 400
+        try:
+            await UserService(session=s).reset_password('petrov@x.com', '654321', 'Another1')
+            raise AssertionError('код переиспользован!')
+        except HTTPException as e:
+            assert e.status_code == 400
+    print('[ok] сброс пароля: неверный код 400, верный меняет пароль, старый не работает, код одноразовый')
 
     # --- деактивированный пользователь: токен жив, но 401 ---
     async with Sess() as s:

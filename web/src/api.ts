@@ -120,6 +120,22 @@ export async function signin(email: string, password: string): Promise<string> {
   return r.access_token
 }
 
+// --- восстановление пароля по коду на почту (ответ на шаг 1 всегда 204) ---
+export const requestReset = (email: string) => req<void>('/auth/reset/', json({ email }))
+export const confirmReset = (email: string, code: string, password: string) =>
+  req<void>('/auth/reset/confirm/', json({ email, code, password }))
+
+// роли из JWT (только для показа/скрытия UI — доступ enforce'ит бэк)
+export function tokenRoles(): string[] {
+  const token = localStorage.getItem('token')
+  if (!token) return []
+  try { return JSON.parse(atob(token.split('.')[1])).roles ?? [] } catch { return [] }
+}
+export const isAdmin = () => tokenRoles().includes('admin')
+
+// --- админ: статистика «сколько в базе чего» ---
+export const adminStats = () => req<Record<string, number>>('/admin/stats')
+
 // --- профиль ---
 export interface Me { id: string; person: string; contact: { email?: string }
                       confirmed: boolean }

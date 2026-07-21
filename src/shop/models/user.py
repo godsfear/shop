@@ -65,6 +65,18 @@ class SignUpConfirm(BaseModel):
     code: str
 
 
+class PasswordReset(BaseModel):
+    """Шаг 1 восстановления пароля: адрес, на который слать код."""
+    email: str
+
+
+class PasswordResetConfirm(BaseModel):
+    """Шаг 2 восстановления: код из письма + новый пароль."""
+    email: str
+    code: str
+    password: str = Field(min_length=8)
+
+
 class User(UserBase, ReadMixin):
     roles: list[str] = []
     confirmed: bool = False   # почта подтверждена кодом

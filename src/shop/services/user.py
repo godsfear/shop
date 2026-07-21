@@ -121,6 +121,24 @@ class UserService:
         await self.session.commit()
         return AuthService.create_token(user), user
 
+    async def reset_password(self, email: str, code: str, new_password: str) -> None:
+        """Смена пароля по коду из письма (mailer.request_password_reset).
+        Код неверный/протухший -> confirm_code_invalid. Доступ к медданным не
+        зависит от пароля (DEK под ключом карты, не производным пароля), поэтому
+        сброс пароля данные не осиротит."""
+        from .mailer import pop_reset
+        if not await pop_reset(email, code):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail='confirm_code_invalid')
+        user = await self.get_by_contact(email)
+        if user is None:                     # код был, а юзер исчез — не палим, чей код
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail='confirm_code_invalid')
+        await versioned_update(self.session, User, user.id,
+                               {'password_hash': AuthService.hash_password(new_password)})
+        await self.session.commit()
+        await get_cache().delete(f'user:{user.id}')
+
     async def authenticate_user(self, prop: str, password: str) -> Token:
         user = await self.get_by_contact(prop)
         if user is None:

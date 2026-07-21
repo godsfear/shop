@@ -10,8 +10,9 @@ from sqlalchemy.exc import IntegrityError
 from ..cache import get_cache
 from ..keyservice import get_key_service
 from ..models.auth import Challenge, KeyCredentials, Token
-from ..models.user import Contact, SignUp, SignUpConfirm, User, password_issues
-from ..services.mailer import pop_signup, request_signup
+from ..models.user import (Contact, PasswordReset, PasswordResetConfirm, SignUp,
+                           SignUpConfirm, User, password_issues)
+from ..services.mailer import pop_signup, request_password_reset, request_signup
 from ..services.medaccess import enroll_patient
 from ..services.user import UserService
 from ..services.auth import AuthService, get_current_user
@@ -90,6 +91,31 @@ async def sign_up_confirm(body: SignUpConfirm, service: UserService = Depends())
     # ключи выпускаются каждому при регистрации (решение владельца)
     await enroll_patient(service.session, get_key_service(), user.id, user.person)
     return token
+
+
+@router.post('/reset/', status_code=status.HTTP_204_NO_CONTENT,
+             dependencies=[Depends(rate_limit)])
+async def request_reset(body: PasswordReset, service: UserService = Depends()):
+    """Шаг 1 восстановления: код на почту. Ответ ВСЕГДА 204 — существование
+    адреса не палим (анти-enumeration). Письмо шлём, только если учётка есть,
+    у неё есть пароль и не превышен лимит писем на адрес."""
+    email = _prop(body.email, None)
+    user = await service.get_by_contact(email)
+    if user is not None and user.password_hash and await get_cache().hit(
+            f'resetmail:{email.lower()}', settings.signup_mail_limit, 3600):
+        await request_password_reset(service.session, email)
+        await service.session.commit()      # письмо — через outbox
+
+
+@router.post('/reset/confirm/', status_code=status.HTTP_204_NO_CONTENT,
+             dependencies=[Depends(rate_limit)])
+async def confirm_reset(body: PasswordResetConfirm, service: UserService = Depends()):
+    """Шаг 2: код сошёлся -> новый пароль. Сброс не осиротит медданные (ключ
+    карты не производный пароля)."""
+    if issues := password_issues(body.password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail='weak_password: ' + ','.join(issues))
+    await service.reset_password(body.email, body.code, body.password)
 
 
 @router.post('/signin/', response_model=Token, dependencies=[Depends(rate_limit)])

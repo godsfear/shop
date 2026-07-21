@@ -33,6 +33,7 @@ export default function Login() {
         <input type="password" placeholder={ui('пароль')} value={password}
                onChange={(e) => setPassword(e.target.value)} />
         <button type="submit">{ui('Войти')}</button>
+        <p className="muted"><Link to="/reset">{ui('Забыли пароль?')}</Link></p>
         <p className="muted">{ui('Нет аккаунта?')} <Link to="/register">{ui('Регистрация')}</Link></p>
       </form>
     </div>

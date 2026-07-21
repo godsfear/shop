@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  ApiError, concepts, enroll, getCare, listProperties, openSession, setCare,
+  ApiError, concepts, enroll, getCare, isAdmin, listProperties, openSession, setCare,
 } from '../api'
 import { useAuth } from '../auth'
 import { loadMeta } from '../ui'
@@ -81,6 +81,7 @@ export default function Shell() {
           <NavLink to="/profile">{ui('Моя карта')}</NavLink>
           <NavLink to="/access">{ui('Доступы')}</NavLink>
           <NavLink to="/patients">{ui('Доверили мне')}</NavLink>
+          {isAdmin() && <NavLink to="/admin">{ui('Админ')}</NavLink>}
         </nav>
         <LangSwitch className="right" />
         <button className="ghost" onClick={logout}>{ui('Выйти')}</button>
