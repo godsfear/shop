@@ -113,7 +113,6 @@ const EN: Record<string, string> = {
     'Nothing bothers you right now. Got sick or injured — open an episode.',
   'История болезни': 'Past episodes',
   'Документы': 'Documents',
-  'Анализы и выписки — на странице эпизода.': 'Test results and reports live on the episode page.',
   'Сон': 'Sleep',
   'Нагрузки': 'Activity',
   'Питание': 'Nutrition',

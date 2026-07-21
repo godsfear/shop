@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  listEpisodes, createEpisode, episodeState, listDocuments, concepts, getNutrition,
-  type Episode, type Doc, type Concepts, type Nutrition,
+  listEpisodes, createEpisode, episodeState, concepts, getNutrition,
+  type Episode, type Concepts, type Nutrition,
 } from '../api'
 import { MacroBar, localDay } from './Nutrition'
 import { KINDS, STATES, t } from '../ui'
@@ -26,7 +26,6 @@ function EpisodeLink({ ep }: { ep: EpisodeRow }) {
 export default function Dashboard() {
   const nav = useNavigate()
   const [eps, setEps] = useState<EpisodeRow[]>([])
-  const [docs, setDocs] = useState<Doc[]>([])
   const [cs, setCs] = useState<Concepts>({})
   const [err, setErr] = useState('')
   const [creating, setCreating] = useState(false)
@@ -43,7 +42,6 @@ export default function Dashboard() {
           ? { ...e, fsm: st.value.state, closed: st.value.available.length === 0 }
           : { ...e }
       }))
-      setDocs((await listDocuments()).slice(-3).reverse())
     } catch (e) { setErr((e as Error).message) }
   }
   useEffect(() => {
@@ -106,19 +104,6 @@ export default function Dashboard() {
             </ul>
           </details>
         )}
-      </section>
-
-      <section className="tile">
-        <header><h3>{ui('Документы')}</h3></header>
-        {docs.length === 0 && <p className="muted">{ui('Анализы и выписки — на странице эпизода.')}</p>}
-        <ul className="rows">
-          {docs.map((d) => (
-            <li key={d.id} className="row-link">
-              <span>{d.name || d.code}</span>
-              <span className="muted">{new Date(d.begins).toLocaleDateString()}</span>
-            </li>
-          ))}
-        </ul>
       </section>
 
       {/* питание: сегодняшние ккал против нормы ИИ; вся лента — на /nutrition */}
