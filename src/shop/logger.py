@@ -40,6 +40,7 @@ logging_config = {
             "class": "logging.handlers.TimedRotatingFileHandler",
             "formatter": "json",
             "filename": str(LOG_DIR / "shop.log"),
+            "encoding": "utf-8",   # иначе на локали C кириллица падает UnicodeEncodeError
             "when": "D",
             "interval": 1,
         }
