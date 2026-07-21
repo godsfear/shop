@@ -50,7 +50,8 @@ export default function Reset() {
           <h2>{ui('Восстановление пароля')}</h2>
           {err && <p className="error">{err}</p>}
           <p className="muted">{ui('Введите email — вышлем код для смены пароля.')}</p>
-          <input placeholder="email" value={email} autoFocus
+          <input placeholder="email" value={email} autoFocus type="email"
+                 name="email" autoComplete="email"
                  onChange={(e) => setEmail(e.target.value)} />
           <button type="submit" disabled={!email.trim()}>{ui('Получить код')}</button>
           <p className="muted"><Link to="/login">{ui('← ко входу')}</Link></p>
@@ -60,9 +61,13 @@ export default function Reset() {
           <h2>{ui('Новый пароль')}</h2>
           <p className="muted">{ui('Если такой адрес зарегистрирован, на него отправлен код.')}</p>
           {err && <p className="error">{err}</p>}
+          {/* autocomplete: код — как OTP, пароли — как новые; иначе менеджер
+              паролей подставляет email в поле кода (оно перед полем пароля) */}
           <input placeholder={ui('код из письма')} value={code} inputMode="numeric" autoFocus
+                 name="otp" autoComplete="one-time-code"
                  onChange={(e) => setCode(e.target.value)} />
           <input type="password" placeholder={ui('новый пароль')} value={password}
+                 autoComplete="new-password"
                  onChange={(e) => setPassword(e.target.value)} />
           {password && !pwOk && (
             <ul className="pw-rules">
@@ -74,6 +79,7 @@ export default function Reset() {
             </ul>
           )}
           <input type="password" placeholder={ui('повторите пароль')} value={password2}
+                 autoComplete="new-password"
                  onChange={(e) => setPassword2(e.target.value)} />
           {password2 && password2 !== password &&
             <p className="error">{ui('пароли не совпадают')}</p>}
