@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { signupStart, signupConfirm } from '../api'
 import { useAuth } from '../auth'
 import { ui } from '../i18n'
+import { PasswordField } from '../PasswordField'
 import { LangSwitch } from './Shell'
 
 // требования к паролю — зеркало бэковой password_issues (models/user.py):
@@ -67,8 +68,9 @@ export default function Register() {
           <h2>{ui('Регистрация')}</h2>
           {err && <p className="error">{err}</p>}
           <input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input type="password" placeholder={ui('пароль')} value={password}
-                 onChange={(e) => setPassword(e.target.value)} />
+          <PasswordField placeholder={ui('пароль')} value={password}
+                         autoComplete="new-password"
+                         onChange={(e) => setPassword(e.target.value)} />
           {/* живой чек-лист: чего не хватает паролю; исчезает, когда всё ✓ */}
           {password && !pwOk && (
             <ul className="pw-rules">
@@ -80,8 +82,9 @@ export default function Register() {
             </ul>
           )}
           {/* двойной ввод — защита от опечатки в пароле */}
-          <input type="password" placeholder={ui('повторите пароль')} value={password2}
-                 onChange={(e) => setPassword2(e.target.value)} />
+          <PasswordField placeholder={ui('повторите пароль')} value={password2}
+                         autoComplete="new-password"
+                         onChange={(e) => setPassword2(e.target.value)} />
           {password2 && password2 !== password &&
             <p className="error">{ui('пароли не совпадают')}</p>}
           <input placeholder={ui('фамилия')} value={last} onChange={(e) => setLast(e.target.value)} />

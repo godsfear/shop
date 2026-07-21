@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { requestReset, confirmReset } from '../api'
 import { ui } from '../i18n'
+import { PasswordField } from '../PasswordField'
 import { LangSwitch } from './Shell'
 
 // требования к паролю — зеркало бэковой password_issues (models/user.py)
@@ -66,9 +67,9 @@ export default function Reset() {
           <input placeholder={ui('код из письма')} value={code} inputMode="numeric" autoFocus
                  name="otp" autoComplete="one-time-code"
                  onChange={(e) => setCode(e.target.value)} />
-          <input type="password" placeholder={ui('новый пароль')} value={password}
-                 autoComplete="new-password"
-                 onChange={(e) => setPassword(e.target.value)} />
+          <PasswordField placeholder={ui('новый пароль')} value={password}
+                         autoComplete="new-password"
+                         onChange={(e) => setPassword(e.target.value)} />
           {password && !pwOk && (
             <ul className="pw-rules">
               {PW_RULES.map(([label, ok]) => (
@@ -78,9 +79,9 @@ export default function Reset() {
               ))}
             </ul>
           )}
-          <input type="password" placeholder={ui('повторите пароль')} value={password2}
-                 autoComplete="new-password"
-                 onChange={(e) => setPassword2(e.target.value)} />
+          <PasswordField placeholder={ui('повторите пароль')} value={password2}
+                         autoComplete="new-password"
+                         onChange={(e) => setPassword2(e.target.value)} />
           {password2 && password2 !== password &&
             <p className="error">{ui('пароли не совпадают')}</p>}
           <button type="submit" disabled={!code.trim() || !pwOk || password2 !== password}>

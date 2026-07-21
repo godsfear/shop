@@ -34,6 +34,8 @@ const EN: Record<string, string> = {
   'Вход': 'Sign in',
   'Войти': 'Sign in',
   'пароль': 'password',
+  'Показать пароль': 'Show password',
+  'Скрыть пароль': 'Hide password',
   'Нет аккаунта?': 'No account?',
   'Регистрация': 'Sign up',
   'повторите пароль': 'repeat the password',
