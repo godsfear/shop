@@ -21,9 +21,10 @@
 
 Хранение: таблицы Key / Breakglass / KeyAudit (tables.py) — состояние видно
 всем воркерам и переживает рестарт (в отличие от прежней файловой заглушки).
-Материал ключей зашифрован KEK — мастер-ключом из settings.kek: компрометация
-дампа БД без KEK ключи не раскрывает. Ceiling: KEK в .env; следующий уровень —
-KEK в Vault/KMS, реализация Protocol поверх их API (точка — get_key_service).
+Материал ключей зашифрован KEK — мастер-ключом (resolve_kek): компрометация
+дампа БД без KEK ключи не раскрывает. KEK хранится под Google Cloud KMS
+(kms.py); в dev/тестах — открытый settings.kek. Следующий уровень (не сделан) —
+клиентский owner-DEK для zero-knowledge.
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from .kms import resolve_kek
 from .settings import settings
 from . import tables
 
@@ -94,7 +96,7 @@ class DbKeyService:
         self._sessions = session_factory
         self.approvals_required = approvals_required
         self.veto_window = timedelta(seconds=veto_window_s)
-        raw = (kek if kek is not None else settings.kek).encode()
+        raw = (kek if kek is not None else resolve_kek()).encode()
         # KEK-строка любой длины -> ключ Fernet (sha256 -> urlsafe base64)
         self._kek = Fernet(base64.urlsafe_b64encode(hashlib.sha256(raw).digest()))
 

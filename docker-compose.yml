@@ -52,8 +52,13 @@ services:
       DATABASE_URI: postgresql+asyncpg://shop:${POSTGRES_PASSWORD:-secret}@postgres:5432/shop
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET требуется — задайте в .env}
       KEK: ${KEK:-dev-kek}
+      KEK_ENCRYPTED: ${KEK_ENCRYPTED:-}     # прод: KEK под Google Cloud KMS (см. kms.py)
+      KMS_KEY: ${KMS_KEY:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/secrets/gcp-sa.json}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:-app}
       RESEARCH_PASSWORD: ${RESEARCH_PASSWORD:-research}
+    volumes:
+      - ./secrets:/secrets:ro               # ключ ServiceAccount к KMS (gcp-sa.json); в dev пусто
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,6 +71,9 @@ services:
       REDIS_URI: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET требуется — задайте в .env}
       KEK: ${KEK:-dev-kek}
+      KEK_ENCRYPTED: ${KEK_ENCRYPTED:-}
+      KMS_KEY: ${KMS_KEY:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/secrets/gcp-sa.json}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       RUN_WORKERS: "false"
       RESEND_API_KEY: ${RESEND_API_KEY:-}   # задан -> реальная отправка через Resend
@@ -73,6 +81,8 @@ services:
       SMTP_HOST: mailpit                    # fallback, когда RESEND_API_KEY пуст
       SMTP_PORT: "1025"
       SMTP_STARTTLS: "false"
+    volumes:
+      - ./secrets:/secrets:ro               # ключ ServiceAccount к KMS (gcp-sa.json); в dev пусто
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -88,6 +98,9 @@ services:
       REDIS_URI: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET требуется — задайте в .env}
       KEK: ${KEK:-dev-kek}
+      KEK_ENCRYPTED: ${KEK_ENCRYPTED:-}
+      KMS_KEY: ${KMS_KEY:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/secrets/gcp-sa.json}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}   # задан -> реальная отправка через Resend
       MAIL_FROM: ${MAIL_FROM:-onboarding@resend.dev}
@@ -96,6 +109,8 @@ services:
       SMTP_STARTTLS: "false"
       EVENT_BUS: "true"                     # relay + консумеры RabbitMQ
       RABBITMQ_URI: amqp://guest:guest@rabbitmq:5672/
+    volumes:
+      - ./secrets:/secrets:ro               # ключ ServiceAccount к KMS (gcp-sa.json); в dev пусто
     depends_on:
       migrate:
         condition: service_completed_successfully

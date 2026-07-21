@@ -23,7 +23,12 @@ class Settings(BaseSettings):
     api_prefix: str = '/api/v1'
     admin_role: str = 'admin'              # роль управления учётными записями/ролями
     # ключевой сервис (ключи в PG под KEK, см. keyservice.py)
-    kek: str = 'dev-kek'                   # мастер-ключ шифрования ключей; в проде ОБЯЗАТЕЛЬНО в .env
+    kek: str = 'dev-kek'                   # мастер-ключ; dev/тесты. В проде — под KMS (ниже)
+    # Прод: KEK хранится зашифрованным Google Cloud KMS (см. kms.py). Задан
+    # KEK_ENCRYPTED -> на старте KMS его расшифровывает, открытый KEK не нужен.
+    kek_encrypted: str = ''                # base64 KMS-шифротекста KEK (python -m shop.kms)
+    kms_key: str = ''                      # projects/.../locations/.../keyRings/.../cryptoKeys/...
+    gcp_sa_json: str = ''                  # ключ ServiceAccount одной строкой; пусто -> ADC
     breakglass_approvals: int = 2          # «правило двух»
     breakglass_role: str = 'keyholder'     # единственная роль подтверждающих
     veto_window_s: int = 7 * 24 * 3600     # окно вето recovery-заявки
