@@ -24,6 +24,12 @@ class MedPropertyIn(BaseModel):
     _code_not_reserved = field_validator('code')(forbid_state_code)
 
 
+class SleepIn(BaseModel):
+    """Запись ночи в дневник сна: дата (утренняя) + показатели ночи."""
+    day: str
+    value: dict
+
+
 class _MedOut(BaseModel):
     """Общая проекция мед-ответов: БЕЗ objectid/table — псевдоним (носитель
     медданных) не попадает в поверхность API. Инвариант держится здесь одним

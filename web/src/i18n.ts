@@ -243,9 +243,16 @@ const EN: Record<string, string> = {
   'Ночь на дату': 'Night of',
   'Журнал сна': 'Sleep log',
   'Заполните хотя бы один показатель.': 'Fill in at least one value.',
-  'Показатели вносите из своего трекера или часов — заполняйте, что есть.':
-    'Enter values from your tracker or watch — fill in whatever you have.',
+  'Показатели вносите из своего трекера или часов — заполняйте, что есть. Эффективность считается сама.':
+    'Enter values from your tracker or watch — fill in whatever you have. Efficiency is computed automatically.',
+  'Оценка сна': 'Sleep assessment',
+  'Оценка появится после первой записи ночи.': 'The assessment appears after your first logged night.',
+  'Оценка ИИ по журналу и данным карты — ориентир, не диагноз.':
+    'AI assessment from your log and record — a guide, not a diagnosis.',
+  'Оценка сна обновляется…': 'Sleep assessment updating…',
+  'Качество': 'Quality',
   'Когда лёг': 'Bedtime',
+  'Когда встал': 'Wake time',
   'Время засыпания': 'Time to fall asleep',
   'Общее время сна': 'Total sleep time',
   'Эффективность сна': 'Sleep efficiency',
@@ -256,9 +263,6 @@ const EN: Record<string, string> = {
   'Ночной SpO₂': 'Night SpO₂',
   'мин': 'min',
   'мс': 'ms',
-  'последняя ночь': 'last night',
-  'сон': 'sleep',
-  'самочувствие': 'wellbeing',
   'Запишите ночь — сон, пробуждения, пульс, HRV.': 'Log a night — sleep, awakenings, pulse, HRV.',
   // интервью
   'Что беспокоит больше всего? Это станет главной жалобой.':

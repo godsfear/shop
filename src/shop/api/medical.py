@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, 
 from fastapi.responses import Response
 
 from ..models.medical import (SessionOpen, MedPropertyIn, MedPropertyOut,
-                               AnamnesisEdit, DiagnosisIn, TreatmentIn,
+                               AnamnesisEdit, DiagnosisIn, TreatmentIn, SleepIn,
                                EpisodeIn, EpisodeOut, EpisodeRename, Transition, DataOut)
 from ..services.medaccess import MedAccessService
 
@@ -257,6 +257,25 @@ async def add_meal(day: str = Form(...),
                             detail='meal_input_required')
     return await svc.add_meal(day, desc.strip(),
                               photo, file.content_type if file else '')
+
+
+# --- сон: журнал ночей + оценка ИИ за период (запрашивается один раз при записи) ---
+@router.get('/sleep')
+async def sleep(svc: MedAccessService = Depends()):
+    """Журнал ночей (свежие сверху) + последняя оценка сна ИИ."""
+    return await svc.sleep_journal()
+
+
+@router.post('/sleep', response_model=MedPropertyOut,
+             status_code=status.HTTP_201_CREATED)
+async def add_sleep(body: SleepIn, svc: MedAccessService = Depends()):
+    """Запись ночи; в той же транзакции ставится задача переоценки сна за период."""
+    try:
+        datetime.date.fromisoformat(body.day)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail='bad_day') from None
+    return await svc.add_sleep(body.day, body.value)
 
 
 @router.get('/nutrition')

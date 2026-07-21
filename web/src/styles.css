@@ -144,6 +144,11 @@ h2, h3 { margin: 8px 0; }
 
 /* журнал сна: показатели ночи в карточке */
 .sleep-vals { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 13px; }
+/* форма сна: каждое поле — своя строка (label по умолчанию inline, вне .auth) */
+.sleep-form label { display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; margin: 10px 0; }
+.sleep-form input[type=time], .sleep-form input[type=number] { max-width: 140px; }
+.sleep-form input[type=range] { width: 130px; }
 
 /* --- интервью: диалоговая лента --- */
 .interview .feed { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }

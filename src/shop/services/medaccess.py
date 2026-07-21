@@ -37,6 +37,7 @@ from ..services.consent import APPROVED, MEDICAL, _until_alive
 from ..services.entity import EntityService
 from ..services.evaluate import _upsert, request_evaluate, request_plan
 from ..services.nutrition import NORM_CODE, request_meal_estimate, request_norm
+from ..services.sleep import ASSESS_CODE, request_sleep_assess
 from ..services.extract import request_extract
 from ..services.files import FileStore
 from ..services.fsm import FSMService
@@ -602,6 +603,60 @@ class MedAccessService:
         out_meal = MedPropertyOut.model_validate
         return {'day': day, 'norm': norm.value if norm else None,
                 'meals': [out_meal(p) for p in meals], 'totals': totals}
+
+    # --- сон: журнал ночей + оценка ИИ за период (один раз при записи) --------
+    async def add_sleep(self, day: str, value: dict) -> tables.Property:
+        """Запись ночи (Property на псевдониме) + постановка оценки сна за период.
+        Оценку пересчитываем при каждой записи; прежний текст висит со
+        status='pending' до готовности (маркер защищает от дублей при поллинге)."""
+        pseudonym = await self._resolve()
+        cats = await medical_concepts(self.session)
+        if 'sleep' not in cats:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail='seed_missing: sleep')
+        prop = tables.Property(table='pseudonym', objectid=pseudonym,
+                               category=cats['sleep'], code=f'sleep-{day}-{uuid.uuid4()}',
+                               name=day, value={**value, 'date': day})
+        self.session.add(prop)
+        await self.session.flush()
+        age = sex = None
+        if self.link_id is None:              # identity (возраст/пол) — только владелец
+            person = await self.session.get(tables.Person, await self._person_id())
+            if person is not None:
+                today = datetime.date.today()
+                bd = person.birthdate
+                age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+                sex = 'м' if person.sex else 'ж'
+        request_sleep_assess(self.session, pseudonym, age, sex, lang=self.lang)
+        assess = (await self.session.execute(select(tables.Property).where(
+            tables.Property.table == 'pseudonym',
+            tables.Property.objectid == pseudonym,
+            tables.Property.code == ASSESS_CODE))).scalars().first()
+        pend = {**(assess.value if assess else {}), 'status': 'pending'}
+        if assess is not None:
+            await versioned_update(self.session, tables.Property, assess.id, {'value': pend})
+        else:
+            self.session.add(tables.Property(table='pseudonym', objectid=pseudonym,
+                                             code=ASSESS_CODE, value=pend))
+        await self.session.commit()
+        return prop
+
+    async def sleep_journal(self) -> dict:
+        """Журнал ночей (свежие сверху) + последняя оценка сна ИИ."""
+        pseudonym = await self._resolve()
+        cats = await medical_concepts(self.session)
+        entries = (await self.session.execute(select(tables.Property).where(
+            tables.Property.table == 'pseudonym',
+            tables.Property.objectid == pseudonym,
+            tables.Property.category == cats.get('sleep'))
+            .order_by(tables.Property.begins.desc()))).scalars().all()
+        assess = (await self.session.execute(select(tables.Property).where(
+            tables.Property.table == 'pseudonym',
+            tables.Property.objectid == pseudonym,
+            tables.Property.code == ASSESS_CODE))).scalars().first()
+        out = MedPropertyOut.model_validate
+        return {'entries': [out(p) for p in entries],
+                'assessment': assess.value if assess else None}
 
     # --- интервью (сбор анамнеза по протоколу) — за теми же воротами эпизода ---
     async def interview_open(self, episode_id: uuid.UUID) -> dict:

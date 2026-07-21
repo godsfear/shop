@@ -199,6 +199,13 @@ export const closeProperty = (id: string) =>
 export const propertyHistory = (id: string) =>
   req<MedProperty[]>(`/me/properties/${id}/history`)
 
+// --- сон: журнал ночей + оценка ИИ за период (ставится при записи) ---
+export interface SleepAssessment { quality?: string; summary?: string; status?: string; nights?: number }
+export interface SleepJournal { entries: MedProperty[]; assessment: SleepAssessment | null }
+export const getSleep = () => req<SleepJournal>('/me/sleep')
+export const addSleep = (day: string, value: Record<string, unknown>) =>
+  req<MedProperty>('/me/sleep', json({ day, value }))
+
 // --- ИИ-оценка эпизода (результат — Property code='ddx' на эпизоде) ---
 export const evaluateEpisode = (id: string) =>
   req<{ queued: boolean }>(`/me/episodes/${id}/evaluate`, { method: 'POST' })
