@@ -95,6 +95,10 @@ const json = (body: unknown, method = 'POST'): RequestInit => ({
   method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 })
 
+// --- юр-документы (публичные, до авторизации): текст из БД на языке интерфейса ---
+export interface LegalDoc { version: string; title: string; body: string }
+export const legalDoc = (code: string) => req<LegalDoc>(`/legal/${code}`)
+
 // --- аутентификация: регистрация двухшаговая (код на почту ДО создания учётки) ---
 export const signupStart = (email: string, password: string,
                             last: string, first: string,

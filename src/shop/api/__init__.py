@@ -15,6 +15,7 @@ from .place import router as place_router
 from .rate import router as rate_router
 from .translation import router as translation_router
 from .medical import router as medical_router
+from .legal import router as legal_router
 from ..settings import settings
 
 router = APIRouter(prefix=settings.api_prefix, tags=['api'])
@@ -34,3 +35,4 @@ router.include_router(translation_router)
 router.include_router(bridge_router)
 router.include_router(consent_router)
 router.include_router(medical_router)
+router.include_router(legal_router)

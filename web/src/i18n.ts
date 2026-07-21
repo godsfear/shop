@@ -54,17 +54,7 @@ const EN: Record<string, string> = {
   'условия и согласие на обработку персональных данных':
     'terms and consent to the processing of personal data',
   '← к регистрации': '← back to sign up',
-  'Пользовательское соглашение': 'Terms of Use',
-  'Согласие на обработку персональных данных': 'Consent to Processing of Personal Data',
-  'Политика конфиденциальности': 'Privacy Policy',
-  'ЧЕРНОВИК. Документы не проверены юристом и не имеют юридической силы — заглушка до подготовки итоговых текстов.':
-    'DRAFT. These documents are not reviewed by a lawyer and have no legal force — a placeholder until final texts are prepared.',
-  'Здесь будет описание правил пользования сервисом: назначение, обязанности сторон, ограничение ответственности, порядок изменения условий.':
-    'This will describe the rules of using the service: purpose, obligations of the parties, limitation of liability, and how terms are changed.',
-  'Здесь будет согласие на обработку персональных данных, включая сведения о состоянии здоровья (специальная категория). Должно содержать: оператора и его реквизиты, перечень данных, цели, действия с данными, срок хранения, порядок отзыва согласия и права субъекта.':
-    'This will be the consent to processing of personal data, including health information (a special category). It must include: the operator and its details, the list of data, purposes, processing actions, retention period, how to withdraw consent, and the subject’s rights.',
-  'Здесь будет описание, какие данные собираются, как хранятся и защищаются, кому и на каком основании передаются, как их посмотреть или удалить.':
-    'This will describe what data is collected, how it is stored and protected, to whom and on what basis it is transferred, and how to view or delete it.',
+  'Редакция:': 'Version:',
   'Получить код': 'Get a code',
   'Код из письма': 'Code from the email',
   'Мы отправили код на': 'We sent a code to',

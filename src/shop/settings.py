@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     signup_mail_limit: int = 3             # писем с кодом на один адрес в час
     # версия документов согласия на обработку ПДн — меняется при правке текстов;
     # фиксируется на учётке при регистрации (юр. след). Формат: дата редакции.
-    terms_version: str = '2026-07-21-draft'
+    terms_version: str = '2026-07-21'
     # периметр HTTP
     auth_rate_limit: int = 10              # попыток /auth/* с одного IP за окно
     auth_rate_window_s: int = 60           # окно rate limit (сек)

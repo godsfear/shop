@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import tables
+from .legal_seed import LEGAL_DOCS
 
 # 11-слотовая схема разбора жалобы (OPQRST/SOCRATES + расширение).
 # label — вопрос пациенту как есть: человеческим языком, без мед. жаргона;
@@ -547,8 +548,46 @@ async def seed_medical(db: AsyncSession) -> dict[str, uuid.UUID]:
             entity_ids[(kind, code)] = row.id
 
     await _seed_translations(db, ids, entity_ids)
+    await _seed_legal(db)
     await db.commit()
     return ids
+
+
+async def _seed_legal(db: AsyncSession) -> None:
+    """Юр-документы (сид, истина): top-level категория 'legal' + Entity на
+    документ; тело в description (RU-база), EN — в Translation. Отдельно от
+    медицинского дерева, чтобы не попадать в /me/concepts."""
+    en = (await db.execute(select(tables.Language.id).where(
+        tables.Language.iso == 'en'))).scalar_one()
+    cat = await _get_category(db, None, 'legal')
+    if cat is None:
+        cat = tables.Category(category=None, code='legal', name='Документы')
+        db.add(cat)
+        await db.flush()
+    for code, doc in LEGAL_DOCS.items():
+        ent = (await db.execute(select(tables.Entity).where(
+            tables.Entity.category == cat.id,
+            tables.Entity.code == code))).scalars().first()
+        if ent is None:
+            ent = tables.Entity(category=cat.id, code=code, name=doc['title_ru'],
+                                description=doc['body_ru'],
+                                table='category', objectid=cat.id)
+            db.add(ent)
+            await db.flush()
+        else:                       # сид — истина: подхватываем правки текста
+            ent.name, ent.description = doc['title_ru'], doc['body_ru']
+        for field, content in (('name', doc['title_en']),
+                               ('description', doc['body_en'])):
+            row = (await db.execute(select(tables.Translation).where(
+                tables.Translation.table == 'entity',
+                tables.Translation.objectid == ent.id,
+                tables.Translation.field == field,
+                tables.Translation.language == en))).scalars().first()
+            if row is None:
+                db.add(tables.Translation(table='entity', objectid=ent.id,
+                                          field=field, language=en, content=content))
+            elif row.content != content:
+                row.content = content
 
 
 async def _seed_translations(db: AsyncSession, ids: dict, entity_ids: dict) -> None:
