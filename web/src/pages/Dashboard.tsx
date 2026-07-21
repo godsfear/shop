@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  listEpisodes, createEpisode, episodeState, concepts, getNutrition,
-  type Episode, type Concepts, type Nutrition,
+  listEpisodes, createEpisode, episodeState, concepts, getNutrition, listProperties,
+  type Episode, type Concepts, type Nutrition, type MedProperty,
 } from '../api'
 import { MacroBar, localDay } from './Nutrition'
 import { KINDS, STATES, t } from '../ui'
@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [err, setErr] = useState('')
   const [creating, setCreating] = useState(false)
   const [nutri, setNutri] = useState<Nutrition | null>(null)
+  const [sleep, setSleep] = useState<MedProperty | null>(null)
 
   const load = async () => {
     try {
@@ -50,6 +51,9 @@ export default function Dashboard() {
       if (Object.keys(c).length === 0)
         setErr(ui('Справочник пуст — на сервере не прогнан медицинский сид') +
                ' (uv run python scripts/bootstrap_dev.py)')
+      if (c['sleep']) listProperties(c['sleep'])
+        .then((r) => setSleep(r.sort((a, b) => b.begins.localeCompare(a.begins))[0] ?? null))
+        .catch(() => {})
     }).catch((e) => setErr((e as Error).message))
     load()
     getNutrition(localDay()).then(setNutri).catch(() => {})
@@ -124,8 +128,19 @@ export default function Dashboard() {
         ) : <p className="muted">…</p>}
       </section>
 
-      {/* перспектива: те же плитки, данные подключатся новыми концептами ядра */}
-      <section className="tile future"><header><h3>{ui('Сон')}</h3></header><p>{ui('скоро')}</p></section>
+      <section className="tile">
+        <header><h3>{ui('Сон')}</h3>
+          <Link to="/sleep"><button className="ghost">{ui('Открыть')}</button></Link>
+        </header>
+        {sleep ? (() => {
+          const v = sleep.value as { date?: string; total?: string; wellbeing?: number }
+          return <p className="muted">{ui('последняя ночь')}: {String(v.date ?? '')}
+            {v.total ? ` · ${ui('сон')} ${v.total}` : ''}
+            {v.wellbeing ? ` · ${ui('самочувствие')} ${v.wellbeing}/10` : ''}</p>
+        })() : <p className="muted">{ui('Запишите ночь — сон, пробуждения, пульс, HRV.')}</p>}
+      </section>
+
+      {/* перспектива: данные подключатся новыми концептами ядра */}
       <section className="tile future"><header><h3>{ui('Нагрузки')}</h3></header><p>{ui('скоро')}</p></section>
     </div>
   )

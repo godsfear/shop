@@ -238,6 +238,28 @@ const EN: Record<string, string> = {
   'высокий сахар натощак': 'high fasting blood sugar',
   'высокий сахар после еды': 'high post-meal blood sugar',
   'высокий сахар': 'high blood sugar',
+  // сон (трекер)
+  'Записать ночь': 'Log a night',
+  'Ночь на дату': 'Night of',
+  'Журнал сна': 'Sleep log',
+  'Заполните хотя бы один показатель.': 'Fill in at least one value.',
+  'Показатели вносите из своего трекера или часов — заполняйте, что есть.':
+    'Enter values from your tracker or watch — fill in whatever you have.',
+  'Когда лёг': 'Bedtime',
+  'Время засыпания': 'Time to fall asleep',
+  'Общее время сна': 'Total sleep time',
+  'Эффективность сна': 'Sleep efficiency',
+  'Пробуждений за ночь': 'Awakenings',
+  'Длительность пробуждений': 'Time awake',
+  'Самочувствие утром': 'Morning wellbeing',
+  'Ночной пульс': 'Night pulse',
+  'Ночной SpO₂': 'Night SpO₂',
+  'мин': 'min',
+  'мс': 'ms',
+  'последняя ночь': 'last night',
+  'сон': 'sleep',
+  'самочувствие': 'wellbeing',
+  'Запишите ночь — сон, пробуждения, пульс, HRV.': 'Log a night — sleep, awakenings, pulse, HRV.',
   // интервью
   'Что беспокоит больше всего? Это станет главной жалобой.':
     'What bothers you most? This becomes the chief complaint.',

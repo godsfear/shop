@@ -174,6 +174,9 @@ CONCEPTS = {
     # трекер питания: приёмы пищи (Property на псевдониме) + суточная норма;
     # оценка калорийности и норма — ИИ-консумеры (services/nutrition.py)
     "meal": ("Питание", {}),
+    # трекер сна: журнал ночей (Property на псевдониме, generic /me/properties),
+    # значение — набор показателей ночи; ИИ-консумеров пока нет
+    "sleep": ("Сон", {}),
     # свободные комментарии пациента к эпизоду — доп. контекст для диагноза;
     # это обычные свойства эпизода, попадают в ИИ-бандл (_bundle)
     "note": ("Комментарии", {}),
@@ -347,7 +350,7 @@ CONCEPTS_EN = {
     "surgery": "Surgeries/hospitalizations", "social": "Social history",
     "system": "Body system", "document": "Document", "analysis": "Test",
     "referral": "Referrals", "prescription": "Prescriptions",
-    "meal": "Nutrition", "note": "Comments",
+    "meal": "Nutrition", "sleep": "Sleep", "note": "Comments",
     "interview": "Interview (anamnesis)",
 }
 SLOTS_EN = {
