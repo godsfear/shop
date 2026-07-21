@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # Прод: KEK хранится зашифрованным Google Cloud KMS (см. kms.py). Задан
     # KEK_ENCRYPTED -> на старте KMS его расшифровывает, открытый KEK не нужен.
     kek_encrypted: str = ''                # base64 KMS-шифротекста KEK (python -m shop.kms)
-    kms_key: str = ''                      # projects/.../locations/.../keyRings/.../cryptoKeys/...
+    kms_key: str = ''                      # projects/.../keyRings/.../cryptoKeys/КЛЮЧ — БЕЗ /cryptoKeyVersions/N
     gcp_sa_json: str = ''                  # ключ ServiceAccount одной строкой; пусто -> ADC
     breakglass_approvals: int = 2          # «правило двух»
     breakglass_role: str = 'keyholder'     # единственная роль подтверждающих

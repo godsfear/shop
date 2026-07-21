@@ -29,6 +29,9 @@ ServiceAccount к KMS) хранить **отдельно** от бэкапов.
   KMS_KEY=projects/<proj>/locations/<loc>/keyRings/<ring>/cryptoKeys/<key>
   KEK_ENCRYPTED=<из шага 3 ниже>
   ```
+  ⚠️ `KMS_KEY` — имя самого ключа, **без** хвоста `/cryptoKeyVersions/N` (иначе
+  KMS ответит `INVALID_RESOURCE_TYPE`). В консоли копируйте resource name со
+  страницы ключа, а не его версии.
 
 **Переход с открытого KEK на KMS (одноразово, без потери данных):**
 
