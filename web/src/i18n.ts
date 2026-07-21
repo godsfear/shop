@@ -243,8 +243,10 @@ const EN: Record<string, string> = {
   'Ночь на дату': 'Night of',
   'Журнал сна': 'Sleep log',
   'Заполните хотя бы один показатель.': 'Fill in at least one value.',
-  'Показатели вносите из своего трекера или часов — заполняйте, что есть. Эффективность считается сама.':
-    'Enter values from your tracker or watch — fill in whatever you have. Efficiency is computed automatically.',
+  'Как спалось?': 'How did you sleep?',
+  'Показатели вносите из своего трекера или часов — заполняйте, что есть. Время сна и эффективность считаются сами.':
+    'Enter values from your tracker or watch — fill in whatever you have. Sleep time and efficiency are computed automatically.',
+  'ч': 'h',
   'Оценка сна': 'Sleep assessment',
   'Оценка появится после первой записи ночи.': 'The assessment appears after your first logged night.',
   'Оценка ИИ по журналу и данным карты — ориентир, не диагноз.':

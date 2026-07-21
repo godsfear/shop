@@ -11,20 +11,26 @@ const localDay = (shift = 0) => {
   return d.toLocaleDateString('sv')
 }
 
-// "HH:MM" -> минуты
 const parseHM = (s?: string): number | null => {
   const m = /^(\d{1,2}):(\d{2})$/.exec((s ?? '').trim())
   return m ? +m[1] * 60 + +m[2] : null
 }
-// эффективность = время сна / время в постели × 100; постель = встал − лёг (через полночь)
-const efficiency = (bedtime?: string, getup?: string, total?: string): number | null => {
-  const bt = parseHM(bedtime), gu = parseHM(getup), tot = parseHM(total)
-  if (bt == null || gu == null || tot == null) return null
-  let tib = gu - bt; if (tib <= 0) tib += 1440
-  return tib > 0 ? Math.round((tot / tib) * 100) : null
+const num = (s?: string): number => {
+  const v = parseFloat((s ?? '').replace(',', '.')); return isFinite(v) ? v : 0
+}
+// время в постели = встал − лёг (через полночь)
+const tibMin = (bedtime?: string, getup?: string): number | null => {
+  const bt = parseHM(bedtime), gu = parseHM(getup)
+  if (bt == null || gu == null) return null
+  let d = gu - bt; if (d <= 0) d += 1440
+  return d > 0 ? d : null
+}
+const fmtDur = (min: number): string => {
+  const h = Math.floor(min / 60), m = Math.round(min % 60)
+  return h ? `${h} ${ui('ч')}${m ? ` ${m} ${ui('мин')}` : ''}` : `${m} ${ui('мин')}`
 }
 
-// показатели ночи для журнала (порядок карточки); efficiency/wellbeing — особые
+// показатели ночи для журнала; единица — в скобках после названия
 const LABELS: { key: string; label: string; unit?: string }[] = [
   { key: 'bedtime', label: 'Когда лёг' },
   { key: 'getup', label: 'Когда встал' },
@@ -52,7 +58,6 @@ export default function Sleep() {
     catch (e) { setErr((e as Error).message) }
   }
   useEffect(() => { load() }, [])
-  // пока ИИ считает оценку за период — поллим
   useEffect(() => {
     if (assess?.status !== 'pending') return
     const t = setInterval(load, 3000)
@@ -60,15 +65,20 @@ export default function Sleep() {
   }, [assess?.status])
 
   const set = (k: string, v: string) => setF((s) => ({ ...s, [k]: v }))
-  const eff = efficiency(f.bedtime, f.getup, f.total)
+
+  // время сна = время в постели − засыпание − пробуждения; эффективность = сон / постель
+  const tib = tibMin(f.bedtime, f.getup)
+  const totalMin = tib != null ? Math.max(0, tib - num(f.onset_min) - num(f.wake_min)) : null
+  const eff = (tib && totalMin != null) ? Math.round(totalMin / tib * 100) : null
 
   const save = async (e: FormEvent) => {
     e.preventDefault(); setErr('')
     const value: Record<string, unknown> = { wellbeing: wb }
     for (const [k, raw] of Object.entries(f)) {
       const v = raw.trim(); if (!v) continue
-      value[k] = ['bedtime', 'getup', 'total'].includes(k) ? v : Number(v.replace(',', '.'))
+      value[k] = ['bedtime', 'getup'].includes(k) ? v : Number(v.replace(',', '.'))
     }
+    if (totalMin != null) value.total = fmtDur(totalMin)   // считается, не вводится
     if (eff != null) value.efficiency = eff
     try {
       await addSleep(date, value)
@@ -82,13 +92,10 @@ export default function Sleep() {
     try { await closeProperty(id); await load() } catch (e) { setErr((e as Error).message) }
   }
 
-  const numField = (key: string, label: string, unit?: string, min?: number, max?: number) => (
-    <label className="row" key={key}>{ui(label)}
-      <span className="inline">
-        <input type="number" inputMode="decimal" min={min} max={max}
-               value={f[key] ?? ''} onChange={(e) => set(key, e.target.value)} />
-        {unit && <span className="muted">{ui(unit)}</span>}
-      </span>
+  const numField = (key: string, label: string, unit?: string) => (
+    <label className="row" key={key}>{ui(label)}{unit ? ` (${ui(unit)})` : ''}
+      <input type="number" inputMode="decimal" value={f[key] ?? ''}
+             onChange={(e) => set(key, e.target.value)} />
     </label>
   )
   const timeField = (key: string, label: string) => (
@@ -119,7 +126,14 @@ export default function Sleep() {
       </section>
 
       <section>
-        <h3>{ui('Записать ночь')}</h3>
+        <h3>{ui('Как спалось?')}</h3>
+        {/* итог сверху, крупно: эффективность выделена */}
+        <div className="sleep-summary">
+          <div><span className="muted">{ui('Эффективность сна')}</span>
+            <b className="big">{eff != null ? `${eff} %` : '—'}</b></div>
+          <div><span className="muted">{ui('Общее время сна')}</span>
+            <b>{totalMin != null ? fmtDur(totalMin) : '—'}</b></div>
+        </div>
         <form onSubmit={save} className="sleep-form">
           <label className="row">{ui('Ночь на дату')}
             <input type="date" value={date} max={localDay()}
@@ -128,10 +142,6 @@ export default function Sleep() {
           {timeField('bedtime', 'Когда лёг')}
           {timeField('getup', 'Когда встал')}
           {numField('onset_min', 'Время засыпания', 'мин')}
-          {timeField('total', 'Общее время сна')}
-          <label className="row">{ui('Эффективность сна')}
-            <span className="muted">{eff != null ? `${eff} %` : '—'}</span>
-          </label>
           {numField('wake_count', 'Пробуждений за ночь')}
           {numField('wake_min', 'Длительность пробуждений', 'мин')}
           <label className="row">{ui('Самочувствие утром')}
@@ -146,7 +156,7 @@ export default function Sleep() {
           {numField('spo2', 'Ночной SpO₂', '%')}
           <button type="submit">{ui('Записать')}</button>
         </form>
-        <p className="muted disclaimer">{ui('Показатели вносите из своего трекера или часов — заполняйте, что есть. Эффективность считается сама.')}</p>
+        <p className="muted disclaimer">{ui('Показатели вносите из своего трекера или часов — заполняйте, что есть. Время сна и эффективность считаются сами.')}</p>
       </section>
 
       <section>
@@ -164,8 +174,7 @@ export default function Sleep() {
                 <div className="sleep-vals">
                   {LABELS.filter((x) => v[x.key] !== undefined && v[x.key] !== '').map((x) => (
                     <span key={x.key} className="muted">
-                      {ui(x.label)}: <b>{String(v[x.key])}{x.key === 'wellbeing' ? '/10'
-                        : x.unit ? ' ' + ui(x.unit) : ''}</b>
+                      {ui(x.label)}{x.unit ? ` (${ui(x.unit)})` : ''}: <b>{String(v[x.key])}{x.key === 'wellbeing' ? '/10' : ''}</b>
                     </span>
                   ))}
                 </div>

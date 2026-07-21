@@ -149,6 +149,12 @@ h2, h3 { margin: 8px 0; }
   gap: 8px; margin: 10px 0; }
 .sleep-form input[type=time], .sleep-form input[type=number] { max-width: 140px; }
 .sleep-form input[type=range] { width: 130px; }
+/* итог сна сверху: эффективность выделена цветом/жирностью/размером */
+.sleep-summary { display: flex; gap: 24px; align-items: baseline; margin: 8px 0 14px;
+  padding: 10px 14px; background: var(--accent-soft); border-radius: 10px; }
+.sleep-summary > div { display: flex; flex-direction: column; gap: 2px; }
+.sleep-summary b { font-size: 1.2em; }
+.sleep-summary .big { color: var(--accent); font-size: 1.9em; font-weight: 700; }
 
 /* --- интервью: диалоговая лента --- */
 .interview .feed { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
