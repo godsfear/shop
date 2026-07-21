@@ -74,6 +74,7 @@ VITAL_SCOPES = {
     "blood_pressure": {"profile", "diary"},
     "pulse": {"profile", "diary"},
     "temperature": {"diary"},
+    "glucose": {"diary"},          # замер в моменте по глюкометру
 }
 
 
@@ -246,6 +247,7 @@ DICTIONARY = {
         ("height", "Рост"), ("weight", "Вес"),
         ("blood_pressure", "Давление"), ("pulse", "Пульс"),
         ("temperature", "Температура"),   # дневник симптомов на эпизоде
+        ("glucose", "Сахар крови"),       # глюкометр — дневник (диабет)
     ],
     "chronic": [
         ("hypertension", "Гипертония"), ("diabetes2", "Сахарный диабет 2 типа"),
@@ -412,7 +414,7 @@ DICTIONARY_EN = {
     "vital": {
         "height": "Height", "weight": "Weight",
         "blood_pressure": "Blood pressure", "pulse": "Pulse",
-        "temperature": "Temperature",
+        "temperature": "Temperature", "glucose": "Blood sugar",
     },
     "chronic": {
         "hypertension": "Hypertension", "diabetes2": "Type 2 diabetes",

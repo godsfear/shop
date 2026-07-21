@@ -28,5 +28,5 @@ export const t = (dict: Record<string, string>, code: string) => dict[code] ?? c
 // подпись локализуется через ui() в момент записи
 export const UNITS: Record<string, string> = {
   height: 'см', weight: 'кг', blood_pressure: 'мм рт. ст.', pulse: 'уд/мин',
-  temperature: '°C',
+  temperature: '°C', glucose: 'ммоль/л',
 }
