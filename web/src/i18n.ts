@@ -232,9 +232,10 @@ const EN: Record<string, string> = {
   'Открыть': 'Open',
   'Печать': 'Print',
   'Загрузка…': 'Uploading…',
-  'Дневник симптомов': 'Symptom diary',
-  'Замеры в моменте — температура, давление, пульс, сахар. Уйдут ИИ в диагноз вместе с анамнезом.':
-    'Momentary readings — temperature, blood pressure, pulse, blood sugar. They feed the AI diagnosis along with the history.',
+  'Дневник состояния': 'Condition diary',
+  'Замеры в моменте (температура, давление, пульс, сахар) и свои заметки о самочувствии. Уйдут ИИ в диагноз вместе с анамнезом.':
+    'Momentary readings (temperature, blood pressure, pulse, blood sugar) and your own notes on how you feel. They feed the AI diagnosis along with the history.',
+  'своя заметка о самочувствии': 'your note on how you feel',
   '— параметр —': '— parameter —',
   // сахар: контекст замера и предупреждения (норма зависит от контекста)
   'без уточнения': 'unspecified',

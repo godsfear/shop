@@ -173,6 +173,7 @@ export default function Episode() {
   const [dCode, setDCode] = useState('')
   const [dVal, setDVal] = useState('')
   const [dCtx, setDCtx] = useState('')   // сахар: натощак/после еды (норма зависит)
+  const [diaryNote, setDiaryNote] = useState('')   // свободная заметка в дневник
   // комментарии пациента к эпизоду (доп. контекст для диагноза)
   const [notes, setNotes] = useState<MedProperty[]>([])
   const [noteText, setNoteText] = useState('')
@@ -188,9 +189,13 @@ export default function Episode() {
       setResults(props.filter((p) =>
         (p.value as { source?: string; result?: string }).source === 'patient'
         && (p.value as { result?: string }).result !== undefined))
-      setDiary(props.filter((p) => p.category === cs['vital'] && !isAi(p))
+      // дневник состояния: замеры (vital) + свои заметки (note, source='diary')
+      setDiary(props.filter((p) => (p.category === cs['vital'] && !isAi(p))
+        || (p.category === cs['note'] && (p.value as { source?: string }).source === 'diary'))
         .sort((a, b) => b.begins.localeCompare(a.begins)))
-      setNotes(props.filter((p) => p.category === cs['note'])
+      // Комментарии — заметки эпизода, кроме дневниковых
+      setNotes(props.filter((p) => p.category === cs['note']
+        && (p.value as { source?: string }).source !== 'diary')
         .sort((a, b) => a.begins.localeCompare(b.begins)))
       setDdx(props.find((p) => p.code === 'ddx') ?? null)
       setWorkup(props.find((p) => p.code === 'workup') ?? null)
@@ -371,6 +376,22 @@ export default function Episode() {
                  ...(dCode === 'glucose' && dCtx ? { context: dCtx } : {}) },
       })
       setDVal(''); setDCtx('')
+      await reload()
+    } catch (e) { setErr((e as Error).message) }
+  }
+
+  // свободная заметка в дневник состояния — свойство эпизода (concept=note,
+  // source='diary'): видна в дневнике, но не в «Комментариях»; уходит ИИ в бандл
+  const addDiaryNote = async () => {
+    const text = diaryNote.trim()
+    if (!text) return
+    setErr('')
+    try {
+      await addEpisodeProperty(id, {
+        category: cs['note'], code: `diary-${Date.now()}`,
+        value: { text, source: 'diary' },
+      })
+      setDiaryNote('')
       await reload()
     } catch (e) { setErr((e as Error).message) }
   }
@@ -719,114 +740,11 @@ export default function Episode() {
         })()}
       </Stage>
 
-      {/* установленный диагноз (вручную/из ddx) — не путать с ИИ-оценкой выше */}
-      {diagProp && (() => {
-        const v = diagProp.value as { text?: string; source?: string }
-        return (
-          <section>
-            <h3>{ui('Диагноз')}</h3>
-            <div className="card resume">
-              <b>{v.text}</b>{' '}
-              <button className="ghost small"
-                      onClick={() => { setDiagText(v.text ?? ''); setDiagOpen(true) }}>
-                {ui('изменить')}
-              </button>
-              <p className="muted">{v.source === 'ddx' ? ui('выбран из вариантов ИИ') : ui('внесён вручную')}
-                {' · '}{new Date(diagProp.begins).toLocaleDateString()}</p>
-            </div>
-          </section>
-        )
-      })()}
+      {/* === порядок блоков после «Диагноз (оценка ИИ)» задан владельцем === */}
 
-      {/* направления на анализы/исследования — выданные врачом бумаги */}
-      {diagProp && (
-        <HandoutDocs title={ui('Направления')} busy={handoutBusy} docs={referrals}
-                     hint={ui('Направления на анализы и исследования. Загрузить может пациент или врач с доступом; ИИ их не читает.')}
-                     onUpload={(f) => uploadHandout('referral', f)} />
-      )}
-
-      {/* план назначений от ИИ — генерится после установки диагноза */}
-      {diagProp && !treatProp && planPending &&
-        (!plan || (plan.value as unknown as Plan).diagnosis !== (diagProp.value as { text?: string }).text) && (
-        <section>
-          <h3>{ui('Назначения (рекомендация ИИ)')}</h3>
-          <p className="muted parsing">{ui('ИИ подбирает назначения по диагнозу…')}</p>
-        </section>
-      )}
-      {plan && (() => {
-        const v = plan.value as unknown as Plan
-        if (!v.items?.length) return null
-        return (
-          <Stage title={ui('Назначения (рекомендация ИИ)')} done={stagePassed('diagnosis')}>
-            <p className="muted">{ui('Отранжированы по важности. Нажмите «Начать лечение», чтобы выбрать из них и/или добавить назначения врача.')}</p>
-            <ul className="cards">
-              {v.items.map((x, i) => (
-                <li key={i} className="card">
-                  <b>{i + 1}. {x.name}</b>
-                  {x.prescription && <span className="chip state"> {ui('нужно назначение врача')}</span>}
-                  <div className="muted">{x.reason}</div>
-                </li>
-              ))}
-            </ul>
-            {v.note && <p className="muted">{v.note}</p>}
-            <p className="muted disclaimer">{ui('Назначения ИИ — предложения для обсуждения с врачом. Не начинайте приём рецептурных препаратов без назначения врача.')}</p>
-          </Stage>
-        )
-      })()}
-
-      {/* зафиксированное лечение (выбор пациента) */}
-      {treatProp && (() => {
-        const its = (treatProp.value as { items?: { code?: string; name: string }[] }).items ?? []
-        return (
-          <section>
-            <h3>{ui('Лечение')}{' '}
-              <button className="ghost small"
-                      onClick={() => {
-                        setTreatPicked(its.filter((i) => i.code).map((i) => i.code!))
-                        setTreatLines(its.filter((i) => !i.code).map((i) => i.name))
-                        setTreatOpen(true)
-                      }}>{ui('изменить')}</button>
-            </h3>
-            <ul className="rows">
-              {its.map((x, i) => (
-                <li key={i} className="row-link">
-                  <span>{x.name}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="muted">{ui('начато')} · {new Date(treatProp.begins).toLocaleDateString()}</p>
-          </section>
-        )
-      })()}
-
-      {/* рецепты — выдаются при лечении */}
-      {treatProp && (
-        <HandoutDocs title={ui('Рецепты')} busy={handoutBusy} docs={prescriptions}
-                     hint={ui('Рецепты на препараты. Загрузить может пациент или врач с доступом; ИИ их не читает.')}
-                     onUpload={(f) => uploadHandout('prescription', f)} />
-      )}
-
-      {/* жалобы вносятся опросом (анамнез) — ручного ввода кодов нет */}
-      {symptoms.length > 0 && (
-        <section>
-          <h3>{ui('Жалобы')}</h3>
-          <ul className="cards">
-            {symptoms.map((s) => (
-              <li key={s.id} className="card">
-                <b>{s.name || symNames[s.code] || s.code}</b>
-                {(s.value as { status?: string }).status === 'absent' &&
-                  <span className="muted"> {ui('— отсутствует (значимо)')}</span>}
-                <span className="muted"> · {String((s.value as { source?: string }).source ?? '')}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* дневник симптомов: журнал замеров в моменте в рамках эпизода */}
-      <section>
-        <h3>{ui('Дневник симптомов')}</h3>
-        <p className="muted">{ui('Замеры в моменте — температура, давление, пульс, сахар. Уйдут ИИ в диагноз вместе с анамнезом.')}</p>
+      {/* дневник состояния: замеры «в моменте» + свои заметки; сворачиваемый */}
+      <Stage title={ui('Дневник состояния')} done={false}>
+        <p className="muted">{ui('Замеры в моменте (температура, давление, пульс, сахар) и свои заметки о самочувствии. Уйдут ИИ в диагноз вместе с анамнезом.')}</p>
         <div className="inline">
           <select value={dCode} onChange={(e) => { setDCode(e.target.value); setDCtx('') }}>
             <option value="">{ui('— параметр —')}</option>
@@ -848,9 +766,23 @@ export default function Episode() {
         {/* живая подсказка при выходе сахара за границы (информация, не диагноз) */}
         {dCode === 'glucose' && glucoseAlert(dVal, dCtx) &&
           <p className="warn">⚠ {ui(glucoseAlert(dVal, dCtx))}</p>}
+        {/* своя заметка о самочувствии (свободный текст) */}
+        <div className="inline">
+          <input placeholder={ui('своя заметка о самочувствии')} value={diaryNote}
+                 onChange={(e) => setDiaryNote(e.target.value)}
+                 onKeyDown={(e) => { if (e.key === 'Enter' && diaryNote.trim()) addDiaryNote() }} />
+          <button className="ghost small" onClick={addDiaryNote} disabled={!diaryNote.trim()}>+</button>
+        </div>
         <ul className="rows">
           {diary.map((p) => {
-            const val = p.value as { value?: unknown; unit?: unknown; context?: string }
+            const val = p.value as { value?: unknown; unit?: unknown; context?: string; text?: string }
+            if (val.text !== undefined) return (        // свободная заметка
+              <li key={p.id} className="row-link">
+                <span>{String(val.text)}</span>
+                <button className="ghost small" style={{ marginLeft: 'auto' }}
+                        onClick={() => removeNote(p.id)}>{ui('удалить')}</button>
+              </li>
+            )
             const alert = p.code === 'glucose' ? glucoseAlert(String(val.value ?? ''), val.context) : ''
             return (
               <li key={p.id} className="row-link">
@@ -863,7 +795,14 @@ export default function Episode() {
             )
           })}
         </ul>
-      </section>
+      </Stage>
+
+      {/* направления на анализы/исследования — выданные врачом бумаги */}
+      {diagProp && (
+        <HandoutDocs title={ui('Направления')} busy={handoutBusy} docs={referrals}
+                     hint={ui('Направления на анализы и исследования. Загрузить может пациент или врач с доступом; ИИ их не читает.')}
+                     onUpload={(f) => uploadHandout('referral', f)} />
+      )}
 
       <section>
         <h3>{ui('Документы')}</h3>
@@ -897,6 +836,103 @@ export default function Episode() {
           </ul>
         )}
       </section>
+
+      {/* жалобы вносятся опросом (анамнез) — ручного ввода кодов нет */}
+      {symptoms.length > 0 && (
+        <section>
+          <h3>{ui('Жалобы')}</h3>
+          <ul className="cards">
+            {symptoms.map((s) => (
+              <li key={s.id} className="card">
+                <b>{s.name || symNames[s.code] || s.code}</b>
+                {(s.value as { status?: string }).status === 'absent' &&
+                  <span className="muted"> {ui('— отсутствует (значимо)')}</span>}
+                <span className="muted"> · {String((s.value as { source?: string }).source ?? '')}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* установленный диагноз (вручную/из ddx) — не путать с ИИ-оценкой выше */}
+      {diagProp && (() => {
+        const v = diagProp.value as { text?: string; source?: string }
+        return (
+          <section>
+            <h3>{ui('Диагноз')}</h3>
+            <div className="card resume">
+              <b>{v.text}</b>{' '}
+              <button className="ghost small"
+                      onClick={() => { setDiagText(v.text ?? ''); setDiagOpen(true) }}>
+                {ui('изменить')}
+              </button>
+              <p className="muted">{v.source === 'ddx' ? ui('выбран из вариантов ИИ') : ui('внесён вручную')}
+                {' · '}{new Date(diagProp.begins).toLocaleDateString()}</p>
+            </div>
+          </section>
+        )
+      })()}
+
+      {/* план назначений от ИИ — генерится после установки диагноза */}
+      {diagProp && !treatProp && planPending &&
+        (!plan || (plan.value as unknown as Plan).diagnosis !== (diagProp.value as { text?: string }).text) && (
+        <section>
+          <h3>{ui('Назначения (рекомендация ИИ)')}</h3>
+          <p className="muted parsing">{ui('ИИ подбирает назначения по диагнозу…')}</p>
+        </section>
+      )}
+      {plan && (() => {
+        const v = plan.value as unknown as Plan
+        if (!v.items?.length) return null
+        return (
+          <Stage title={ui('Назначения (рекомендация ИИ)')} done={stagePassed('diagnosis')}>
+            <p className="muted">{ui('Отранжированы по важности. Нажмите «Начать лечение», чтобы выбрать из них и/или добавить назначения врача.')}</p>
+            <ul className="cards">
+              {v.items.map((x, i) => (
+                <li key={i} className="card">
+                  <b>{i + 1}. {x.name}</b>
+                  {x.prescription && <span className="chip state"> {ui('нужно назначение врача')}</span>}
+                  <div className="muted">{x.reason}</div>
+                </li>
+              ))}
+            </ul>
+            {v.note && <p className="muted">{v.note}</p>}
+            <p className="muted disclaimer">{ui('Назначения ИИ — предложения для обсуждения с врачом. Не начинайте приём рецептурных препаратов без назначения врача.')}</p>
+          </Stage>
+        )
+      })()}
+
+      {/* рецепты — выдаются при лечении */}
+      {treatProp && (
+        <HandoutDocs title={ui('Рецепты')} busy={handoutBusy} docs={prescriptions}
+                     hint={ui('Рецепты на препараты. Загрузить может пациент или врач с доступом; ИИ их не читает.')}
+                     onUpload={(f) => uploadHandout('prescription', f)} />
+      )}
+
+      {/* зафиксированное лечение (выбор пациента) */}
+      {treatProp && (() => {
+        const its = (treatProp.value as { items?: { code?: string; name: string }[] }).items ?? []
+        return (
+          <section>
+            <h3>{ui('Лечение')}{' '}
+              <button className="ghost small"
+                      onClick={() => {
+                        setTreatPicked(its.filter((i) => i.code).map((i) => i.code!))
+                        setTreatLines(its.filter((i) => !i.code).map((i) => i.name))
+                        setTreatOpen(true)
+                      }}>{ui('изменить')}</button>
+            </h3>
+            <ul className="rows">
+              {its.map((x, i) => (
+                <li key={i} className="row-link">
+                  <span>{x.name}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="muted">{ui('начато')} · {new Date(treatProp.begins).toLocaleDateString()}</p>
+          </section>
+        )
+      })()}
     </div>
   )
 }
