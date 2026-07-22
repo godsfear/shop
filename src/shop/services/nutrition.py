@@ -87,10 +87,11 @@ def request_meal_estimate(session: AsyncSession, property_id: uuid.UUID,
 
 
 def request_norm(session: AsyncSession, pseudonym: uuid.UUID, day: str,
-                 age: int | None, sex: str | None, lang: str = 'ru') -> None:
+                 age: int | None, sex: str | None,
+                 residence: dict | None = None, lang: str = 'ru') -> None:
     """Пересчёт суточной нормы в очередь (лениво, по первому заходу за день)."""
-    emit(session, TOPIC_NORM, {'pseudonym': str(pseudonym), 'day': day,
-                               'age': age, 'sex': sex, 'lang': lang})
+    emit(session, TOPIC_NORM, {'pseudonym': str(pseudonym), 'day': day, 'age': age,
+                               'sex': sex, 'residence': residence, 'lang': lang})
 
 
 @outbox_handler(TOPIC_MEAL)
@@ -143,6 +144,7 @@ async def _norm(session: AsyncSession, payload: dict) -> None:
         tables.Property.category == cats.get('chronic')))).scalars().all()
     bundle = {
         'age': payload.get('age'), 'sex': payload.get('sex'),
+        'residence': payload.get('residence'),
         'height': await latest(cats.get('vital'), 'height'),
         'weight': await latest(cats.get('vital'), 'weight'),
         'chronic': list(chronic),

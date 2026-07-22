@@ -79,6 +79,7 @@ export default function Shell() {
         <nav className="topnav">
           <NavLink to="/" end>{ui('Сегодня')}</NavLink>
           <NavLink to="/profile">{ui('Моя карта')}</NavLink>
+          <NavLink to="/personal">{ui('Личные данные')}</NavLink>
           <NavLink to="/access">{ui('Доступы')}</NavLink>
           <NavLink to="/patients">{ui('Доверили мне')}</NavLink>
           {isAdmin() && <NavLink to="/admin">{ui('Админ')}</NavLink>}

@@ -141,6 +141,16 @@ export interface Me { id: string; person: string; contact: { email?: string }
                       confirmed: boolean }
 export const me = () => req<Me>('/auth/user/')
 
+// --- личные данные (персона, домен личности; правит только владелец) ---
+export interface Residence { country?: string; city?: string }
+export interface PersonData {
+  id: string; name: Record<string, string>; sex: boolean; birthdate: string
+  residence?: Residence | null
+}
+export const getPerson = (id: string) => req<PersonData>(`/person/${id}`)
+export const updatePerson = (id: string, data: { residence?: Residence }) =>
+  req<PersonData>(`/person/${id}`, json(data, 'PATCH'))
+
 // --- согласия (consent-first доступ) ---
 export interface Consent {
   id: string; table: string; objectid: string; grantee: string

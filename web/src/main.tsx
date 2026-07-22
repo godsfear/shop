@@ -14,6 +14,7 @@ import Interview from './pages/Interview'
 import Access from './pages/Access'
 import Patients from './pages/Patients'
 import Profile from './pages/Profile'
+import Personal from './pages/Personal'
 import Nutrition from './pages/Nutrition'
 import Sleep from './pages/Sleep'
 import './styles.css'
@@ -34,6 +35,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="access" element={<Access />} />
             <Route path="patients" element={<Patients />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="personal" element={<Personal />} />
             <Route path="nutrition" element={<Nutrition />} />
             <Route path="sleep" element={<Sleep />} />
             <Route path="admin" element={<Admin />} />

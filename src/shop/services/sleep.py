@@ -43,10 +43,11 @@ _ASSESS_SCHEMA = {
 
 
 def request_sleep_assess(session: AsyncSession, pseudonym: uuid.UUID,
-                         age: int | None, sex: str | None, lang: str = 'ru') -> None:
+                         age: int | None, sex: str | None,
+                         residence: dict | None = None, lang: str = 'ru') -> None:
     """Оценку сна за период в очередь — в транзакции записи ночи."""
-    emit(session, TOPIC_SLEEP, {'pseudonym': str(pseudonym),
-                                'age': age, 'sex': sex, 'lang': lang})
+    emit(session, TOPIC_SLEEP, {'pseudonym': str(pseudonym), 'age': age,
+                                'sex': sex, 'residence': residence, 'lang': lang})
 
 
 @outbox_handler(TOPIC_SLEEP)
@@ -77,6 +78,7 @@ async def _assess(session: AsyncSession, payload: dict) -> None:
         tables.Property.category == cats.get('chronic')))).scalars().all()
     bundle = {
         'age': payload.get('age'), 'sex': payload.get('sex'),
+        'residence': payload.get('residence'),
         'height': await latest(cats.get('vital'), 'height'),
         'weight': await latest(cats.get('vital'), 'weight'),
         'chronic': list(chronic), 'nights': nights,

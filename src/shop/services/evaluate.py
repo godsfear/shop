@@ -40,8 +40,10 @@ _DDX_PROMPT = (
     'ранжированный список возможных состояний (differential diagnosis). Это '
     'ПРЕДПОЛОЖЕНИЯ для обсуждения с врачом, не диагноз. likelihood — субъективная '
     'вероятность 0..1, по убыванию. rationale — короткое обоснование со '
-    'ссылкой на конкретные данные (в т.ч. значения из документов). urgent=true, если '
-    'данные указывают на угрожающее состояние, требующее немедленной помощи.'
+    'ссылкой на конкретные данные (в т.ч. значения из документов). Если указан '
+    'регион проживания (concept=residence), учитывай эндемичные и сезонные для '
+    'него факторы. urgent=true, если данные указывают на угрожающее состояние, '
+    'требующее немедленной помощи.'
 )
 _DDX_SCHEMA = {
     'type': 'OBJECT',
@@ -140,11 +142,11 @@ _WORKUP_SCHEMA = {
 
 def request_evaluate(session: AsyncSession, episode_id: uuid.UUID,
                      pseudonym: uuid.UUID, age: int | None, sex: str | None,
-                     lang: str = 'ru') -> None:
+                     residence: dict | None = None, lang: str = 'ru') -> None:
     """Диагноз в очередь — вызывать в транзакции (за воротами эпизода).
     lang — язык генерации ответа (консумер работает вне запроса)."""
     emit(session, TOPIC_EVALUATE, {'episode': str(episode_id), 'pseudonym': str(pseudonym),
-                                   'age': age, 'sex': sex, 'lang': lang})
+                                   'age': age, 'sex': sex, 'residence': residence, 'lang': lang})
 
 
 def request_workup(session: AsyncSession, episode_id: uuid.UUID,
@@ -214,6 +216,10 @@ def _with_identity(bundle: dict, payload: dict) -> dict:
         bundle['patient'].append({'concept': 'age', 'years': payload['age']})
     if payload.get('sex'):
         bundle['patient'].append({'concept': 'sex', 'value': payload['sex']})
+    res = payload.get('residence') or {}
+    if res.get('country') or res.get('city'):
+        bundle['patient'].append({'concept': 'residence',
+                                  'country': res.get('country'), 'city': res.get('city')})
     return bundle
 
 

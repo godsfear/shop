@@ -148,6 +148,19 @@ class MedAccessService:
                                 detail='user_not_found')
         return person
 
+    async def _owner_identity(self) -> tuple[int | None, str | None, dict | None]:
+        """Возраст/пол/место жительства владельца из identity — только в
+        owner-режиме (Слой B их не несёт). Идут контекстом в ИИ-оценки."""
+        if self.link_id is not None:
+            return None, None, None
+        person = await self.session.get(tables.Person, await self._person_id())
+        if person is None:
+            return None, None, None
+        today = datetime.date.today()
+        bd = person.birthdate
+        age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+        return age, ('м' if person.sex else 'ж'), (person.residence or None)
+
     async def _owner_link(self, person_id: uuid.UUID) -> tables.Link | None:
         return (await self.session.execute(select(tables.Link).where(
             tables.Link.table == 'person', tables.Link.objectid == person_id,
@@ -438,15 +451,8 @@ class MedAccessService:
         """Поставить ИИ-оценку эпизода в очередь. Возраст/пол — только когда
         вызывает владелец (identity-чтение самого себя); Слой B их не несёт."""
         pseudonym = await self._gate_episode(episode_id)
-        age = sex = None
-        if self.link_id is None:
-            person = await self.session.get(tables.Person, await self._person_id())
-            if person is not None:
-                today = datetime.date.today()
-                bd = person.birthdate
-                age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
-                sex = 'м' if person.sex else 'ж'
-        request_evaluate(self.session, episode_id, pseudonym, age, sex, lang=self.lang)
+        age, sex, residence = await self._owner_identity()
+        request_evaluate(self.session, episode_id, pseudonym, age, sex, residence, lang=self.lang)
         await self.session.commit()
         return {'queued': True}
 
@@ -576,15 +582,8 @@ class MedAccessService:
             tables.Property.objectid == pseudonym,
             tables.Property.code == NORM_CODE))).scalars().first()
         if norm is None or (norm.value or {}).get('date', '') < day:
-            age = sex = None
-            if self.link_id is None:      # identity — только сам владелец
-                person = await self.session.get(tables.Person, await self._person_id())
-                if person is not None:
-                    today = datetime.date.today()
-                    bd = person.birthdate
-                    age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
-                    sex = 'м' if person.sex else 'ж'
-            request_norm(self.session, pseudonym, day, age, sex, lang=self.lang)
+            age, sex, residence = await self._owner_identity()
+            request_norm(self.session, pseudonym, day, age, sex, residence, lang=self.lang)
             # маркер pending: прежние цифры остаются видимыми до пересчёта
             pend = {**(norm.value if norm else {}), 'date': day, 'status': 'pending'}
             if norm is not None:
@@ -619,15 +618,8 @@ class MedAccessService:
                                name=day, value={**value, 'date': day})
         self.session.add(prop)
         await self.session.flush()
-        age = sex = None
-        if self.link_id is None:              # identity (возраст/пол) — только владелец
-            person = await self.session.get(tables.Person, await self._person_id())
-            if person is not None:
-                today = datetime.date.today()
-                bd = person.birthdate
-                age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
-                sex = 'м' if person.sex else 'ж'
-        request_sleep_assess(self.session, pseudonym, age, sex, lang=self.lang)
+        age, sex, residence = await self._owner_identity()
+        request_sleep_assess(self.session, pseudonym, age, sex, residence, lang=self.lang)
         assess = (await self.session.execute(select(tables.Property).where(
             tables.Property.table == 'pseudonym',
             tables.Property.objectid == pseudonym,

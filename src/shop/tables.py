@@ -763,6 +763,8 @@ class Person(Base):
     # необязательно: самоучёт-регистрация не требует места рождения (нет сида Place)
     birth_place: Mapped[uuid6.UUID | None] = mapped_column(UUID_TYPE, ForeignKey("place.id"),
                                                            nullable=True)
+    # место жительства {country, city} — свободный текст; уходит в ИИ-оценки
+    residence: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     sensitive: Mapped[list[str]] = mapped_column(ARRAY(String),nullable=True)
 
     __local_table_args__ = (

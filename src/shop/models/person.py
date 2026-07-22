@@ -11,6 +11,7 @@ class PersonBase(BaseModel):
     sex: bool
     birthdate: datetime.date
     birth_place: uuid.UUID | None = None   # необязательно (самоучёт-регистрация)
+    residence: dict | None = None          # {'country': ..., 'city': ...} — для ИИ-оценок
 
 
 class PersonCreate(PersonBase):
@@ -22,6 +23,7 @@ class PersonUpdate(BaseModel):
     sex: bool | None = None
     birthdate: datetime.date | None = None
     birth_place: uuid.UUID | None = None
+    residence: dict | None = None
 
 
 class Person(PersonBase, ReadMixin):
