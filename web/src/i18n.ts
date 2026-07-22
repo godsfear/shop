@@ -36,6 +36,26 @@ const EN: Record<string, string> = {
   'пароль': 'password',
   'Показать пароль': 'Show password',
   'Скрыть пароль': 'Hide password',
+  // защита данных (футер логина)
+  'Как защищены ваши данные': 'How your data is protected',
+  'Разделение.': 'Separation.',
+  'Медкарта хранится под обезличенным псевдонимом, а имя и контакты — отдельно; связь между ними зашифрована.':
+    'Your health record is kept under an anonymous pseudonym, while your name and contacts are stored separately; the link between them is encrypted.',
+  'Шифрование.': 'Encryption.',
+  'Медицинская часть базы зашифрована. Мастер-ключ хранится в облачном хранилище ключей (Google Cloud KMS), не на сервере; каждый доступ к нему логируется и может быть мгновенно отозван.':
+    'The medical part of the database is encrypted. The master key is held in a managed cloud key store (Google Cloud KMS), not on the server; every access to it is logged and can be revoked instantly.',
+  'Доступ по согласию.': 'Access by consent.',
+  'Врач или близкий видит вашу карту только когда вы это разрешили; согласие можно отозвать.':
+    'A doctor or a close person sees your record only when you allow it; consent can be withdrawn.',
+  'Изоляция и аудит.': 'Isolation and audit.',
+  'Доступ к строкам ограничен на уровне базы (RLS); все обращения к ключам пишутся в неизменяемый журнал.':
+    'Row access is enforced at the database level (RLS); every key access is written to an append-only log.',
+  'Транспорт и пароли.': 'Transport and passwords.',
+  'Соединение по HTTPS; пароли хранятся только в виде необратимого хеша.':
+    'The connection uses HTTPS; passwords are stored only as an irreversible hash.',
+  'Оценки делает ИИ (Google Gemini) — ему передаются медицинские данные без вашего имени; это вспомогательный инструмент, не диагноз.':
+    'Assessments are made by AI (Google Gemini) — it receives medical data without your name; it is a supporting tool, not a diagnosis.',
+  'Подробнее — в Пользовательском соглашении': 'More in the Terms of Use',
   'Нет аккаунта?': 'No account?',
   'Регистрация': 'Sign up',
   'повторите пароль': 'repeat the password',

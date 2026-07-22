@@ -79,6 +79,12 @@ a:hover { text-decoration: underline; }
 .auth form, .panel { background: var(--card); border: 1px solid var(--line);
   border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
 .auth .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+/* футер логина: как защищены данные (раскрывающийся) */
+.data-protect { margin-top: 14px; font-size: 13px; color: var(--muted); }
+.data-protect summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 6px 0; }
+.data-protect ul { margin: 8px 0; padding-left: 18px; display: grid; gap: 7px; line-height: 1.45; }
+.data-protect b { color: var(--text); }
+.data-protect p { line-height: 1.45; }
 .welcome ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 .welcome p { margin: 0; line-height: 1.5; }
 
