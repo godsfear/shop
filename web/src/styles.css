@@ -89,7 +89,7 @@ a:hover { text-decoration: underline; }
 .welcome p { margin: 0; line-height: 1.5; }
 
 /* --- каркас --- */
-.app header {
+.app > header {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 5;
