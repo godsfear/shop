@@ -150,6 +150,7 @@ const EN: Record<string, string> = {
   'Сон': 'Sleep',
   'Нагрузки': 'Activity',
   'Питание': 'Nutrition',
+  'Настроить плашки': 'Customize tiles',
   'скоро': 'soon',
   // питание
   'Норма на день': 'Daily target',
@@ -261,6 +262,12 @@ const EN: Record<string, string> = {
   'Печать': 'Print',
   'Загрузка…': 'Uploading…',
   'Дневник состояния': 'Condition diary',
+  'Замеры и заметки хранятся в общем дневнике и доступны всем эпизодам.':
+    'Readings and notes are stored in one shared diary and are available to every episode.',
+  'Записи ведутся в общем дневнике и доступны этому эпизоду.':
+    'Entries are kept in the shared diary and are available to this episode.',
+  'Добавить замер': 'Add a reading',
+  'Добавить заметку': 'Add a note',
   'Замеры в моменте (температура, давление, пульс, сахар) и свои заметки о самочувствии. Уйдут ИИ в диагноз вместе с анамнезом.':
     'Momentary readings (temperature, blood pressure, pulse, blood sugar) and your own notes on how you feel. They feed the AI diagnosis along with the history.',
   'своя заметка о самочувствии': 'your note on how you feel',

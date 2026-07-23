@@ -11,6 +11,7 @@
 """
 import json
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -167,25 +168,69 @@ async def _bundle(session: AsyncSession, episode_id: uuid.UUID,
                   pseudonym: uuid.UUID) -> dict:
     """Анамнез: симптомы эпизода со слотами + анамнез жизни (коды концептов).
     Находки ИИ из документов (source=ai) НЕ включаем — оригиналы уходят
-    мультимодально; служебные коды (ddx/workup/state) исключены."""
+    мультимодально; служебные коды (ddx/workup/state) исключены.
+
+    События общего дневника попадают только в границы эпизода. Для постоянных
+    данных карты берём версию, которая была актуальна в этот период — не
+    сегодняшнее значение для уже законченной истории болезни.
+    """
     cats = await medical_concepts(session)
     names = {v: k for k, v in cats.items()}
+    begins, ends = await _episode_window(session, episode_id)
+    upper = ends or datetime.now(timezone.utc)
 
-    def rows_to_list(rows):
+    def belongs_to_window(p: tables.Property, patient: bool) -> bool:
+        value = p.value or {}
+        if patient and value.get('source') == 'diary':
+            # Дневник — моментальное событие, а не длительное состояние.
+            return begins <= p.begins <= upper
+        # Постоянный факт (аллергия, препарат и т.п.) релевантен, если его
+        # период действия пересекается с эпизодом. Исторические версии нужны
+        # для уже завершённых эпизодов.
+        return p.begins <= upper and (p.ends is None or p.ends >= begins)
+
+    def rows_to_list(rows, patient: bool = False):
         # at — время записи: дневник симптомов (температура/давление в моменте)
         # без отметок времени теряет смысл, ИИ видит динамику
         return [{'concept': names.get(p.category), 'code': p.code,
                  'at': p.begins.isoformat(timespec='minutes'), **(p.value or {})}
                 for p in rows if p.code not in _INTERNAL_CODES
-                and (p.value or {}).get('source') != 'ai']
+                and (p.value or {}).get('source') != 'ai'
+                and belongs_to_window(p, patient)]
 
     ep = (await session.execute(select(tables.Property).where(
         tables.Property.table == 'entity',
-        tables.Property.objectid == episode_id))).scalars().all()
+        tables.Property.objectid == episode_id)
+        .execution_options(include_expired=True))).scalars().all()
     pat = (await session.execute(select(tables.Property).where(
         tables.Property.table == 'pseudonym',
-        tables.Property.objectid == pseudonym))).scalars().all()
-    return {'episode': rows_to_list(ep), 'patient': rows_to_list(pat)}
+        tables.Property.objectid == pseudonym)
+        .execution_options(include_expired=True))).scalars().all()
+    return {'episode': rows_to_list(ep), 'patient': rows_to_list(pat, patient=True)}
+
+
+async def _episode_window(session: AsyncSession,
+                          episode_id: uuid.UUID) -> tuple[datetime, datetime | None]:
+    """Границы эпизода; Entity остаётся активным после выздоровления,
+    поэтому для финального статуса конец берём из времени последней строки FSM."""
+    episode = (await session.execute(select(tables.Entity).where(
+        tables.Entity.id == episode_id).execution_options(include_expired=True))).scalar_one()
+    ends = episode.ends
+    if ends is None:
+        state_row = (await session.execute(select(tables.Property).where(
+            tables.Property.table == 'entity',
+            tables.Property.objectid == episode_id,
+            tables.Property.code == 'state',
+        ))).scalars().first()
+        category = await session.get(tables.Category, episode.category)
+        transitions = ((category.value or {}).get('fsm') or {}).get('transitions', []) if category else []
+        sources = set()
+        for transition in transitions:
+            source = transition.get('source')
+            sources.update(source if isinstance(source, list) else [source])
+        if state_row is not None and state_row.value.get('state') not in sources:
+            ends = state_row.begins
+    return episode.begins, ends
 
 
 # документы «на руки пациенту» (направления, рецепты): ИИ их не читает —

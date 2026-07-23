@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  listEpisodes, createEpisode, episodeState, concepts, getNutrition, getSleep,
-  type Episode, type Concepts, type Nutrition, type SleepJournal,
+  listEpisodes, createEpisode, episodeState, concepts, getDiary, getNutrition, getSleep,
+  type Episode, type Concepts, type MedProperty, type Nutrition, type SleepJournal,
 } from '../api'
 import { MacroBar, localDay } from './Nutrition'
 import { KINDS, STATES, t } from '../ui'
@@ -10,6 +10,23 @@ import { ui } from '../i18n'
 
 // available пуст -> маршрут завершён: эпизод уходит в «Историю болезни»
 interface EpisodeRow extends Episode { fsm?: string; closed?: boolean }
+type OptionalTile = 'nutrition' | 'sleep'
+type TileVisibility = Record<OptionalTile, boolean>
+
+const TILE_VISIBILITY_KEY = 'dashboard-optional-tiles'
+const tileVisibility = (): TileVisibility => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TILE_VISIBILITY_KEY) ?? '{}')
+    return { nutrition: saved.nutrition !== false, sleep: saved.sleep !== false }
+  } catch { return { nutrition: true, sleep: true } }
+}
+
+function diaryLabel(p: MedProperty) {
+  const v = p.value as { value?: unknown; unit?: unknown; text?: string }
+  return v.text !== undefined
+    ? String(v.text)
+    : `${p.name || p.code}: ${String(v.value ?? '')} ${String(v.unit ?? '')}`
+}
 
 function EpisodeLink({ ep }: { ep: EpisodeRow }) {
   return (
@@ -21,8 +38,8 @@ function EpisodeLink({ ep }: { ep: EpisodeRow }) {
   )
 }
 
-// Дашборд «Сегодня»: сетка плиток-трекеров. Эпизоды — первая плитка;
-// сон/нагрузки/питание зарезервированы пунктиром (перспектива, сетка не меняется).
+// Дашборд «Сегодня»: эпизоды и общий дневник всегда под рукой; питание и сон
+// пользователь может скрыть без потери самих данных.
 export default function Dashboard() {
   const nav = useNavigate()
   const [eps, setEps] = useState<EpisodeRow[]>([])
@@ -31,6 +48,8 @@ export default function Dashboard() {
   const [creating, setCreating] = useState(false)
   const [nutri, setNutri] = useState<Nutrition | null>(null)
   const [sleep, setSleep] = useState<SleepJournal | null>(null)
+  const [diary, setDiary] = useState<MedProperty[]>([])
+  const [visibleTiles, setVisibleTiles] = useState<TileVisibility>(tileVisibility)
 
   const load = async () => {
     try {
@@ -55,7 +74,14 @@ export default function Dashboard() {
     load()
     getNutrition(localDay()).then(setNutri).catch(() => {})
     getSleep().then(setSleep).catch(() => {})
+    getDiary().then(setDiary).catch(() => {})
   }, [])
+
+  const setTileVisibility = (tile: OptionalTile, visible: boolean) => {
+    const next = { ...visibleTiles, [tile]: visible }
+    setVisibleTiles(next)
+    localStorage.setItem(TILE_VISIBILITY_KEY, JSON.stringify(next))
+  }
 
   // эпизод открывается жалобой, а не диагнозом: имени пока нет — авто по дате;
   // назвать можно на странице эпизода, когда диагноз поставлен
@@ -75,7 +101,18 @@ export default function Dashboard() {
   const closed = eps.filter((e) => e.closed)
 
   return (
-    <div className="tiles">
+    <div>
+      <details className="dashboard-settings">
+        <summary>{ui('Настроить плашки')}</summary>
+        <div className="inline">
+          <label><input type="checkbox" checked={visibleTiles.nutrition}
+                        onChange={(e) => setTileVisibility('nutrition', e.target.checked)} /> {ui('Питание')}</label>
+          <label><input type="checkbox" checked={visibleTiles.sleep}
+                        onChange={(e) => setTileVisibility('sleep', e.target.checked)} /> {ui('Сон')}</label>
+        </div>
+      </details>
+
+      <div className="tiles">
       {err && <p className="error" style={{ gridColumn: '1 / -1' }}>{err}</p>}
 
       <section className="tile">
@@ -108,8 +145,24 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* питание: сегодняшние ккал против нормы ИИ; вся лента — на /nutrition */}
       <section className="tile">
+        <header><h3>{ui('Дневник состояния')}</h3>
+          <Link to="/diary"><button className="ghost">{ui('Открыть')}</button></Link>
+        </header>
+        {diary.length === 0 ? <p className="muted">{ui('пока пусто')}</p> : (
+          <ul className="rows">
+            {diary.slice(0, 2).map((p) => (
+              <li key={p.id} className="row-link">
+                <span>{diaryLabel(p)}</span>
+                <span className="muted">{new Date(p.begins).toLocaleDateString()}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* питание: сегодняшние ккал против нормы ИИ; вся лента — на /nutrition */}
+      {visibleTiles.nutrition && <section className="tile">
         <header><h3>{ui('Питание')}</h3>
           <Link to="/nutrition"><button className="ghost">{ui('Открыть')}</button></Link>
         </header>
@@ -124,9 +177,9 @@ export default function Dashboard() {
               : ui('Сфотографируйте или опишите еду — ИИ посчитает калории.')}</p>
           </>
         ) : <p className="muted">…</p>}
-      </section>
+      </section>}
 
-      <section className="tile">
+      {visibleTiles.sleep && <section className="tile">
         <header><h3>{ui('Сон')}</h3>
           <Link to="/sleep"><button className="ghost">{ui('Открыть')}</button></Link>
         </header>
@@ -140,10 +193,11 @@ export default function Dashboard() {
         ) : sleep && sleep.entries.length > 0
           ? <p className="muted">{ui('Оценка сна обновляется…')}</p>
           : <p className="muted">{ui('Запишите ночь — сон, пробуждения, пульс, HRV.')}</p>}
-      </section>
+      </section>}
 
       {/* перспектива: данные подключатся новыми концептами ядра */}
       <section className="tile future"><header><h3>{ui('Нагрузки')}</h3></header><p>{ui('скоро')}</p></section>
+      </div>
     </div>
   )
 }

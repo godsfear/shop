@@ -101,6 +101,19 @@ async def close_my_property(property_id: uuid.UUID, svc: MedAccessService = Depe
     return await svc.close_property(property_id)
 
 
+@router.get('/diary', response_model=List[MedPropertyOut])
+async def diary(svc: MedAccessService = Depends()):
+    """Общий дневник состояния: замеры и заметки, не привязанные к эпизоду."""
+    return await svc.diary()
+
+
+@router.post('/diary', response_model=MedPropertyOut,
+             status_code=status.HTTP_201_CREATED)
+async def add_diary_entry(body: MedPropertyIn, svc: MedAccessService = Depends()):
+    """Добавить замер или заметку в общий дневник состояния."""
+    return await svc.add_diary_entry(body)
+
+
 @router.get('/properties/{property_id}/history', response_model=List[MedPropertyOut])
 async def my_property_history(property_id: uuid.UUID, svc: MedAccessService = Depends()):
     """Версии записи — история значений показателя."""
@@ -141,6 +154,12 @@ async def episode_properties(episode_id: uuid.UUID, svc: MedAccessService = Depe
                              category: uuid.UUID | None = Query(None),
                              code: str | None = Query(None)):
     return await svc.episode_properties(episode_id, category, code)
+
+
+@router.get('/episodes/{episode_id}/diary', response_model=List[MedPropertyOut])
+async def episode_diary(episode_id: uuid.UUID, svc: MedAccessService = Depends()):
+    """Записи общего дневника, попадающие во временной интервал эпизода."""
+    return await svc.episode_diary(episode_id)
 
 
 @router.post('/episodes/{episode_id}/properties', response_model=MedPropertyOut,

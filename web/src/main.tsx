@@ -17,6 +17,7 @@ import Profile from './pages/Profile'
 import Personal from './pages/Personal'
 import Nutrition from './pages/Nutrition'
 import Sleep from './pages/Sleep'
+import Diary from './pages/Diary'
 import './styles.css'
 
 createRoot(document.getElementById('root')!).render(
@@ -38,6 +39,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="personal" element={<Personal />} />
             <Route path="nutrition" element={<Nutrition />} />
             <Route path="sleep" element={<Sleep />} />
+            <Route path="diary" element={<Diary />} />
             <Route path="admin" element={<Admin />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

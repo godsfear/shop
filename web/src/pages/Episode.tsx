@@ -4,9 +4,9 @@ import {
   getEpisode, renameEpisode, episodeHistory, episodeState, transition, assess,
   episodeProperties, listDocuments, uploadDocument, concepts, dictionary,
   evaluateEpisode, addEpisodeProperty, setDiagnosis, startTreatment, documentContent,
-  editAnamnesis, closeEpisodeProperty,
+  editAnamnesis, closeEpisodeProperty, closeProperty, episodeDiary,
   type Episode as Ep, type FsmState, type Assess, type MedProperty, type Doc,
-  type Concepts, type StateLog, type DictItem,
+  type Concepts, type StateLog,
 } from '../api'
 
 interface Ddx {
@@ -17,7 +17,7 @@ interface WorkupTest { code?: string; test: string; reason: string; self?: boole
 interface Workup { tests: WorkupTest[] }
 interface PlanItem { code?: string; name: string; reason?: string; prescription?: boolean }
 interface Plan { items: PlanItem[]; note?: string; diagnosis?: string }
-import { EVENTS, GLUCOSE_CTX, RED_FLAGS, SECTIONS, SLOTS, STATES, UNITS, glucoseAlert, t } from '../ui'
+import { EVENTS, GLUCOSE_CTX, RED_FLAGS, SECTIONS, SLOTS, STATES, glucoseAlert, t } from '../ui'
 import { ui } from '../i18n'
 
 // Секция пройденного этапа сворачивается (details), текущего — раскрыта
@@ -157,6 +157,11 @@ export default function Episode() {
     try { await closeEpisodeProperty(id, propId); await reload() }
     catch (e) { setErr((e as Error).message) }
   }
+  const removeDiary = async (propId: string) => {
+    setErr('')
+    try { await closeProperty(propId); await reload() }
+    catch (e) { setErr((e as Error).message) }
+  }
 
   // установленный диагноз, план назначений ИИ и зафиксированное лечение
   const [diagProp, setDiagProp] = useState<MedProperty | null>(null)
@@ -169,13 +174,8 @@ export default function Episode() {
   const [treatPicked, setTreatPicked] = useState<string[]>([])   // коды из плана ИИ
   const [treatLines, setTreatLines] = useState<string[]>([])     // свои назначения
   const [treatFree, setTreatFree] = useState('')
-  // дневник симптомов: замеры в моменте (температура/давление/пульс)
+  // общий дневник: записи на медкарте, доступны из каждого эпизода
   const [diary, setDiary] = useState<MedProperty[]>([])
-  const [diaryDict, setDiaryDict] = useState<DictItem[]>([])
-  const [dCode, setDCode] = useState('')
-  const [dVal, setDVal] = useState('')
-  const [dCtx, setDCtx] = useState('')   // сахар: натощак/после еды (норма зависит)
-  const [diaryNote, setDiaryNote] = useState('')   // свободная заметка в дневник
   // комментарии пациента к эпизоду (доп. контекст для диагноза)
   const [notes, setNotes] = useState<MedProperty[]>([])
   const [noteText, setNoteText] = useState('')
@@ -191,10 +191,7 @@ export default function Episode() {
       setResults(props.filter((p) =>
         (p.value as { source?: string; result?: string }).source === 'patient'
         && (p.value as { result?: string }).result !== undefined))
-      // дневник состояния: замеры (vital) + свои заметки (note, source='diary')
-      setDiary(props.filter((p) => (p.category === cs['vital'] && !isAi(p))
-        || (p.category === cs['note'] && (p.value as { source?: string }).source === 'diary'))
-        .sort((a, b) => b.begins.localeCompare(a.begins)))
+      setDiary(await episodeDiary(id))
       // Комментарии — заметки эпизода, кроме дневниковых
       setNotes(props.filter((p) => p.category === cs['note']
         && (p.value as { source?: string }).source !== 'diary')
@@ -223,9 +220,6 @@ export default function Episode() {
     // symptom + system: имена жалоб и систем (резюме анамнеза, ROS)
     Promise.all([dictionary('symptom'), dictionary('system')]).then(([a, b]) =>
       setSymNames(Object.fromEntries([...a, ...b].map((x) => [x.code, x.name])))).catch(() => {})
-    // дневник — только показатели «в моменте» (рост и т.п. живут в «Моей карте»)
-    dictionary('vital').then((d) =>
-      setDiaryDict(d.filter((x) => x.scopes?.includes('diary')))).catch(() => {})
   }, [])
   // перезагрузка данных, когда стали известны концепты (нужен id категории симптома)
   useEffect(() => { if (id) reload() }, [id, cs['symptom']])
@@ -365,40 +359,6 @@ export default function Episode() {
   // выполнен ли рекомендованный анализ: по коду, иначе по названию
   const matches = (code: string | null, name: string | null, x: WorkupTest) =>
     (x.code != null && code === x.code) || name === x.test
-
-  // запись дневника — обычное свойство эпизода (concept=vital, source=diary):
-  // ИИ получает её в бандле с отметкой времени, отдельного носителя не нужно
-  const addDiary = async () => {
-    if (!dCode || !dVal.trim()) return
-    setErr('')
-    try {
-      const names = new Map(diaryDict.map((d) => [d.code, d.name]))
-      await addEpisodeProperty(id, {
-        category: cs['vital'], code: dCode, name: names.get(dCode),
-        value: { value: dVal.trim(), unit: ui(UNITS[dCode] ?? ''), source: 'diary',
-                 // контекст замера сахара — идёт и в бандл ИИ (норма зависит от него)
-                 ...(dCode === 'glucose' && dCtx ? { context: dCtx } : {}) },
-      })
-      setDVal(''); setDCtx('')
-      await reload()
-    } catch (e) { setErr((e as Error).message) }
-  }
-
-  // свободная заметка в дневник состояния — свойство эпизода (concept=note,
-  // source='diary'): видна в дневнике, но не в «Комментариях»; уходит ИИ в бандл
-  const addDiaryNote = async () => {
-    const text = diaryNote.trim()
-    if (!text) return
-    setErr('')
-    try {
-      await addEpisodeProperty(id, {
-        category: cs['note'], code: `diary-${Date.now()}`,
-        value: { text, source: 'diary' },
-      })
-      setDiaryNote('')
-      await reload()
-    } catch (e) { setErr((e as Error).message) }
-  }
 
   // загрузка направления/рецепта: и пациентом, и врачом по мосту (тот же эндпоинт)
   const uploadHandout = async (concept: 'referral' | 'prescription', f: File) => {
@@ -754,41 +714,12 @@ export default function Episode() {
 
       {/* === порядок блоков после «Диагноз (оценка ИИ)» задан владельцем === */}
 
-      {/* дневник состояния: замеры «в моменте» + свои заметки; сворачиваемый */}
+      {/* общий дневник: ведётся на медкарте и доступен всем эпизодам */}
       <Stage title={ui('Дневник состояния')} done={false}>
-        <p className="muted">{ui('Замеры в моменте (температура, давление, пульс, сахар) и свои заметки о самочувствии. Уйдут ИИ в диагноз вместе с анамнезом.')}</p>
-        {!isFinal && (
-          <>
-            <div className="inline">
-              <select value={dCode} onChange={(e) => { setDCode(e.target.value); setDCtx('') }}>
-                <option value="">{ui('— параметр —')}</option>
-                {diaryDict.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
-              </select>
-              {/* сахар: контекст замера — норма и предупреждение зависят от него */}
-              {dCode === 'glucose' && (
-                <select value={dCtx} onChange={(e) => setDCtx(e.target.value)}>
-                  <option value="">{ui('без уточнения')}</option>
-                  <option value="fasting">{ui('натощак')}</option>
-                  <option value="postprandial">{ui('после еды')}</option>
-                </select>
-              )}
-              <input placeholder={ui('значение')} value={dVal}
-                     onChange={(e) => setDVal(e.target.value)}
-                     onKeyDown={(e) => { if (e.key === 'Enter') addDiary() }} />
-              <button onClick={addDiary} disabled={!dCode || !dVal.trim()}>{ui('Записать')}</button>
-            </div>
-            {/* живая подсказка при выходе сахара за границы (информация, не диагноз) */}
-            {dCode === 'glucose' && glucoseAlert(dVal, dCtx) &&
-              <p className="warn">⚠ {ui(glucoseAlert(dVal, dCtx))}</p>}
-            {/* своя заметка о самочувствии (свободный текст) */}
-            <div className="inline">
-              <input placeholder={ui('своя заметка о самочувствии')} value={diaryNote}
-                     onChange={(e) => setDiaryNote(e.target.value)}
-                     onKeyDown={(e) => { if (e.key === 'Enter' && diaryNote.trim()) addDiaryNote() }} />
-              <button className="ghost small" onClick={addDiaryNote} disabled={!diaryNote.trim()}>+</button>
-            </div>
-          </>
-        )}
+        <div className="inline">
+          <p className="muted">{ui('Записи ведутся в общем дневнике и доступны этому эпизоду.')}</p>
+          <Link to="/diary"><button className="ghost small">{ui('Открыть')}</button></Link>
+        </div>
         <ul className="rows">
           {diary.map((p) => {
             const val = p.value as { value?: unknown; unit?: unknown; context?: string; text?: string }
@@ -797,7 +728,7 @@ export default function Episode() {
                 <span>{String(val.text)}</span>
                 {!isFinal && (
                   <button className="ghost small" style={{ marginLeft: 'auto' }}
-                          onClick={() => removeNote(p.id)}>{ui('удалить')}</button>
+                          onClick={() => removeDiary(p.id)}>{ui('удалить')}</button>
                 )}
               </li>
             )

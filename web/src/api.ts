@@ -209,6 +209,12 @@ export const closeProperty = (id: string) =>
 export const propertyHistory = (id: string) =>
   req<MedProperty[]>(`/me/properties/${id}/history`)
 
+// --- общий дневник состояния: замеры и заметки, доступные всем эпизодам ---
+export const getDiary = () => req<MedProperty[]>('/me/diary')
+export const addDiaryEntry = (p: { category?: string; code: string; name?: string;
+                                   value: Record<string, unknown> }) =>
+  req<MedProperty>('/me/diary', json(p))
+
 // --- сон: журнал ночей + оценка ИИ за период (ставится при записи) ---
 export interface SleepAssessment { quality?: string; summary?: string; status?: string; nights?: number }
 export interface SleepJournal { entries: MedProperty[]; assessment: SleepAssessment | null }
@@ -273,6 +279,7 @@ export const startTreatment = (id: string, items: { code?: string; name: string 
 // --- симптомы/находки эпизода ---
 export const episodeProperties = (id: string, category?: string) =>
   req<MedProperty[]>(`/me/episodes/${id}/properties` + (category ? `?category=${category}` : ''))
+export const episodeDiary = (id: string) => req<MedProperty[]>(`/me/episodes/${id}/diary`)
 export const addEpisodeProperty = (
   id: string, p: { category?: string; code: string; name?: string; value: Record<string, unknown> },
 ) => req<MedProperty>(`/me/episodes/${id}/properties`, json(p))

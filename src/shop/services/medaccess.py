@@ -368,6 +368,65 @@ class MedAccessService:
         await self.session.commit()
         return closed
 
+    # --- общий дневник состояния: замеры и заметки на медкарте -----------------
+    async def _diary_entries(self, pseudonym: uuid.UUID,
+                             begins: datetime.datetime | None = None,
+                             ends: datetime.datetime | None = None) -> list[tables.Property]:
+        """Дневниковые события на карте; при границах — только внутри интервала."""
+        cats = await medical_concepts(self.session)
+        categories = [cats[c] for c in ('vital', 'note') if c in cats]
+        if not categories:
+            return []
+        conditions = [
+            tables.Property.table == 'pseudonym',
+            tables.Property.objectid == pseudonym,
+            tables.Property.category.in_(categories),
+            tables.Property.value['source'].astext == 'diary',
+        ]
+        if begins is not None:
+            conditions.append(tables.Property.begins >= begins)
+        if ends is not None:
+            conditions.append(tables.Property.begins <= ends)
+        rows = await self.session.execute(select(tables.Property)
+                                          .where(*conditions)
+                                          .order_by(tables.Property.begins.desc()))
+        return list(rows.scalars().all())
+
+    async def diary(self) -> list[tables.Property]:
+        """Общий для всех эпизодов дневник; активные записи — свежие сверху."""
+        return await self._diary_entries(await self._resolve())
+
+    async def add_diary_entry(self, data: MedPropertyIn) -> tables.Property:
+        """Запись в общий дневник: только разрешённый замер или свободная заметка.
+
+        Обычные /properties не годятся: замеры одного типа должны добавляться
+        многократно, а не заменять друг друга как постоянный показатель карты.
+        """
+        pseudonym = await self._resolve()
+        cats = await medical_concepts(self.session)
+        vital, note = cats.get('vital'), cats.get('note')
+        if data.category == vital:
+            if data.code not in VITAL_SCOPES or 'diary' not in VITAL_SCOPES[data.code]:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                    detail='diary_vital_invalid')
+            if not str(data.value.get('value', '')).strip():
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                    detail='diary_value_required')
+        elif data.category == note:
+            if not str(data.value.get('text', '')).strip():
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                    detail='diary_note_required')
+        else:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail='diary_category_invalid')
+        prop = tables.Property(category=data.category, code=data.code, name=data.name,
+                               table='pseudonym', objectid=pseudonym,
+                               value={**data.value, 'source': 'diary'},
+                               creator=self.payload.sub)
+        self.session.add(prop)
+        await self.session.commit()
+        return prop
+
     async def property_history(self, property_id: uuid.UUID) -> list[tables.Property]:
         """Версии записи (история значений показателя), от старых к новым."""
         row = await self._gate_property(property_id)
@@ -412,6 +471,35 @@ class MedAccessService:
         await self._gate_episode(episode_id)
         return await PropertyService(session=self.session).find(PropertyFilter(
             table='entity', objectid=episode_id, category=category, code=code))
+
+    async def _episode_window(self, episode_id: uuid.UUID) -> tuple[datetime.datetime, datetime.datetime | None]:
+        """Интервал эпизода: конец берём из Entity или из финального FSM-состояния.
+
+        Entity не закрывается при выздоровлении, поэтому для истории болезни
+        окончанием является время входа в состояние без доступных переходов.
+        """
+        episode = await self.session.get(tables.Entity, episode_id)
+        if episode is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='episode_not_found')
+        ends = episode.ends
+        if ends is None:
+            state = await FSMService(session=self.session).state('entity', episode_id)
+            if not state['available']:
+                state_row = (await self.session.execute(select(tables.Property).where(
+                    tables.Property.table == 'entity',
+                    tables.Property.objectid == episode_id,
+                    tables.Property.code == 'state',
+                ))).scalars().first()
+                if state_row is not None:
+                    ends = state_row.begins
+        return episode.begins, ends
+
+    async def episode_diary(self, episode_id: uuid.UUID) -> list[tables.Property]:
+        """Общий дневник, ограниченный сроком конкретного эпизода."""
+        pseudonym = await self._gate_episode(episode_id)
+        begins, ends = await self._episode_window(episode_id)
+        return await self._diary_entries(
+            pseudonym, begins, ends or datetime.datetime.now(datetime.timezone.utc))
 
     async def add_episode_property(self, episode_id: uuid.UUID, data: MedPropertyIn) -> tables.Property:
         await self._gate_episode(episode_id)

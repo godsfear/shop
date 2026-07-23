@@ -116,6 +116,16 @@ a:hover { text-decoration: underline; }
 .tile h3 { margin: 0; font-size: 1.02rem; }
 .tile.future { border-style: dashed; border-color: var(--future); background: transparent; }
 .tile.future h3, .tile.future p { color: var(--future); margin: 0; }
+.dashboard-settings { margin: 0 0 10px; }
+.dashboard-settings summary { cursor: pointer; color: var(--muted); font-size: 13.5px;
+  width: fit-content; }
+.dashboard-settings summary:hover { color: var(--accent); }
+.dashboard-settings label { display: inline-flex; align-items: center; gap: 4px;
+  color: var(--text); font-size: 13.5px; }
+.dashboard-settings input[type=checkbox] { width: auto; min-width: auto; padding: 0;
+  accent-color: var(--accent); }
+.diary-editor { margin: 0; }
+.diary-entries { margin-top: 10px; }
 
 /* --- моя карта: данные прежде всего, редактор — по явному действию --- */
 .profile-tiles { gap: 10px; }
