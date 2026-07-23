@@ -117,6 +117,38 @@ a:hover { text-decoration: underline; }
 .tile.future { border-style: dashed; border-color: var(--future); background: transparent; }
 .tile.future h3, .tile.future p { color: var(--future); margin: 0; }
 
+/* --- моя карта: данные прежде всего, редактор — по явному действию --- */
+.profile-tiles { gap: 10px; }
+/* Контейнер страницы ограничен 900px: две широкие колонки читаются лучше трёх узких. */
+@media (min-width: 640px) { .profile-tiles { grid-template-columns: 1fr 1fr; } }
+.profile-tiles .tile { padding: 12px 14px; }
+.profile-tiles .tile header { align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.profile-tiles .tile h3 { flex: 1 1 0; min-width: 0; }
+.profile-add { flex: 0 0 auto; padding: 4px 9px; font-size: 12.5px; white-space: nowrap; }
+.profile-values { list-style: none; margin: 0 0 10px; padding: 0;
+  display: flex; flex-direction: column; flex-wrap: nowrap; gap: 0; }
+.profile-value-wrap { min-width: 0; }
+.profile-value-wrap + .profile-value-wrap { border-top: 1px solid var(--line); }
+.profile-value { display: flex; align-items: center; gap: 7px; min-height: 34px; width: 100%;
+  padding: 7px 2px; color: var(--text); font-size: 13.5px; }
+.profile-value-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.profile-remove { display: grid; place-items: center; width: 22px; height: 22px; padding: 0;
+  border: 0; border-radius: 50%; background: transparent; color: var(--muted);
+  font-size: 18px; font-weight: 400; line-height: 1; }
+.profile-remove:hover { background: var(--danger-soft); color: var(--danger); filter: none; }
+.profile-vitals .profile-value-name { flex: 1; }
+.profile-vitals b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.profile-history { margin-left: 2px; }
+.profile-history-list { margin: 0 0 4px 12px; }
+.profile-editor { margin-top: 8px; padding: 10px; border: 1px solid var(--line);
+  border-radius: 9px; background: var(--accent-soft); }
+.profile-editor .inline { margin: 0; }
+.profile-editor input, .profile-editor select { flex: 1 1 150px; }
+.profile-editor-actions { margin-top: 8px !important; }
+@media (max-width: 420px) {
+  .profile-vitals .profile-history { padding: 3px 7px; }
+}
+
 .rows { list-style: none; margin: 0; padding: 0; display: flex;
   flex-direction: column; }
 .rows li + li { border-top: 1px solid var(--line); }

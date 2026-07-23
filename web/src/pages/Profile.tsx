@@ -19,6 +19,7 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
   const [val, setVal] = useState('')          // значение для vital
   const [picked, setPicked] = useState('')
   const [adding, setAdding] = useState(false)
+  const [addFormOpen, setAddFormOpen] = useState(false)
   const [err, setErr] = useState('')
   const [hist, setHist] = useState<Record<string, MedProperty[]>>({})
   const vital = concept === 'vital'
@@ -47,6 +48,7 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
       if (existing) await updateProperty(existing.id, { ...existing.value, ...value })
       else await addProperty({ category: cid, code, name: names.get(code), value })
       setFree(''); setVal(''); setPicked('')
+      setAddFormOpen(false)
       await load()
     } catch (e) { setErr((e as Error).message) }
     finally { setAdding(false) }
@@ -63,24 +65,43 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
     setHist({ ...hist, [p.id]: await propertyHistory(p.id) })
   }
 
+  const openAddForm = () => {
+    setErr('')
+    setAddFormOpen(true)
+  }
+
+  const closeAddForm = () => {
+    setFree(''); setVal(''); setPicked('')
+    setAddFormOpen(false)
+  }
+
   return (
     <section className="tile">
-      <header><h3>{t(SECTIONS, concept)}</h3></header>
+      <header>
+        <h3>{t(SECTIONS, concept)}</h3>
+        {!addFormOpen && (
+          <button className="ghost small profile-add" onClick={openAddForm}>
+            + {ui('Добавить')}
+          </button>
+        )}
+      </header>
       {err && <p className="error">{err}</p>}
       {items.length === 0 && <p className="muted">{ui('пока пусто')}</p>}
-      <ul className="rows">
+      <ul className={'profile-values' + (vital ? ' profile-vitals' : '')}>
         {items.map((p) => (
-          <li key={p.id}>
-            <div className="row-link">
-              <span>{p.name || names.get(p.code) || p.code}</span>
+          <li key={p.id} className="profile-value-wrap">
+            <div className="profile-value">
+              <span className="profile-value-name">{p.name || names.get(p.code) || p.code}</span>
               {vital && <b>{String(p.value.value ?? '')} {String(p.value.unit ?? '')}</b>}
-              {vital && <button className="ghost small" onClick={() => toggleHist(p)}>
+              {vital && <button className="ghost small profile-history" onClick={() => toggleHist(p)}>
                 {hist[p.id] ? ui('скрыть') : ui('история')}</button>}
-              <button className="ghost small" style={{ marginLeft: 'auto' }}
-                      onClick={() => close(p)}>{ui('закрыть')}</button>
+              <button className="profile-remove" type="button"
+                      title={ui('удалить')}
+                      aria-label={`${ui('удалить')}: ${p.name || names.get(p.code) || p.code}`}
+                      onClick={() => close(p)}>×</button>
             </div>
             {hist[p.id] && (
-              <ul className="rows hist">
+              <ul className="rows hist profile-history-list">
                 {hist[p.id].map((h) => (
                   <li key={h.id} className="row-link muted">
                     <span>{String(h.value.value ?? '')} {String(h.value.unit ?? '')}</span>
@@ -92,25 +113,35 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
           </li>
         ))}
       </ul>
-      <div className="inline">
-        {dict.length > 0 && (
-          <select value={picked} onChange={(e) => setPicked(e.target.value)}>
-            <option value="">{ui('— из справочника —')}</option>
-            {dict.map((d) => <option key={d.code} value={d.code}
-                                     disabled={!vital && items.some((i) => i.code === d.code)}>
-              {d.name}
-            </option>)}
-          </select>
-        )}
-        {!vital && <input placeholder={ui('свой вариант')} value={free}
-                          onChange={(e) => setFree(e.target.value)} />}
-        {vital && <input placeholder={ui('значение')} value={val}
-                         onChange={(e) => setVal(e.target.value)} />}
-        <button onClick={add} disabled={adding || (vital ? !(picked && val.trim())
-          : !selectedCode || selectedExists)}>
-          {vital ? ui('Записать') : ui('Добавить')}
-        </button>
-      </div>
+      {addFormOpen && (
+        <div className="profile-editor">
+          <div className="inline">
+            {dict.length > 0 && (
+              <select value={picked} onChange={(e) => {
+                setPicked(e.target.value)
+                if (e.target.value) setFree('')
+              }}>
+                <option value="">{ui('— из справочника —')}</option>
+                {dict.map((d) => <option key={d.code} value={d.code}
+                                         disabled={!vital && items.some((i) => i.code === d.code)}>
+                  {d.name}
+                </option>)}
+              </select>
+            )}
+            {!vital && <input placeholder={ui('свой вариант')} value={free}
+                              onChange={(e) => { setFree(e.target.value); if (e.target.value) setPicked('') }} />}
+            {vital && <input placeholder={ui('значение')} value={val}
+                             onChange={(e) => setVal(e.target.value)} />}
+          </div>
+          <div className="inline profile-editor-actions">
+            <button onClick={add} disabled={adding || (vital ? !(picked && val.trim())
+              : !selectedCode || selectedExists)}>
+              {vital ? ui('Записать') : ui('Добавить')}
+            </button>
+            <button className="ghost" type="button" onClick={closeAddForm}>{ui('Отмена')}</button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -124,7 +155,7 @@ export default function Profile() {
     <div>
       <h2>{ui('Моя карта')}</h2>
       <p className="muted">{ui('Постоянные данные о здоровье. Врач увидит их по вашему согласию; опрос при новом эпизоде лишь попросит подтвердить актуальность.')}</p>
-      <div className="tiles">
+      <div className="tiles profile-tiles">
         {PROFILE_SECTIONS.filter((s) => cs[s]).map((s) =>
           <Section key={s} concept={s} cid={cs[s]} />)}
       </div>
