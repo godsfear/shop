@@ -720,14 +720,15 @@ export default function Episode() {
           <p className="muted">{ui('Записи ведутся в общем дневнике и доступны этому эпизоду.')}</p>
           <Link to="/diary"><button className="ghost small">{ui('Открыть')}</button></Link>
         </div>
-        <ul className="rows">
+        <ul className="rows diary-entries">
           {diary.map((p) => {
             const val = p.value as { value?: unknown; unit?: unknown; context?: string; text?: string }
             if (val.text !== undefined) return (        // свободная заметка
               <li key={p.id} className="row-link">
-                <span>{String(val.text)}</span>
+                <span className="diary-entry-label">{String(val.text)}</span>
+                <span className="muted diary-entry-time">{new Date(p.begins).toLocaleString()}</span>
                 {!isFinal && (
-                  <button className="ghost small" style={{ marginLeft: 'auto' }}
+                  <button className="ghost small diary-entry-remove"
                           onClick={() => removeDiary(p.id)}>{ui('удалить')}</button>
                 )}
               </li>
@@ -735,11 +736,11 @@ export default function Episode() {
             const alert = p.code === 'glucose' ? glucoseAlert(String(val.value ?? ''), val.context) : ''
             return (
               <li key={p.id} className="row-link">
-                <span>{p.name || p.code}
+                <span className="diary-entry-label">{p.name || p.code}
                   {val.context && <span className="muted"> · {ui(GLUCOSE_CTX[val.context] ?? '')}</span>}</span>
-                <b>{String(val.value ?? '')} {String(val.unit ?? '')}</b>
-                {alert && <span className="warn">⚠ {ui(alert)}</span>}
-                <span className="muted">{new Date(p.begins).toLocaleString()}</span>
+                <b className="diary-entry-value">{String(val.value ?? '')} {String(val.unit ?? '')}</b>
+                {alert && <span className="warn diary-entry-alert">⚠ {ui(alert)}</span>}
+                <span className="muted diary-entry-time">{new Date(p.begins).toLocaleString()}</span>
               </li>
             )
           })}

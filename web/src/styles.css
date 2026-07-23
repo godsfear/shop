@@ -126,6 +126,17 @@ a:hover { text-decoration: underline; }
   accent-color: var(--accent); }
 .diary-editor { margin: 0; }
 .diary-entries { margin-top: 10px; }
+@media (min-width: 560px) {
+  .diary-entries .row-link { display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr) 10.8rem max-content;
+    gap: 10px; }
+  .diary-entry-label { grid-column: 1; min-width: 0; }
+  .diary-entry-value { grid-column: 2; white-space: nowrap; }
+  .diary-entry-alert { grid-column: 3; }
+  .diary-entry-time { grid-column: 4; margin-left: 0 !important; white-space: nowrap;
+    font-variant-numeric: tabular-nums; }
+  .diary-entry-remove { grid-column: 5; }
+}
 
 /* --- моя карта: данные прежде всего, редактор — по явному действию --- */
 .profile-tiles { gap: 10px; }
