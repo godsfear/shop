@@ -457,6 +457,7 @@ const ERRORS: Record<string, [string, string]> = {
   subject_not_found: ['субъект не найден', 'subject not found'],
   identity_subject_only: ['согласия применимы только к identity-субъектам', 'consents apply to identity subjects only'],
   consent_exists: ['запрос или согласие уже существует', 'a request or consent already exists'],
+  property_exists: ['такой пункт уже добавлен', 'this item is already added'],
   manage_exists: ['у получателя уже есть manage-доступ', 'the grantee already has manage access'],
   consent_required: ['нет доступа: требуется согласие владельца', 'no access: owner consent required'],
   owner_decision_only: ['решает владелец данных или управляющий', 'only the owner or a manager decides'],

@@ -18,10 +18,13 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
   const [free, setFree] = useState('')
   const [val, setVal] = useState('')          // значение для vital
   const [picked, setPicked] = useState('')
+  const [adding, setAdding] = useState(false)
   const [err, setErr] = useState('')
   const [hist, setHist] = useState<Record<string, MedProperty[]>>({})
   const vital = concept === 'vital'
   const names = new Map(dict.map((d) => [d.code, d.name]))
+  const selectedCode = picked || free.trim()
+  const selectedExists = !vital && items.some((i) => i.code === selectedCode)
 
   const load = () => listProperties(cid).then(setItems).catch((e) => setErr(e.message))
   useEffect(() => {
@@ -33,8 +36,9 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
 
   const add = async () => {
     setErr('')
-    const code = picked || free.trim()
-    if (!code) return
+    const code = selectedCode
+    if (!code || selectedExists || adding) return
+    setAdding(true)
     try {
       const value: Record<string, unknown> = vital
         ? { value: val.trim(), unit: ui(UNITS[code] ?? '') }   // единица — на языке ввода
@@ -45,6 +49,7 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
       setFree(''); setVal(''); setPicked('')
       await load()
     } catch (e) { setErr((e as Error).message) }
+    finally { setAdding(false) }
   }
 
   const close = async (p: MedProperty) => {
@@ -91,14 +96,18 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
         {dict.length > 0 && (
           <select value={picked} onChange={(e) => setPicked(e.target.value)}>
             <option value="">{ui('— из справочника —')}</option>
-            {dict.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
+            {dict.map((d) => <option key={d.code} value={d.code}
+                                     disabled={!vital && items.some((i) => i.code === d.code)}>
+              {d.name}
+            </option>)}
           </select>
         )}
         {!vital && <input placeholder={ui('свой вариант')} value={free}
                           onChange={(e) => setFree(e.target.value)} />}
         {vital && <input placeholder={ui('значение')} value={val}
                          onChange={(e) => setVal(e.target.value)} />}
-        <button onClick={add} disabled={vital ? !(picked && val.trim()) : !(picked || free.trim())}>
+        <button onClick={add} disabled={adding || (vital ? !(picked && val.trim())
+          : !selectedCode || selectedExists)}>
           {vital ? ui('Записать') : ui('Добавить')}
         </button>
       </div>

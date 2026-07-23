@@ -97,9 +97,14 @@ async def test_main():
             MedPropertyIn(code='symptom', value={'text': 'кашель'}))
     assert created.objectid == pseudonym_id, 'сервер обязан скоупить на псевдоним сессии'
     async with Sess() as s:
+        with pytest.raises(HTTPException) as ei:
+            await _svc(s, ks, payload).add_property(
+                MedPropertyIn(code='symptom', value={'text': 'повтор'}))
+        assert ei.value.status_code == 409 and ei.value.detail == 'property_exists'
+    async with Sess() as s:
         props = await _svc(s, ks, payload).properties()
     assert {p.code for p in props} == {'allergy', 'symptom'}, props
-    print('[ok] запись факта скоупится на псевдоним сессии')
+    print('[ok] запись факта скоупится на псевдоним сессии, дубли отклоняются')
 
     # --- закрыть сессию -> снова 401 ---
     async with Sess() as s:

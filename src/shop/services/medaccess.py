@@ -326,6 +326,21 @@ class MedAccessService:
 
     async def add_property(self, data: MedPropertyIn) -> tables.Property:
         pseudonym = await self._resolve()
+        conditions = [
+            tables.Property.table == 'pseudonym',
+            tables.Property.objectid == pseudonym,
+            tables.Property.code == data.code,
+            tables.Property.ends.is_(None),
+        ]
+        if data.category is None:
+            conditions.append(tables.Property.category.is_(None))
+        else:
+            conditions.append(tables.Property.category == data.category)
+        existing = (await self.session.execute(
+            select(tables.Property.id).where(*conditions))).scalars().first()
+        if existing is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail='property_exists')
         return await PropertyService(session=self.session).create(
             PropertyCreate(category=data.category, code=data.code, name=data.name,
                            table='pseudonym', objectid=pseudonym, value=data.value),
