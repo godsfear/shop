@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  ApiError, concepts, enroll, getCare, isAdmin, listProperties, openSession, setCare,
+  ApiError, concepts, enroll, getCare, getPerson, isAdmin, listProperties, me, openSession,
+  setCare,
 } from '../api'
 import { useAuth } from '../auth'
 import { loadMeta } from '../ui'
@@ -27,6 +28,7 @@ export default function Shell() {
   const [status, setStatus] = useState('')
   const [ready, setReady] = useState(false)   // гейт: дети грузят данные по открытой сессии
   const [sessionOk, setSessionOk] = useState(false)
+  const [profileName, setProfileName] = useState('')
   // подсказка «заполните карту»: показывается, пока нет роста и веса —
   // без них ИИ-оценки (норма питания, диагноз) заметно грубее
   const [needProfile, setNeedProfile] = useState(false)
@@ -34,6 +36,21 @@ export default function Shell() {
     sessionStorage.getItem('profile-hint-hidden') === '1')
   const care = getCare()
   const location = useLocation()
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const currentUser = await me()
+        const person = await getPerson(currentUser.person)
+        const name = [person.name.first, person.name.last]
+          .filter((part): part is string => typeof part === 'string' && !!part.trim())
+          .join(' ')
+        if (!cancelled) setProfileName(name)
+      } catch { /* имя не должно мешать открытию приложения */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (!ready || care) { setNeedProfile(false); return }
@@ -75,7 +92,7 @@ export default function Shell() {
   return (
     <div className="app">
       <header>
-        <NavLink to="/" className="brand" end>{ui('здоровье')}</NavLink>
+        <NavLink to="/" className="brand" end>{profileName || ui('здоровье')}</NavLink>
         <nav className="topnav">
           <NavLink to="/" end>{ui('Сегодня')}</NavLink>
           <NavLink to="/profile">{ui('Моя карта')}</NavLink>
