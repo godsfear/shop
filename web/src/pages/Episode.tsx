@@ -36,8 +36,8 @@ function Stage({ title, done, children }: {
 
 // Документы «на руки» (направления, рецепты): загрузить может пациент или
 // доверенный врач; ИИ их не читает. Открываются в новой вкладке — оттуда печать.
-function HandoutDocs({ title, hint, docs, onUpload, busy }: {
-  title: string; hint: string; docs: Doc[]; busy: boolean
+function HandoutDocs({ title, hint, docs, onUpload, busy, readOnly }: {
+  title: string; hint: string; docs: Doc[]; busy: boolean; readOnly: boolean
   onUpload: (f: File) => void
 }) {
   const [err, setErr] = useState('')
@@ -67,11 +67,13 @@ function HandoutDocs({ title, hint, docs, onUpload, busy }: {
           </li>
         ))}
       </ul>
-      <label className="ghost small btn-file">
-        {busy ? ui('Загрузка…') : ui('Загрузить документ')}
-        <input type="file" hidden disabled={busy}
-               onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = '' }} />
-      </label>
+      {!readOnly && (
+        <label className="ghost small btn-file">
+          {busy ? ui('Загрузка…') : ui('Загрузить документ')}
+          <input type="file" hidden disabled={busy}
+                 onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = '' }} />
+        </label>
+      )}
     </section>
   )
 }
@@ -294,6 +296,8 @@ export default function Episode() {
   // этап пройден (для сворачивания секций): текущее состояние дальше по маршруту
   const stagePassed = (s: string) =>
     !!fsm && fsm.states.includes(s) && fsm.states.indexOf(fsm.state) > fsm.states.indexOf(s)
+  // У финального статуса нет доступных переходов: историю показываем только для чтения.
+  const isFinal = fsm !== null && fsm.available.length === 0
 
   const fire = async (event: string) => {
     setErr('')
@@ -422,7 +426,7 @@ export default function Episode() {
   return (
     <div>
       <p><Link to="/">{ui('← сегодня')}</Link></p>
-      {renaming ? (
+      {!isFinal && renaming ? (
         <div className="inline">
           <input value={newName} autoFocus placeholder={ui('диагноз / название')}
                  onChange={(e) => setNewName(e.target.value)} />
@@ -431,10 +435,12 @@ export default function Episode() {
         </div>
       ) : (
         <h2>{ep?.name || ep?.code || ui('Эпизод')}{' '}
-          <button className="ghost small"
-                  onClick={() => { setNewName(ep?.name ?? ''); setRenaming(true) }}>
-            {ui('переименовать')}
-          </button>
+          {!isFinal && (
+            <button className="ghost small"
+                    onClick={() => { setNewName(ep?.name ?? ''); setRenaming(true) }}>
+              {ui('переименовать')}
+            </button>
+          )}
         </h2>
       )}
       {err && <p className="error">{err}</p>}
@@ -443,12 +449,12 @@ export default function Episode() {
         {fsm && <Timeline fsm={fsm} />}
         <div className="inline">
           {/* сбор анамнеза — основной путь на этапе «анамнез» */}
-          {fsm?.state === 'anamnesis' &&
+          {!isFinal && fsm?.state === 'anamnesis' &&
             <Link to={`/episode/${id}/interview`}><button>{ui('Пройти опрос (анамнез)')}</button></Link>}
-          {fsm && fsm.state !== 'anamnesis' &&
+          {!isFinal && fsm && fsm.state !== 'anamnesis' &&
             <Link to={`/episode/${id}/interview`} className="muted">{ui('интервью')}</Link>}
           {/* diagnose/treat — не голые переходы: открывают формы диагноза/назначений */}
-          {fsm?.available.map((ev) => (
+          {!isFinal && fsm?.available.map((ev) => (
             <button key={ev} className={fsm.state === 'anamnesis' ? 'ghost' : ''}
                     onClick={() => ev === 'diagnose'
                       ? (setDiagText((diagProp?.value as { text?: string })?.text ?? ''), setDiagOpen(true))
@@ -460,7 +466,7 @@ export default function Episode() {
         </div>
 
         {/* форма диагноза: выбрать вариант ИИ (ddx) или вписать свой */}
-        {diagOpen && (() => {
+        {!isFinal && diagOpen && (() => {
           const opts = ((ddx?.value as unknown as Ddx)?.assessments ?? [])
             .slice(0, 5).map((a) => a.condition)
           return (
@@ -487,7 +493,7 @@ export default function Episode() {
         })()}
 
         {/* форма назначений: чипы из плана ИИ (мультивыбор) + свои строки */}
-        {treatOpen && (() => {
+        {!isFinal && treatOpen && (() => {
           const items = ((plan?.value as unknown as Plan)?.items ?? []).filter((x) => x.code)
           const toggle = (c: string) => setTreatPicked(treatPicked.includes(c)
             ? treatPicked.filter((x) => x !== c) : [...treatPicked, c])
@@ -572,7 +578,7 @@ export default function Episode() {
                 const answered = Object.keys(SLOTS).filter((s) => sl[s] !== undefined)
                 // правки — только до диагноза (после — анамнез зафиксирован);
                 // associations структурный (очередь разбора) — не редактируется
-                const editable = fsm?.state === 'anamnesis'
+                const editable = !isFinal && fsm?.state === 'anamnesis'
                 return (
                   <details key={c} className="log">
                     <summary>{nm(c)}</summary>
@@ -627,18 +633,22 @@ export default function Episode() {
               {notes.map((n) => (
                 <li key={n.id} className="row-link">
                   <span>{String((n.value as { text?: string }).text ?? '')}</span>
-                  <button className="ghost small" style={{ marginLeft: 'auto' }}
-                          onClick={() => removeNote(n.id)}>{ui('удалить')}</button>
+                  {!isFinal && (
+                    <button className="ghost small" style={{ marginLeft: 'auto' }}
+                            onClick={() => removeNote(n.id)}>{ui('удалить')}</button>
+                  )}
                 </li>
               ))}
             </ul>
           )}
-          <div className="inline">
-            <input placeholder={ui('добавить комментарий')} value={noteText}
-                   onChange={(e) => setNoteText(e.target.value)}
-                   onKeyDown={(e) => { if (e.key === 'Enter' && noteText.trim()) addNote() }} />
-            <button className="ghost small" onClick={addNote} disabled={!noteText.trim()}>+</button>
-          </div>
+          {!isFinal && (
+            <div className="inline">
+              <input placeholder={ui('добавить комментарий')} value={noteText}
+                     onChange={(e) => setNoteText(e.target.value)}
+                     onKeyDown={(e) => { if (e.key === 'Enter' && noteText.trim()) addNote() }} />
+              <button className="ghost small" onClick={addNote} disabled={!noteText.trim()}>+</button>
+            </div>
+          )}
         </Stage>
       )}
 
@@ -666,7 +676,7 @@ export default function Episode() {
                     {done && <div>✓ {ui('Результат:')}{' '}
                       {String((done.value as { result?: string }).result ?? '')}</div>}
                     {doc && !done && <div className="muted">✓ {ui('документ загружен')}</div>}
-                    {!done && resFor !== x.test && (
+                    {!isFinal && !done && resFor !== x.test && (
                       <div className="inline">
                         <button className="ghost small" onClick={() => { setResFor(x.test); setResText('') }}>
                           {ui('Вписать результат')}
@@ -678,7 +688,7 @@ export default function Episode() {
                         </label>
                       </div>
                     )}
-                    {resFor === x.test && (
+                    {!isFinal && resFor === x.test && (
                       <div className="inline">
                         <input value={resText} autoFocus placeholder={ui('что получилось — своими словами')}
                                onChange={(e) => setResText(e.target.value)}
@@ -704,17 +714,19 @@ export default function Episode() {
       )}
 
       <Stage title={ui('Диагноз (оценка ИИ)')} done={stagePassed('anamnesis')}>
-        <div className="inline">
-          {/* диагноз по неполному анамнезу вводит в заблуждение — сначала опрос */}
-          <button onClick={evaluate} disabled={evaluating || !a || a.gaps.length > 0}>
-            {evaluating ? ui('ИИ анализирует…') : (ddx ? ui('Пересчитать диагноз') : ui('Диагноз'))}
-          </button>
-          <span className="muted">
-            {a && a.gaps.length > 0
-              ? ui('станет доступно после сбора анамнеза — пройдите опрос')
-              : ui('анамнез и оригиналы загруженных документов уйдут ИИ одной задачей')}
-          </span>
-        </div>
+        {!isFinal && (
+          <div className="inline">
+            {/* диагноз по неполному анамнезу вводит в заблуждение — сначала опрос */}
+            <button onClick={evaluate} disabled={evaluating || !a || a.gaps.length > 0}>
+              {evaluating ? ui('ИИ анализирует…') : (ddx ? ui('Пересчитать диагноз') : ui('Диагноз'))}
+            </button>
+            <span className="muted">
+              {a && a.gaps.length > 0
+                ? ui('станет доступно после сбора анамнеза — пройдите опрос')
+                : ui('анамнез и оригиналы загруженных документов уйдут ИИ одной задачей')}
+            </span>
+          </div>
+        )}
         {/* мягкое предупреждение о неполноте: рекомендованы анализы, а результатов нет */}
         {workup && (workup.value as unknown as Workup).tests?.length > 0
           && docs.length === 0 && results.length === 0 &&
@@ -745,42 +757,48 @@ export default function Episode() {
       {/* дневник состояния: замеры «в моменте» + свои заметки; сворачиваемый */}
       <Stage title={ui('Дневник состояния')} done={false}>
         <p className="muted">{ui('Замеры в моменте (температура, давление, пульс, сахар) и свои заметки о самочувствии. Уйдут ИИ в диагноз вместе с анамнезом.')}</p>
-        <div className="inline">
-          <select value={dCode} onChange={(e) => { setDCode(e.target.value); setDCtx('') }}>
-            <option value="">{ui('— параметр —')}</option>
-            {diaryDict.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
-          </select>
-          {/* сахар: контекст замера — норма и предупреждение зависят от него */}
-          {dCode === 'glucose' && (
-            <select value={dCtx} onChange={(e) => setDCtx(e.target.value)}>
-              <option value="">{ui('без уточнения')}</option>
-              <option value="fasting">{ui('натощак')}</option>
-              <option value="postprandial">{ui('после еды')}</option>
-            </select>
-          )}
-          <input placeholder={ui('значение')} value={dVal}
-                 onChange={(e) => setDVal(e.target.value)}
-                 onKeyDown={(e) => { if (e.key === 'Enter') addDiary() }} />
-          <button onClick={addDiary} disabled={!dCode || !dVal.trim()}>{ui('Записать')}</button>
-        </div>
-        {/* живая подсказка при выходе сахара за границы (информация, не диагноз) */}
-        {dCode === 'glucose' && glucoseAlert(dVal, dCtx) &&
-          <p className="warn">⚠ {ui(glucoseAlert(dVal, dCtx))}</p>}
-        {/* своя заметка о самочувствии (свободный текст) */}
-        <div className="inline">
-          <input placeholder={ui('своя заметка о самочувствии')} value={diaryNote}
-                 onChange={(e) => setDiaryNote(e.target.value)}
-                 onKeyDown={(e) => { if (e.key === 'Enter' && diaryNote.trim()) addDiaryNote() }} />
-          <button className="ghost small" onClick={addDiaryNote} disabled={!diaryNote.trim()}>+</button>
-        </div>
+        {!isFinal && (
+          <>
+            <div className="inline">
+              <select value={dCode} onChange={(e) => { setDCode(e.target.value); setDCtx('') }}>
+                <option value="">{ui('— параметр —')}</option>
+                {diaryDict.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
+              </select>
+              {/* сахар: контекст замера — норма и предупреждение зависят от него */}
+              {dCode === 'glucose' && (
+                <select value={dCtx} onChange={(e) => setDCtx(e.target.value)}>
+                  <option value="">{ui('без уточнения')}</option>
+                  <option value="fasting">{ui('натощак')}</option>
+                  <option value="postprandial">{ui('после еды')}</option>
+                </select>
+              )}
+              <input placeholder={ui('значение')} value={dVal}
+                     onChange={(e) => setDVal(e.target.value)}
+                     onKeyDown={(e) => { if (e.key === 'Enter') addDiary() }} />
+              <button onClick={addDiary} disabled={!dCode || !dVal.trim()}>{ui('Записать')}</button>
+            </div>
+            {/* живая подсказка при выходе сахара за границы (информация, не диагноз) */}
+            {dCode === 'glucose' && glucoseAlert(dVal, dCtx) &&
+              <p className="warn">⚠ {ui(glucoseAlert(dVal, dCtx))}</p>}
+            {/* своя заметка о самочувствии (свободный текст) */}
+            <div className="inline">
+              <input placeholder={ui('своя заметка о самочувствии')} value={diaryNote}
+                     onChange={(e) => setDiaryNote(e.target.value)}
+                     onKeyDown={(e) => { if (e.key === 'Enter' && diaryNote.trim()) addDiaryNote() }} />
+              <button className="ghost small" onClick={addDiaryNote} disabled={!diaryNote.trim()}>+</button>
+            </div>
+          </>
+        )}
         <ul className="rows">
           {diary.map((p) => {
             const val = p.value as { value?: unknown; unit?: unknown; context?: string; text?: string }
             if (val.text !== undefined) return (        // свободная заметка
               <li key={p.id} className="row-link">
                 <span>{String(val.text)}</span>
-                <button className="ghost small" style={{ marginLeft: 'auto' }}
-                        onClick={() => removeNote(p.id)}>{ui('удалить')}</button>
+                {!isFinal && (
+                  <button className="ghost small" style={{ marginLeft: 'auto' }}
+                          onClick={() => removeNote(p.id)}>{ui('удалить')}</button>
+                )}
               </li>
             )
             const alert = p.code === 'glucose' ? glucoseAlert(String(val.value ?? ''), val.context) : ''
@@ -801,18 +819,20 @@ export default function Episode() {
       {diagProp && (
         <HandoutDocs title={ui('Направления')} busy={handoutBusy} docs={referrals}
                      hint={ui('Направления на анализы и исследования. Загрузить может пациент или врач с доступом; ИИ их не читает.')}
-                     onUpload={(f) => uploadHandout('referral', f)} />
+                     onUpload={(f) => uploadHandout('referral', f)} readOnly={isFinal} />
       )}
 
       <section>
         <h3>{ui('Документы')}</h3>
         <p className="muted">{ui('Результаты анализов и обследований. Читаются ИИ при нажатии «Диагноз» (оригиналы), не разбираются при загрузке.')}</p>
-        <form className="inline" onSubmit={upload}>
-          <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-          <input placeholder={ui('название')} value={docName}
-                 onChange={(e) => setDocName(e.target.value)} />
-          <button type="submit" disabled={!file}>{ui('Загрузить')}</button>
-        </form>
+        {!isFinal && (
+          <form className="inline" onSubmit={upload}>
+            <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            <input placeholder={ui('название')} value={docName}
+                   onChange={(e) => setDocName(e.target.value)} />
+            <button type="submit" disabled={!file}>{ui('Загрузить')}</button>
+          </form>
+        )}
         <ul className="cards">
           {docs.map((d) => (
             <li key={d.id} className="card">{d.name || d.code}
@@ -862,10 +882,12 @@ export default function Episode() {
             <h3>{ui('Диагноз')}</h3>
             <div className="card resume">
               <b>{v.text}</b>{' '}
-              <button className="ghost small"
-                      onClick={() => { setDiagText(v.text ?? ''); setDiagOpen(true) }}>
-                {ui('изменить')}
-              </button>
+              {!isFinal && (
+                <button className="ghost small"
+                        onClick={() => { setDiagText(v.text ?? ''); setDiagOpen(true) }}>
+                  {ui('изменить')}
+                </button>
+              )}
               <p className="muted">{v.source === 'ddx' ? ui('выбран из вариантов ИИ') : ui('внесён вручную')}
                 {' · '}{new Date(diagProp.begins).toLocaleDateString()}</p>
             </div>
@@ -886,7 +908,9 @@ export default function Episode() {
         if (!v.items?.length) return null
         return (
           <Stage title={ui('Назначения (рекомендация ИИ)')} done={stagePassed('diagnosis')}>
-            <p className="muted">{ui('Отранжированы по важности. Нажмите «Начать лечение», чтобы выбрать из них и/или добавить назначения врача.')}</p>
+            {!isFinal && (
+              <p className="muted">{ui('Отранжированы по важности. Нажмите «Начать лечение», чтобы выбрать из них и/или добавить назначения врача.')}</p>
+            )}
             <ul className="cards">
               {v.items.map((x, i) => (
                 <li key={i} className="card">
@@ -906,7 +930,7 @@ export default function Episode() {
       {treatProp && (
         <HandoutDocs title={ui('Рецепты')} busy={handoutBusy} docs={prescriptions}
                      hint={ui('Рецепты на препараты. Загрузить может пациент или врач с доступом; ИИ их не читает.')}
-                     onUpload={(f) => uploadHandout('prescription', f)} />
+                     onUpload={(f) => uploadHandout('prescription', f)} readOnly={isFinal} />
       )}
 
       {/* зафиксированное лечение (выбор пациента) */}
@@ -915,12 +939,14 @@ export default function Episode() {
         return (
           <section>
             <h3>{ui('Лечение')}{' '}
-              <button className="ghost small"
-                      onClick={() => {
-                        setTreatPicked(its.filter((i) => i.code).map((i) => i.code!))
-                        setTreatLines(its.filter((i) => !i.code).map((i) => i.name))
-                        setTreatOpen(true)
-                      }}>{ui('изменить')}</button>
+              {!isFinal && (
+                <button className="ghost small"
+                        onClick={() => {
+                          setTreatPicked(its.filter((i) => i.code).map((i) => i.code!))
+                          setTreatLines(its.filter((i) => !i.code).map((i) => i.name))
+                          setTreatOpen(true)
+                        }}>{ui('изменить')}</button>
+              )}
             </h3>
             <ul className="rows">
               {its.map((x, i) => (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { legalDoc, type LegalDoc } from '../api'
 import { ui } from '../i18n'
 import { LangSwitch } from './Shell'
@@ -9,6 +9,8 @@ import { LangSwitch } from './Shell'
 export default function Legal() {
   const [doc, setDoc] = useState<LegalDoc | null>(null)
   const [err, setErr] = useState('')
+  const location = useLocation()
+  const returnToLogin = location.state?.from === 'data-protection'
   useEffect(() => {
     legalDoc('agreement').then(setDoc).catch((e) => setErr((e as Error).message))
   }, [])
@@ -25,7 +27,9 @@ export default function Legal() {
             <p className="muted">{ui('Редакция:')} {doc.version}</p>
           </>
         )}
-        <p><Link to="/register">{ui('← к регистрации')}</Link></p>
+        <p>{returnToLogin
+          ? <Link to="/login">← {ui('Назад')}</Link>
+          : <Link to="/register">{ui('← к регистрации')}</Link>}</p>
       </div>
     </div>
   )
