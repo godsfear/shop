@@ -6,7 +6,7 @@ from typing import List
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, func
 
 from shop.cache import get_cache
 from shop.database import db_helper
@@ -16,7 +16,7 @@ from shop.versioning import versioned_expire, versioned_update
 from .auth import AuthService
 from shop import tables
 from shop.models.auth import Challenge, Token
-from shop.models.user import SignUp, UserCreate, UserUpdate
+from shop.models.user import SignUp, UserCreate, UserUpdate, normalize_email
 
 _auth_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -42,10 +42,14 @@ class UserService:
         return user
 
     async def get_by_contact(self, prop: str) -> User | None:
-        """Поиск по email или телефону в JSONB-поле contact."""
+        """Поиск по email или телефону в JSONB-поле contact. Email — регистронезависимо:
+        новые пишутся в нижнем регистре (Contact._lower_email), а func.lower() на
+        читающей стороне подстраховывает записи, заведённые до нормализации."""
+        prop = prop.strip()
+        email = normalize_email(prop)
         query = select(User).where(
             or_(
-                User.contact['email'].astext == prop,
+                func.lower(User.contact['email'].astext) == email,
                 User.contact['phone'].astext == prop,
             )
         )

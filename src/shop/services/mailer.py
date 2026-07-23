@@ -22,6 +22,7 @@ from ..cache import get_cache
 from ..logger import logger
 from ..outbox import emit, outbox_handler
 from ..settings import settings
+from ..models.user import normalize_email
 
 TOPIC_EMAIL = 'notify.email'
 _NS = 'signup'
@@ -30,8 +31,9 @@ _NS = 'signup'
 async def request_signup(session: AsyncSession, email: str, pending: dict) -> None:
     """Заявка на регистрацию: код + данные в Redis, письмо в очередь.
     Повторная заявка на тот же адрес перезаписывает прежнюю (новый код)."""
+    email = normalize_email(email)
     code = f'{secrets.randbelow(1_000_000):06d}'
-    await get_cache().set(f'{_NS}:{email.lower()}',
+    await get_cache().set(f'{_NS}:{email}',
                           json.dumps({'code': code, 'pending': pending}),
                           settings.confirm_ttl_s)
     emit(session, TOPIC_EMAIL, {
@@ -44,7 +46,7 @@ async def request_signup(session: AsyncSession, email: str, pending: dict) -> No
 
 async def pop_signup(email: str, code: str) -> dict | None:
     """Сверка кода: совпал — заявка изымается (одноразово) и возвращается."""
-    key = f'{_NS}:{email.lower()}'
+    key = f'{_NS}:{normalize_email(email)}'
     raw = await get_cache().get(key)
     if raw is None:
         return None
@@ -61,8 +63,9 @@ _RESET_NS = 'pwreset'
 async def request_password_reset(session: AsyncSession, email: str) -> None:
     """Восстановление пароля: код в Redis + письмо через outbox. В отличие от
     signup ничего в pending не кладём — новый пароль придёт в шаге confirm."""
+    email = normalize_email(email)
     code = f'{secrets.randbelow(1_000_000):06d}'
-    await get_cache().set(f'{_RESET_NS}:{email.lower()}', code, settings.confirm_ttl_s)
+    await get_cache().set(f'{_RESET_NS}:{email}', code, settings.confirm_ttl_s)
     emit(session, TOPIC_EMAIL, {
         'to': email,
         'subject': 'Код для смены пароля',
@@ -73,7 +76,7 @@ async def request_password_reset(session: AsyncSession, email: str) -> None:
 
 async def pop_reset(email: str, code: str) -> bool:
     """Сверка кода восстановления: совпал — код изымается (одноразово)."""
-    key = f'{_RESET_NS}:{email.lower()}'
+    key = f'{_RESET_NS}:{normalize_email(email)}'
     raw = await get_cache().get(key)
     if raw is None or raw != code.strip():
         return False

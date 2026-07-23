@@ -1,15 +1,25 @@
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .base import ReadMixin
 from .person import PersonCreate
+
+
+def normalize_email(email: str) -> str:
+    """Единая каноническая форма email для поиска, кэша и хранения."""
+    return email.strip().lower()
 
 
 class Contact(BaseModel):
     """Контакты пользователя; хранятся в JSONB-поле user.contact."""
     email: str | None = None
     phone: str | None = None
+
+    @field_validator('email')
+    @classmethod
+    def _lower_email(cls, v: str | None) -> str | None:
+        return normalize_email(v) if v is not None else None
 
 
 class UserBase(BaseModel):
@@ -59,20 +69,27 @@ class UserRoles(BaseModel):
     roles: list[str]
 
 
-class SignUpConfirm(BaseModel):
-    """Шаг 2 регистрации: почта + код из письма (заявка — в Redis)."""
+class _EmailPayload(BaseModel):
+    """Поля email вне Contact (подтверждение и восстановление пароля)."""
     email: str
+
+    @field_validator('email')
+    @classmethod
+    def _normalize_email(cls, value: str) -> str:
+        return normalize_email(value)
+
+
+class SignUpConfirm(_EmailPayload):
+    """Шаг 2 регистрации: почта + код из письма (заявка — в Redis)."""
     code: str
 
 
-class PasswordReset(BaseModel):
+class PasswordReset(_EmailPayload):
     """Шаг 1 восстановления пароля: адрес, на который слать код."""
-    email: str
 
 
-class PasswordResetConfirm(BaseModel):
+class PasswordResetConfirm(_EmailPayload):
     """Шаг 2 восстановления: код из письма + новый пароль."""
-    email: str
     code: str
     password: str = Field(min_length=8)
 

@@ -46,7 +46,7 @@ async def test_main():
             person=PersonCreate(name={'last': 'Петров'}, sex=True,
                                 birthdate=datetime.date(1990, 1, 1),
                                 birth_place=place_id),
-            contact=Contact(email='petrov@x.com'),
+            contact=Contact(email=' Petrov@X.COM '),
             password='correct-horse'), AuthService.hash_password('correct-horse'),
             {'terms_version': 'v-test', 'terms_accepted_at': '2026-07-21T10:00:00+00:00'})
         signup_payload = AuthService.verify_token(token.access_token)
@@ -66,7 +66,7 @@ async def test_main():
         svc = UserService(session=s)
         user = await svc.create(UserCreate(
             person=person_id,
-            contact=Contact(email='ivanov@example.com'),
+            contact=Contact(email=' Ivanov@Example.COM '),
             password='correct-horse'))
         token = AuthService.create_token(user)
 
@@ -105,11 +105,11 @@ async def test_main():
     # --- аутентификация по контакту (JSONB) ---
     async with Sess() as s:
         svc = UserService(session=s)
-        tok = await svc.authenticate_user('ivanov@example.com', 'correct-horse')
+        tok = await svc.authenticate_user(' IVANOV@EXAMPLE.COM ', 'correct-horse')
         assert AuthService.verify_token(tok.access_token).sub == user.id
         print('[ok] вход по email из JSONB-контакта')
         try:
-            await svc.authenticate_user('ivanov@example.com', 'wrong-password')
+            await svc.authenticate_user('IVANOV@EXAMPLE.COM', 'wrong-password')
             raise AssertionError('вход с неверным паролем!')
         except HTTPException as e:
             assert e.status_code == 401
@@ -120,17 +120,17 @@ async def test_main():
     async with Sess() as s:
         svc = UserService(session=s)
         try:                                  # неверный код -> 400, пароль тот же
-            await svc.reset_password('petrov@x.com', '000000', 'BrandNew1')
+            await svc.reset_password(' PETROV@X.COM ', '000000', 'BrandNew1')
             raise AssertionError('неверный код прошёл!')
         except HTTPException as e:
             assert e.status_code == 400
-        await svc.reset_password('petrov@x.com', '654321', 'BrandNew1')  # верный
+        await svc.reset_password(' PETROV@X.COM ', '654321', 'BrandNew1')  # верный
     async with Sess() as s:
         svc = UserService(session=s)
-        tok = await svc.authenticate_user('petrov@x.com', 'BrandNew1')
+        tok = await svc.authenticate_user('PETROV@X.COM', 'BrandNew1')
         assert AuthService.verify_token(tok.access_token).sub == new_user_id
         try:                                  # старый пароль больше не работает
-            await svc.authenticate_user('petrov@x.com', 'correct-horse')
+            await svc.authenticate_user('PETROV@X.COM', 'correct-horse')
             raise AssertionError('старый пароль ещё работает!')
         except HTTPException as e:
             assert e.status_code == 401
