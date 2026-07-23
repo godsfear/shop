@@ -177,6 +177,12 @@ a:hover { text-decoration: underline; }
   color: var(--text); }
 .row-link:hover { text-decoration: none; background: var(--accent-soft); border-radius: 6px; }
 .row-link .muted { margin-left: auto; }
+@media (min-width: 560px) {
+  .episode-link { display: grid; grid-template-columns: minmax(0, 1fr) 9.5rem 7.2rem; }
+  .episode-link .chip { grid-column: 2; justify-self: start; }
+  .episode-link .muted { grid-column: 3; margin-left: 0; white-space: nowrap;
+    font-variant-numeric: tabular-nums; }
+}
 
 /* --- таймлайн FSM --- */
 .timeline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;

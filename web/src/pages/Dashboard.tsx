@@ -30,7 +30,7 @@ function diaryLabel(p: MedProperty) {
 
 function EpisodeLink({ ep }: { ep: EpisodeRow }) {
   return (
-    <Link to={`/episode/${ep.id}`} className="row-link">
+    <Link to={`/episode/${ep.id}`} className="row-link episode-link">
       <span>{ep.name || ep.code}</span>
       {ep.fsm && <span className="chip state">{t(STATES, ep.fsm)}</span>}
       <span className="muted">{new Date(ep.begins).toLocaleDateString()}</span>
