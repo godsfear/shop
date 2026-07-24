@@ -142,7 +142,10 @@ export interface Me { id: string; person: string; contact: { email?: string }
 export const me = () => req<Me>('/auth/user/')
 
 // --- личные данные (персона, домен личности; правит только владелец) ---
-export interface Residence { country?: string; city?: string }
+export interface Residence {
+  country?: string; city?: string
+  country_code?: string; city_code?: string
+}
 export interface PersonData {
   id: string; name: Record<string, string>; sex: boolean; birthdate: string
   residence?: Residence | null
@@ -150,6 +153,12 @@ export interface PersonData {
 export const getPerson = (id: string) => req<PersonData>(`/person/${id}`)
 export const updatePerson = (id: string, data: { residence?: Residence }) =>
   req<PersonData>(`/person/${id}`, json(data, 'PATCH'))
+
+// --- связанные справочники места жительства (Accept-Language локализует name) ---
+export interface GeographyOption { id: string; code: string; name: string }
+export const countries = () => req<GeographyOption[]>('/geography/countries')
+export const cities = (country: string) =>
+  req<GeographyOption[]>(`/geography/cities?country=${encodeURIComponent(country)}`)
 
 // --- согласия (consent-first доступ) ---
 export interface Consent {

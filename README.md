@@ -19,6 +19,11 @@ docker compose up --build
 Стек: `postgres` (PostGIS), `redis`, `rabbitmq`, `migrate` (одноразовый: схема +
 RLS + сид), `api`, `worker`, `web` (nginx), `mailpit`. Данные БД — в томе `pgdata`.
 
+Географический сид содержит связанные справочники `Country → Place`: страны,
+столицы и города с населением от 100 тысяч, с русскими и английскими названиями.
+Зафиксированный снимок получен из [Wikidata](https://www.wikidata.org/) (CC0);
+обновление: `python scripts/fetch_geography.py`.
+
 Шина событий (гибрид outbox + RabbitMQ, см. `eventbus.py`): atomicity «данные +
 событие» держит outbox, relay перекачивает события в topic-exchange, консумеры
 читают из очередей `shop.ai` (ИИ-разбор/оценка — масштабируется репликами

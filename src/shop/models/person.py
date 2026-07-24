@@ -11,7 +11,8 @@ class PersonBase(BaseModel):
     sex: bool
     birthdate: datetime.date
     birth_place: uuid.UUID | None = None   # необязательно (самоучёт-регистрация)
-    residence: dict | None = None          # {'country': ..., 'city': ...} — для ИИ-оценок
+    # Подписи нужны ИИ, стабильные коды — повторному выбору локализованных справочников.
+    residence: dict | None = None          # {country, city, country_code?, city_code?}
 
 
 class PersonCreate(PersonBase):

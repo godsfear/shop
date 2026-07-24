@@ -44,7 +44,7 @@ services:
       retries: 12
     restart: unless-stopped
 
-  # одноразовый init: миграции (владельцем shop) + роли/RLS + медицинский сид
+  # одноразовый init: миграции (владельцем shop) + роли/RLS + справочники
   migrate:
     build: .
     command: ["python", "-m", "shop.init_stack"]

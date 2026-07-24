@@ -1,7 +1,8 @@
 """Инициализация стека для контейнерного запуска (идемпотентно, БЕЗ удаления данных).
 
 Одноразовый init-контейнер (см. docker-compose): схема (alembic) + роли/RLS +
-медицинский сид. Запускается как владелец схемы (shop) до api/worker.
+медицинский и географический справочники. Запускается как владелец схемы
+(shop) до api/worker.
     python -m shop.init_stack
 """
 import asyncio
@@ -11,6 +12,7 @@ from alembic.config import Config
 from sqlalchemy import text
 
 from .database import db_helper
+from .geography_seed import seed_geography
 from .medical_seed import seed_medical
 from .security import apply_rls
 
@@ -30,13 +32,15 @@ async def _rls_and_seed() -> None:
         await apply_rls(conn)                 # роли app/research + FORCE RLS + политики
     async with db_helper.session_factory() as session:
         await seed_medical(session)           # справочник (концепты + элементы)
+    async with db_helper.session_factory() as session:
+        await seed_geography(session)          # страны -> города + переводы ru/en
 
 
 def main() -> None:
     asyncio.run(_prepare())                          # search_path -> public
     command.upgrade(Config('alembic.ini'), 'head')   # схема, триггеры, расширения
     asyncio.run(_rls_and_seed())
-    print('init: схема, RLS и медицинский сид готовы')
+    print('init: схема, RLS и справочники готовы')
 
 
 if __name__ == '__main__':

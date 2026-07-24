@@ -102,6 +102,9 @@ const EN: Record<string, string> = {
   'Город': 'City',
   'например, Россия': 'e.g. Russia',
   'например, Москва': 'e.g. Moscow',
+  '— выберите страну —': '— select a country —',
+  'начните вводить город': 'start typing a city',
+  'загрузка…': 'loading…',
   'сохранено': 'saved',
   'Страна и город проживания — учитываются в оценках ИИ (эндемичные и сезонные факторы, климат).':
     'Country and city of residence — used in AI assessments (endemic and seasonal factors, climate).',
