@@ -188,7 +188,12 @@ export const concepts = () => req<Concepts>('/me/concepts')
 export const listGrants = () => req<Grant[]>('/me/grants')
 // журнал доступов к моей карте (append-only аудит ключей)
 export interface AccessLogEntry { at: string; event: string; who: string }
-export const accessLog = () => req<AccessLogEntry[]>('/me/access-log')
+export const accessLog = (period?: { begins?: string; ends?: string }) => {
+  const q = new URLSearchParams()
+  if (period?.begins) q.set('begins', period.begins)
+  if (period?.ends) q.set('ends', period.ends)
+  return req<AccessLogEntry[]>(`/me/access-log${q.size ? `?${q}` : ''}`)
+}
 
 // --- эпизоды ---
 export interface StateLog { state: string; event: string | null; begins: string; ends: string | null }

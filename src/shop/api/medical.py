@@ -36,9 +36,12 @@ async def open_session(svc: MedAccessService = Depends(),
 
 
 @router.get('/access-log')
-async def my_access_log(svc: MedAccessService = Depends()):
+async def my_access_log(
+        svc: MedAccessService = Depends(),
+        begins: datetime.datetime | None = Query(None),
+        ends: datetime.datetime | None = Query(None)):
     """Кто и когда разворачивал доступ к моей карте (append-only аудит ключей)."""
-    return await svc.access_log()
+    return await svc.access_log(begins=begins, ends=ends)
 
 
 @router.get('/grants')

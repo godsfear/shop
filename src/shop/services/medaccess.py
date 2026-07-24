@@ -236,18 +236,40 @@ class MedAccessService:
         # задаёт бэк интервью, здесь только представление)
         return sorted(items, key=lambda i: i['name'])
 
-    async def access_log(self, limit: int = 100) -> list[dict]:
+    async def access_log(
+            self, limit: int = 500,
+            begins: datetime.datetime | None = None,
+            ends: datetime.datetime | None = None) -> list[dict]:
         """Журнал доступов к моей карте — владельцу для прозрачности.
 
         Источник — append-only аудит ключевого сервиса (KeyAudit, хеш-цепочка):
         развороты ключа patient:{sub}, отказы и break-glass. actor = user id;
         имя не раскрываем (каталог закрыт) — сопоставляем с reason согласий."""
+        if begins is not None and begins.tzinfo is None:
+            begins = begins.replace(tzinfo=datetime.timezone.utc)
+        if ends is not None and ends.tzinfo is None:
+            ends = ends.replace(tzinfo=datetime.timezone.utc)
+        if begins is not None and ends is not None and begins >= ends:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail='access_log_period_invalid')
         key = self._patient_key()
         events = ('key.unwrap', 'key.unwrap.denied', 'breakglass.execute')
+        conditions = [
+            tables.KeyAudit.event.in_(events),
+            tables.KeyAudit.data['key_id'].astext == key,
+        ]
+        # KeyAudit.ts — канонический UTC isoformat (+00:00), входные границы
+        # приводим к тому же виду; для одинакового формата строковый порядок
+        # совпадает с хронологическим.
+        if begins is not None:
+            conditions.append(tables.KeyAudit.ts >=
+                              begins.astimezone(datetime.timezone.utc).isoformat())
+        if ends is not None:
+            conditions.append(tables.KeyAudit.ts <
+                              ends.astimezone(datetime.timezone.utc).isoformat())
         rows = (await self.session.execute(
             select(tables.KeyAudit)
-            .where(tables.KeyAudit.event.in_(events),
-                   tables.KeyAudit.data['key_id'].astext == key)
+            .where(*conditions)
             .order_by(tables.KeyAudit.seq.desc())
             .limit(limit))).scalars().all()
         # actor -> представление из согласий (действующих и прошлых версий не ищем — MVP)

@@ -183,6 +183,27 @@ a:hover { text-decoration: underline; }
   color: var(--text); }
 .row-link:hover { text-decoration: none; background: var(--accent-soft); border-radius: 6px; }
 .row-link .muted { margin-left: auto; }
+.access-log > summary { display: flex; align-items: center; gap: 9px; list-style: none; }
+.access-log > summary::-webkit-details-marker { display: none; }
+.access-log-chevron { width: .52rem; height: .52rem; flex: 0 0 auto;
+  border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg); transition: transform .16s ease; }
+.access-log[open] .access-log-chevron { transform: rotate(45deg); }
+.access-log > summary .muted { font-size: 13px; }
+.access-log[open] > summary { margin-bottom: 8px; }
+.access-log-filter { align-items: end; margin: 10px 0; }
+.access-log-filter label { display: flex; flex-direction: column; gap: 3px;
+  color: var(--muted); font-size: 12.5px; }
+.access-log-filter input { width: auto; min-width: 9.5rem; }
+.access-log-scroll { max-height: 20.5rem; overflow-y: auto;
+  overscroll-behavior: contain; padding-right: 5px; scrollbar-gutter: stable; }
+.access-log-row { min-height: 2.85rem; }
+@media (max-width: 560px) {
+  .access-log-filter { align-items: stretch; }
+  .access-log-filter label, .access-log-filter input { width: 100%; }
+  .access-log-row { flex-wrap: wrap; }
+  .access-log-row .muted { flex-basis: 100%; margin-left: 0; }
+}
 @media (min-width: 560px) {
   .episode-link { display: grid; grid-template-columns: minmax(0, 1fr) 9.5rem 7.2rem; }
   .episode-link .chip { grid-column: 2; justify-self: start; }

@@ -97,6 +97,22 @@ async def test_main():
     rules = {item['code']: item['validation'] for item in vital_dict}
     assert rules['temperature']['decimals'] == 1
     assert rules['blood_pressure']['kind'] == 'blood_pressure'
+    now = datetime.datetime.now(datetime.timezone.utc)
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        full_access_log = await svc.access_log()
+        period_access_log = await svc.access_log(
+            begins=now - datetime.timedelta(days=1),
+            ends=now + datetime.timedelta(days=1))
+        future_access_log = await svc.access_log(
+            begins=now + datetime.timedelta(days=1))
+        with pytest.raises(HTTPException) as ei:
+            await svc.access_log(
+                begins=now + datetime.timedelta(days=1), ends=now)
+    assert full_access_log
+    assert period_access_log == full_access_log
+    assert future_access_log == []
+    assert ei.value.detail == 'access_log_period_invalid'
     out = MedPropertyOut.model_validate(props[0])
     assert not hasattr(out, 'objectid'), 'проекция не должна раскрывать псевдоним'
     print('[ok] сессия открыта, данные видны, objectid (псевдоним) скрыт')
