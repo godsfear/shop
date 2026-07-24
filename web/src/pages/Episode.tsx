@@ -736,9 +736,10 @@ export default function Episode() {
             const alert = p.code === 'glucose' ? glucoseAlert(String(val.value ?? ''), val.context) : ''
             return (
               <li key={p.id} className="row-link">
-                <span className="diary-entry-label">{p.name || p.code}
+                <span className="diary-entry-label diary-parameter-name">{p.name || p.code}
                   {val.context && <span className="muted"> · {ui(GLUCOSE_CTX[val.context] ?? '')}</span>}</span>
-                <b className="diary-entry-value">{String(val.value ?? '')} {String(val.unit ?? '')}</b>
+                <span className="diary-entry-value diary-parameter-value">
+                  {String(val.value ?? '')} {String(val.unit ?? '')}</span>
                 {alert && <span className="warn diary-entry-alert">⚠ {ui(alert)}</span>}
                 <span className="muted diary-entry-time">{new Date(p.begins).toLocaleString()}</span>
               </li>

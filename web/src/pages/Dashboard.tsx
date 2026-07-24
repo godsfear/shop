@@ -25,11 +25,26 @@ const tileVisibility = (): TileVisibility => {
   } catch { return { nutrition: true, sleep: true, activity: true } }
 }
 
-function diaryLabel(p: MedProperty) {
+function DiaryLabel({ entry }: { entry: MedProperty }) {
+  const p = entry
   const v = p.value as { value?: unknown; unit?: unknown; text?: string }
-  return v.text !== undefined
-    ? String(v.text)
-    : `${p.name || p.code}: ${String(v.value ?? '')} ${String(v.unit ?? '')}`
+  if (v.text !== undefined) return <>{String(v.text)}</>
+  return (
+    <>
+      <b className="diary-parameter-name">{p.name || p.code}</b>
+      <span className="diary-parameter-value">
+        {String(v.value ?? '')} {String(v.unit ?? '')}
+      </span>
+    </>
+  )
+}
+
+function isToday(value: string) {
+  const date = new Date(value)
+  const today = new Date()
+  return date.getFullYear() === today.getFullYear()
+    && date.getMonth() === today.getMonth()
+    && date.getDate() === today.getDate()
 }
 
 function EpisodeLink({ ep }: { ep: EpisodeRow }) {
@@ -103,6 +118,8 @@ export default function Dashboard() {
 
   const active = eps.filter((e) => !e.closed)
   const closed = eps.filter((e) => e.closed)
+  const todayDiary = diary.filter((p) => isToday(p.begins))
+  const dashboardDiary = todayDiary.length > 0 ? todayDiary : diary.slice(0, 2)
 
   return (
     <div>
@@ -156,11 +173,13 @@ export default function Dashboard() {
           <Link to="/diary"><button className="ghost">{ui('Открыть')}</button></Link>
         </header>
         {diary.length === 0 ? <p className="muted">{ui('пока пусто')}</p> : (
-          <ul className="rows">
-            {diary.slice(0, 2).map((p) => (
+          <ul className="rows dashboard-diary-rows">
+            {dashboardDiary.map((p) => (
               <li key={p.id} className="row-link">
-                <span>{diaryLabel(p)}</span>
-                <span className="muted">{new Date(p.begins).toLocaleDateString()}</span>
+                <span className="dashboard-diary-label"><DiaryLabel entry={p} /></span>
+                <span className="muted dashboard-diary-time">{todayDiary.length > 0
+                  ? new Date(p.begins).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : new Date(p.begins).toLocaleDateString()}</span>
               </li>
             ))}
           </ul>

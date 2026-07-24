@@ -174,6 +174,22 @@ async def test_main():
                 value={'value': '80/120', 'unit': 'мм рт. ст.'}))
         assert ei.value.detail == 'vital_order_invalid:blood_pressure'
 
+    # Общий дневник фильтруется на сервере по периоду и параметру.
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        period_diary = await svc.diary(
+            begins=now - datetime.timedelta(days=1),
+            ends=now + datetime.timedelta(days=1))
+        temperature_diary = await svc.diary(code='temperature')
+        future_diary = await svc.diary(begins=now + datetime.timedelta(days=1))
+        with pytest.raises(HTTPException) as ei:
+            await svc.diary(
+                begins=now + datetime.timedelta(days=1), ends=now)
+    assert len(period_diary) == 3
+    assert [p.code for p in temperature_diary] == ['temperature']
+    assert future_diary == []
+    assert ei.value.detail == 'diary_period_invalid'
+
     # Повторное профильное значение обновляет тот же id и попадает в историю.
     async with Sess() as s:
         svc = _svc(s, ks, payload)

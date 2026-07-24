@@ -10,6 +10,28 @@ import { normalizeVitalInput, vitalInputHint } from '../vitals'
 
 type Editor = 'vital' | 'note' | null
 
+function periodBounds(from: string, to: string) {
+  const begins = from ? new Date(`${from}T00:00:00`).toISOString() : undefined
+  const ends = to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined
+  return { begins, ends }
+}
+
+function localDateValue(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function lastSevenDays() {
+  const today = new Date()
+  const from = new Date(today)
+  from.setDate(from.getDate() - 6)
+  return { from: localDateValue(from), to: localDateValue(today) }
+}
+
+const DEFAULT_DIARY_PERIOD = lastSevenDays()
+
 // Общий дневник состояния: записи лежат на медкарте, а не внутри эпизода.
 // Поэтому новый эпизод сразу видит историю измерений и заметок пациента.
 export default function Diary() {
@@ -23,18 +45,40 @@ export default function Diary() {
   const [note, setNote] = useState('')
   const [err, setErr] = useState('')
   const [valueErr, setValueErr] = useState('')
+  const [filterFrom, setFilterFrom] = useState(DEFAULT_DIARY_PERIOD.from)
+  const [filterTo, setFilterTo] = useState(DEFAULT_DIARY_PERIOD.to)
+  const [filterCode, setFilterCode] = useState('')
+  const [loading, setLoading] = useState(false)
   const selectedRule = dict.find((item) => item.code === code)?.validation
 
-  const load = async () => {
-    try { setEntries(await getDiary()) }
+  const load = async (from = filterFrom, to = filterTo, parameter = filterCode) => {
+    if (from && to && from > to) {
+      setErr(ui('Начало периода не может быть позже окончания.'))
+      return
+    }
+    setErr('')
+    setLoading(true)
+    try { setEntries(await getDiary({ ...periodBounds(from, to), code: parameter || undefined })) }
     catch (e) { setErr((e as Error).message) }
+    finally { setLoading(false) }
   }
 
   useEffect(() => {
     concepts().then(setCs).catch(() => {})
     dictionary('vital').then((d) => setDict(d.filter((x) => x.scopes?.includes('diary')))).catch(() => {})
-    load()
+    load(DEFAULT_DIARY_PERIOD.from, DEFAULT_DIARY_PERIOD.to, '')
   }, [])
+
+  const showLastSevenDays = () => {
+    const period = lastSevenDays()
+    setFilterFrom(period.from); setFilterTo(period.to)
+    void load(period.from, period.to, filterCode)
+  }
+
+  const showAllTime = () => {
+    setFilterFrom(''); setFilterTo('')
+    void load('', '', filterCode)
+  }
 
   const closeEditor = () => {
     setCode(''); setValue(''); setContext(''); setNote(''); setValueErr('')
@@ -142,7 +186,36 @@ export default function Diary() {
         )}
       </section>
 
-      {entries.length === 0 ? <p className="muted">{ui('пока пусто')}</p> : (
+      <div className="inline diary-filter">
+        <label>
+          <span>{ui('С')}</span>
+          <input type="date" value={filterFrom} max={filterTo || undefined}
+                 onChange={(e) => { setFilterFrom(e.target.value); setErr('') }} />
+        </label>
+        <label>
+          <span>{ui('По')}</span>
+          <input type="date" value={filterTo} min={filterFrom || undefined}
+                 onChange={(e) => { setFilterTo(e.target.value); setErr('') }} />
+        </label>
+        <label>
+          <span>{ui('Параметр')}</span>
+          <select value={filterCode}
+                  onChange={(e) => { setFilterCode(e.target.value); setErr('') }}>
+            <option value="">{ui('Все параметры')}</option>
+            {dict.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
+          </select>
+        </label>
+        <button onClick={() => load()} disabled={loading}>
+          {loading ? ui('Загрузка…') : ui('Применить')}
+        </button>
+        <button className="ghost" onClick={showLastSevenDays}>{ui('7 дней')}</button>
+        <button className="ghost" onClick={showAllTime}>{ui('Всё время')}</button>
+      </div>
+
+      {!loading && entries.length === 0 ? (
+        <p className="muted">{filterFrom || filterTo || filterCode
+          ? ui('записей по выбранным фильтрам нет') : ui('пока пусто')}</p>
+      ) : (
         <ul className="rows diary-entries">
           {entries.map((p) => {
             const val = p.value as { value?: unknown; unit?: unknown; context?: string; text?: string }
@@ -150,9 +223,11 @@ export default function Diary() {
             const alert = p.code === 'glucose' ? glucoseAlert(String(val.value ?? ''), val.context) : ''
             return (
               <li key={p.id} className="row-link">
-                <span className="diary-entry-label">{isNote ? String(val.text) : p.name || p.code}
+                <span className={`diary-entry-label${isNote ? '' : ' diary-parameter-name'}`}>
+                  {isNote ? String(val.text) : p.name || p.code}
                   {!isNote && val.context && <span className="muted"> · {ui(GLUCOSE_CTX[val.context] ?? '')}</span>}</span>
-                {!isNote && <b className="diary-entry-value">{String(val.value ?? '')} {String(val.unit ?? '')}</b>}
+                {!isNote && <span className="diary-entry-value diary-parameter-value">
+                  {String(val.value ?? '')} {String(val.unit ?? '')}</span>}
                 {alert && <span className="warn diary-entry-alert">⚠ {ui(alert)}</span>}
                 <span className="muted diary-entry-time">{new Date(p.begins).toLocaleString()}</span>
                 <button className="ghost small diary-entry-remove"

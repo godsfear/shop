@@ -105,9 +105,13 @@ async def close_my_property(property_id: uuid.UUID, svc: MedAccessService = Depe
 
 
 @router.get('/diary', response_model=List[MedPropertyOut])
-async def diary(svc: MedAccessService = Depends()):
-    """Общий дневник состояния: замеры и заметки, не привязанные к эпизоду."""
-    return await svc.diary()
+async def diary(
+        svc: MedAccessService = Depends(),
+        begins: datetime.datetime | None = Query(None),
+        ends: datetime.datetime | None = Query(None),
+        code: str | None = Query(None)):
+    """Общий дневник; период и код показателя можно использовать как фильтры."""
+    return await svc.diary(begins=begins, ends=ends, code=code)
 
 
 @router.post('/diary', response_model=MedPropertyOut,

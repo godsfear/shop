@@ -224,7 +224,13 @@ export const propertyHistory = (id: string) =>
   req<MedProperty[]>(`/me/properties/${id}/history`)
 
 // --- общий дневник состояния: замеры и заметки, доступные всем эпизодам ---
-export const getDiary = () => req<MedProperty[]>('/me/diary')
+export const getDiary = (filter?: { begins?: string; ends?: string; code?: string }) => {
+  const q = new URLSearchParams()
+  if (filter?.begins) q.set('begins', filter.begins)
+  if (filter?.ends) q.set('ends', filter.ends)
+  if (filter?.code) q.set('code', filter.code)
+  return req<MedProperty[]>(`/me/diary${q.size ? `?${q}` : ''}`)
+}
 export const addDiaryEntry = (p: { category?: string; code: string; name?: string;
                                    value: Record<string, unknown> }) =>
   req<MedProperty>('/me/diary', json(p))

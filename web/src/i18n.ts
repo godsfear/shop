@@ -275,6 +275,9 @@ const EN: Record<string, string> = {
     'Momentary readings (temperature, blood pressure, pulse, blood sugar) and your own notes on how you feel. They feed the AI diagnosis along with the history.',
   'своя заметка о самочувствии': 'your note on how you feel',
   '— параметр —': '— parameter —',
+  'Параметр': 'Parameter',
+  'Все параметры': 'All parameters',
+  'записей по выбранным фильтрам нет': 'no entries match the selected filters',
   // сахар: контекст замера и предупреждения (норма зависит от контекста)
   'без уточнения': 'unspecified',
   'натощак': 'fasting',

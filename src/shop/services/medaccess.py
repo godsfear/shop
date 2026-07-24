@@ -490,8 +490,9 @@ class MedAccessService:
     # --- общий дневник состояния: замеры и заметки на медкарте -----------------
     async def _diary_entries(self, pseudonym: uuid.UUID,
                              begins: datetime.datetime | None = None,
-                             ends: datetime.datetime | None = None) -> list[tables.Property]:
-        """Дневниковые события на карте; при границах — только внутри интервала."""
+                             ends: datetime.datetime | None = None,
+                             code: str | None = None) -> list[tables.Property]:
+        """Дневниковые события на карте с необязательными фильтрами."""
         cats = await medical_concepts(self.session)
         categories = [cats[c] for c in ('vital', 'note') if c in cats]
         if not categories:
@@ -506,14 +507,26 @@ class MedAccessService:
             conditions.append(tables.Property.begins >= begins)
         if ends is not None:
             conditions.append(tables.Property.begins <= ends)
+        if code is not None:
+            conditions.append(tables.Property.code == code)
         rows = await self.session.execute(select(tables.Property)
                                           .where(*conditions)
                                           .order_by(tables.Property.begins.desc()))
         return list(rows.scalars().all())
 
-    async def diary(self) -> list[tables.Property]:
-        """Общий для всех эпизодов дневник; активные записи — свежие сверху."""
-        return await self._diary_entries(await self._resolve())
+    async def diary(self, begins: datetime.datetime | None = None,
+                    ends: datetime.datetime | None = None,
+                    code: str | None = None) -> list[tables.Property]:
+        """Общий дневник: свежие сверху, с фильтром по периоду и показателю."""
+        if begins is not None and begins.tzinfo is None:
+            begins = begins.replace(tzinfo=datetime.timezone.utc)
+        if ends is not None and ends.tzinfo is None:
+            ends = ends.replace(tzinfo=datetime.timezone.utc)
+        if begins is not None and ends is not None and begins >= ends:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail='diary_period_invalid')
+        return await self._diary_entries(
+            await self._resolve(), begins=begins, ends=ends, code=code)
 
     async def add_diary_entry(self, data: MedPropertyIn) -> tables.Property:
         """Запись в общий дневник: только разрешённый замер или свободная заметка.
