@@ -723,6 +723,7 @@ export default function Episode() {
         <ul className="rows diary-entries">
           {diary.map((p) => {
             const val = p.value as { value?: unknown; unit?: unknown; context?: string; text?: string }
+            const unit = String(val.unit ?? '').trim()
             if (val.text !== undefined) return (        // свободная заметка
               <li key={p.id} className="row-link">
                 <span className="diary-entry-label">{String(val.text)}</span>
@@ -737,9 +738,10 @@ export default function Episode() {
             return (
               <li key={p.id} className="row-link">
                 <span className="diary-entry-label diary-parameter-name">{p.name || p.code}
+                  {unit && <span className="diary-parameter-unit"> ({unit})</span>}
                   {val.context && <span className="muted"> · {ui(GLUCOSE_CTX[val.context] ?? '')}</span>}</span>
                 <span className="diary-entry-value diary-parameter-value">
-                  {String(val.value ?? '')} {String(val.unit ?? '')}</span>
+                  {String(val.value ?? '')}</span>
                 {alert && <span className="warn diary-entry-alert">⚠ {ui(alert)}</span>}
                 <span className="muted diary-entry-time">{new Date(p.begins).toLocaleString()}</span>
               </li>

@@ -28,12 +28,18 @@ const tileVisibility = (): TileVisibility => {
 function DiaryLabel({ entry }: { entry: MedProperty }) {
   const p = entry
   const v = p.value as { value?: unknown; unit?: unknown; text?: string }
-  if (v.text !== undefined) return <>{String(v.text)}</>
+  const unit = String(v.unit ?? '').trim()
+  if (v.text !== undefined) return (
+    <span className="dashboard-diary-note">{String(v.text)}</span>
+  )
   return (
     <>
-      <b className="diary-parameter-name">{p.name || p.code}</b>
-      <span className="diary-parameter-value">
-        {String(v.value ?? '')} {String(v.unit ?? '')}
+      <span className="dashboard-diary-parameter">
+        <b className="diary-parameter-name">{p.name || p.code}</b>
+        {unit && <span className="diary-parameter-unit">({unit})</span>}
+      </span>
+      <span className="dashboard-diary-value diary-parameter-value">
+        {String(v.value ?? '')}
       </span>
     </>
   )
@@ -176,7 +182,7 @@ export default function Dashboard() {
           <ul className="rows dashboard-diary-rows">
             {dashboardDiary.map((p) => (
               <li key={p.id} className="row-link">
-                <span className="dashboard-diary-label"><DiaryLabel entry={p} /></span>
+                <DiaryLabel entry={p} />
                 <span className="muted dashboard-diary-time">{todayDiary.length > 0
                   ? new Date(p.begins).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                   : new Date(p.begins).toLocaleDateString()}</span>

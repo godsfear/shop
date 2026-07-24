@@ -91,28 +91,30 @@ export default function Shell() {
 
   return (
     <div className="app">
-      <header>
-        <NavLink to="/" className="brand" end>{profileName || ui('здоровье')}</NavLink>
-        <nav className="topnav">
-          <NavLink to="/" end>{ui('Сегодня')}</NavLink>
-          <NavLink to="/profile">{ui('Моя карта')}</NavLink>
-          <NavLink to="/personal">{ui('Личные данные')}</NavLink>
-          <NavLink to="/access">{ui('Доступы')}</NavLink>
-          <NavLink to="/patients">{ui('Доверили мне')}</NavLink>
-          {isAdmin() && <NavLink to="/admin">{ui('Админ')}</NavLink>}
-        </nav>
-        <LangSwitch className="right" />
-        <button className="ghost" onClick={logout}>{ui('Выйти')}</button>
-      </header>
-      {care && (
-        <div className="care-banner">
-          {care.patient
-            ? <>{ui('Карта пациента')}: <b>{care.patient}</b></>
-            : <>{ui('Карта пациента')} …{care.link_id.slice(-6)}</>}
-          {' '}{ui('— доступ по согласию')}
-          <button className="ghost" onClick={leaveCare}>{ui('Выйти из карты')}</button>
-        </div>
-      )}
+      <div className="app-sticky">
+        <header>
+          <NavLink to="/" className="brand" end>{profileName || ui('здоровье')}</NavLink>
+          <nav className="topnav">
+            <NavLink to="/" end>{ui('Сегодня')}</NavLink>
+            <NavLink to="/profile">{ui('Моя карта')}</NavLink>
+            <NavLink to="/personal">{ui('Личные данные')}</NavLink>
+            <NavLink to="/access">{ui('Доступы')}</NavLink>
+            <NavLink to="/patients">{ui('Доверили мне')}</NavLink>
+            {isAdmin() && <NavLink to="/admin">{ui('Админ')}</NavLink>}
+          </nav>
+          <LangSwitch className="right" />
+          <button className="ghost" onClick={logout}>{ui('Выйти')}</button>
+        </header>
+        {care && (
+          <div className="care-banner">
+            {care.patient
+              ? <>{ui('Карта пациента')}: <b>{care.patient}</b></>
+              : <>{ui('Карта пациента')} …{care.link_id.slice(-6)}</>}
+            {' '}{ui('— доступ по согласию')}
+            <button className="ghost" onClick={leaveCare}>{ui('Выйти из карты')}</button>
+          </div>
+        )}
+      </div>
       {needProfile && !hintHidden && !care && (
         <div className="confirm-banner">
           <span>{ui('Заполните рост и вес в «Моей карте» — ИИ будет точнее считать норму питания и оценивать здоровье.')}</span>

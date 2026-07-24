@@ -220,14 +220,17 @@ export default function Diary() {
           {entries.map((p) => {
             const val = p.value as { value?: unknown; unit?: unknown; context?: string; text?: string }
             const isNote = val.text !== undefined
+            const unit = String(val.unit ?? '').trim()
             const alert = p.code === 'glucose' ? glucoseAlert(String(val.value ?? ''), val.context) : ''
             return (
               <li key={p.id} className="row-link">
                 <span className={`diary-entry-label${isNote ? '' : ' diary-parameter-name'}`}>
                   {isNote ? String(val.text) : p.name || p.code}
+                  {!isNote && unit &&
+                    <span className="diary-parameter-unit"> ({unit})</span>}
                   {!isNote && val.context && <span className="muted"> · {ui(GLUCOSE_CTX[val.context] ?? '')}</span>}</span>
                 {!isNote && <span className="diary-entry-value diary-parameter-value">
-                  {String(val.value ?? '')} {String(val.unit ?? '')}</span>}
+                  {String(val.value ?? '')}</span>}
                 {alert && <span className="warn diary-entry-alert">⚠ {ui(alert)}</span>}
                 <span className="muted diary-entry-time">{new Date(p.begins).toLocaleString()}</span>
                 <button className="ghost small diary-entry-remove"
