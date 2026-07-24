@@ -77,6 +77,11 @@ VITAL_SCOPES = {
     "glucose": {"diary"},          # замер в моменте по глюкометру
 }
 
+# Группа крови хранится как ОДИН профильный факт с этим стабильным code.
+# Восемь элементов DICTIONARY["blood"] — допустимые значения этого факта,
+# а не восемь независимо добавляемых свойств.
+BLOOD_TYPE_CODE = "blood_type"
+
 
 def symptom_slots(code: str, localized: bool | None = None) -> list[str]:
     """Слоты уточнения для жалобы. Локализованные (site/character/radiation)

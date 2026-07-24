@@ -7,16 +7,23 @@ import {
 import { SECTIONS, UNITS, t } from '../ui'
 import { ui } from '../i18n'
 
-// Разделы «Моей карты» в порядке показа; vital — особый (значение+история)
+const BLOOD_TYPE_CODE = 'blood_type'
+
+// Разделы «Моей карты» в порядке показа; группа крови входит в «Показатели».
 const PROFILE_SECTIONS = ['vital', 'chronic', 'medication', 'allergy',
                           'surgery', 'heredity', 'social', 'risk_factor',
-                          'blood', 'vaccination']
+                          'vaccination']
 
-function Section({ concept, cid }: { concept: string; cid: string }) {
+function Section({ concept, cid, bloodCid }: {
+  concept: string; cid: string; bloodCid?: string
+}) {
   const [items, setItems] = useState<MedProperty[]>([])
   const [dict, setDict] = useState<DictItem[]>([])
+  const [bloodDict, setBloodDict] = useState<DictItem[]>([])
   const [free, setFree] = useState('')
   const [val, setVal] = useState('')          // значение для vital
+  const [bloodValue, setBloodValue] = useState('')
+  const [bloodConfirmed, setBloodConfirmed] = useState(false)
   const [picked, setPicked] = useState('')
   const [adding, setAdding] = useState(false)
   const [addFormOpen, setAddFormOpen] = useState(false)
@@ -24,16 +31,26 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
   const [hist, setHist] = useState<Record<string, MedProperty[]>>({})
   const vital = concept === 'vital'
   const names = new Map(dict.map((d) => [d.code, d.name]))
+  const bloodNames = new Map(bloodDict.map((d) => [d.code, d.name]))
   const selectedCode = picked || free.trim()
+  const bloodSelected = vital && selectedCode === BLOOD_TYPE_CODE
   const selectedExists = !vital && items.some((i) => i.code === selectedCode)
+  const selectedItem = items.find((i) => i.code === selectedCode)
+  const bloodChanged = bloodSelected && !!selectedItem &&
+    selectedItem.value.value !== bloodValue
 
-  const load = () => listProperties(cid).then(setItems).catch((e) => setErr(e.message))
+  const load = () => Promise.all([
+    listProperties(cid),
+    vital && bloodCid ? listProperties(bloodCid) : Promise.resolve([]),
+  ]).then(([main, blood]) => setItems([...main, ...blood]))
+    .catch((e) => setErr(e.message))
   useEffect(() => {
     // vital: в карте — только профильные показатели (температура — дневник эпизода)
     dictionary(concept).then((d) =>
       setDict(vital ? d.filter((x) => x.scopes?.includes('profile')) : d)).catch(() => {})
+    if (vital && bloodCid) dictionary('blood').then(setBloodDict).catch(() => {})
     load()
-  }, [cid])
+  }, [cid, bloodCid])
 
   const add = async () => {
     setErr('')
@@ -41,13 +58,20 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
     if (!code || selectedExists || adding) return
     setAdding(true)
     try {
-      const value: Record<string, unknown> = vital
-        ? { value: val.trim(), unit: ui(UNITS[code] ?? '') }   // единица — на языке ввода
+      const value: Record<string, unknown> = bloodSelected
+        ? { value: bloodValue }
+        : vital
+          ? { value: val.trim(), unit: ui(UNITS[code] ?? '') } // единица — на языке ввода
         : { status: 'present' }
       const existing = vital ? items.find((i) => i.code === code) : undefined
       if (existing) await updateProperty(existing.id, { ...existing.value, ...value })
-      else await addProperty({ category: cid, code, name: names.get(code), value })
-      setFree(''); setVal(''); setPicked('')
+      else await addProperty({
+        category: bloodSelected ? bloodCid : cid,
+        code,
+        name: bloodSelected ? t(SECTIONS, 'blood') : names.get(code),
+        value,
+      })
+      setFree(''); setVal(''); setBloodValue(''); setBloodConfirmed(false); setPicked('')
       setAddFormOpen(false)
       await load()
     } catch (e) { setErr((e as Error).message) }
@@ -71,7 +95,7 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
   }
 
   const closeAddForm = () => {
-    setFree(''); setVal(''); setPicked('')
+    setFree(''); setVal(''); setBloodValue(''); setBloodConfirmed(false); setPicked('')
     setAddFormOpen(false)
   }
 
@@ -88,32 +112,42 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
       {err && <p className="error">{err}</p>}
       {items.length === 0 && <p className="muted">{ui('пока пусто')}</p>}
       <ul className={'profile-values' + (vital ? ' profile-vitals' : '')}>
-        {items.map((p) => (
-          <li key={p.id} className="profile-value-wrap">
-            <div className="profile-value">
-              <span className="profile-value-name">{p.name || names.get(p.code) || p.code}</span>
-              {vital && <b>{String(p.value.value ?? '')} {String(p.value.unit ?? '')}</b>}
-              {vital && <button className="ghost small profile-history" onClick={() => toggleHist(p)}>
-                {hist[p.id] ? ui('скрыть') : ui('история')}</button>}
-              {!vital && (
-                <button className="profile-remove" type="button"
-                        title={ui('удалить')}
-                        aria-label={`${ui('удалить')}: ${p.name || names.get(p.code) || p.code}`}
-                        onClick={() => close(p)}>×</button>
+        {items.map((p) => {
+          const bloodItem = p.category === bloodCid && p.code === BLOOD_TYPE_CODE
+          const displayValue = bloodItem
+            ? bloodNames.get(String(p.value.value)) || String(p.value.value ?? '')
+            : `${String(p.value.value ?? '')} ${String(p.value.unit ?? '')}`.trim()
+          return (
+            <li key={p.id} className="profile-value-wrap">
+              <div className="profile-value">
+                <span className="profile-value-name">
+                  {bloodItem ? t(SECTIONS, 'blood') : p.name || names.get(p.code) || p.code}
+                </span>
+                {vital && <b>{displayValue}</b>}
+                {vital && <button className="ghost small profile-history" onClick={() => toggleHist(p)}>
+                  {hist[p.id] ? ui('скрыть') : ui('история')}</button>}
+                {!vital && (
+                  <button className="profile-remove" type="button"
+                          title={ui('удалить')}
+                          aria-label={`${ui('удалить')}: ${p.name || names.get(p.code) || p.code}`}
+                          onClick={() => close(p)}>×</button>
+                )}
+              </div>
+              {hist[p.id] && (
+                <ul className="rows hist profile-history-list">
+                  {hist[p.id].map((h) => (
+                    <li key={h.id} className="row-link muted">
+                      <span>{bloodItem
+                        ? bloodNames.get(String(h.value.value)) || String(h.value.value ?? '')
+                        : `${String(h.value.value ?? '')} ${String(h.value.unit ?? '')}`.trim()}</span>
+                      <span>{new Date(h.begins).toLocaleDateString()}</span>
+                    </li>
+                  ))}
+                </ul>
               )}
-            </div>
-            {hist[p.id] && (
-              <ul className="rows hist profile-history-list">
-                {hist[p.id].map((h) => (
-                  <li key={h.id} className="row-link muted">
-                    <span>{String(h.value.value ?? '')} {String(h.value.unit ?? '')}</span>
-                    <span>{new Date(h.begins).toLocaleDateString()}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        ))}
+            </li>
+          )
+        })}
       </ul>
       {addFormOpen && (
         <div className="profile-editor">
@@ -128,17 +162,42 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
                                          disabled={!vital && items.some((i) => i.code === d.code)}>
                   {d.name}
                 </option>)}
+                {vital && bloodCid && (
+                  <option value={BLOOD_TYPE_CODE}>{t(SECTIONS, 'blood')}</option>
+                )}
               </select>
             )}
             {!vital && <input placeholder={ui('свой вариант')} value={free}
                               onChange={(e) => { setFree(e.target.value); if (e.target.value) setPicked('') }} />}
-            {vital && <input placeholder={ui('значение')} value={val}
-                             onChange={(e) => setVal(e.target.value)} />}
+            {vital && bloodSelected && (
+              <select value={bloodValue} onChange={(e) => {
+                setBloodValue(e.target.value); setBloodConfirmed(false)
+              }}>
+                <option value="">{ui('— выберите группу крови —')}</option>
+                {bloodDict.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
+              </select>
+            )}
+            {vital && !bloodSelected && <input placeholder={ui('значение')} value={val}
+                                                onChange={(e) => setVal(e.target.value)} />}
           </div>
+          {bloodChanged && (
+            <>
+              <p className="muted profile-blood-warning">
+                {ui('Изменение группы крови сохранится в истории с датой. Указывайте только лабораторно подтверждённое значение.')}
+              </p>
+              <label className="profile-confirm">
+                <input type="checkbox" checked={bloodConfirmed}
+                       onChange={(e) => setBloodConfirmed(e.target.checked)} />
+                <span>{ui('Подтверждаю изменение группы крови')}</span>
+              </label>
+            </>
+          )}
           <div className="inline profile-editor-actions">
-            <button onClick={add} disabled={adding || (vital ? !(picked && val.trim())
-              : !selectedCode || selectedExists)}>
-              {vital ? ui('Записать') : ui('Добавить')}
+            <button onClick={add} disabled={adding || (bloodSelected
+              ? !(bloodValue && (!selectedItem ||
+                  (bloodChanged && bloodConfirmed)))
+              : vital ? !(picked && val.trim()) : !selectedCode || selectedExists)}>
+              {vital ? selectedItem ? ui('Изменить') : ui('Записать') : ui('Добавить')}
             </button>
             <button className="ghost" type="button" onClick={closeAddForm}>{ui('Отмена')}</button>
           </div>
@@ -159,7 +218,8 @@ export default function Profile() {
       <p className="muted">{ui('Постоянные данные о здоровье. Врач увидит их по вашему согласию; опрос при новом эпизоде лишь попросит подтвердить актуальность.')}</p>
       <div className="tiles profile-tiles">
         {PROFILE_SECTIONS.filter((s) => cs[s]).map((s) =>
-          <Section key={s} concept={s} cid={cs[s]} />)}
+          <Section key={s} concept={s} cid={cs[s]}
+                   bloodCid={s === 'vital' ? cs.blood : undefined} />)}
       </div>
     </div>
   )

@@ -166,6 +166,55 @@ async def test_main():
         await s.rollback()
     print('[ok] профильный vital единственный; дневниковые замеры отдельны и множественны')
 
+    # --- группа крови: один стабильный факт внутри блока показателей ---
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        # Обратная совместимость: старый клиент присылал выбранную группу как code.
+        blood = await svc.add_property(MedPropertyIn(
+            category=ids['blood'], code='a_pos', name='A(II) Rh+',
+            value={'status': 'present'}))
+    assert blood.code == 'blood_type'
+    assert blood.name == 'Группа крови'
+    assert blood.value == {'value': 'a_pos', 'source': 'profile'}
+
+    # Другой вариант не становится второй активной записью.
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        with pytest.raises(HTTPException) as ei:
+            await svc.add_property(MedPropertyIn(
+                category=ids['blood'], code='b_neg', name='B(III) Rh−',
+                value={'status': 'present'}))
+        assert ei.value.status_code == 409 and ei.value.detail == 'property_exists'
+
+    # Изменение валидируется по справочнику, сохраняет id и старое значение.
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        changed = await svc.update_property(blood.id, {'value': 'ab_neg'})
+        history = await svc.property_history(changed.id)
+    assert changed.id == blood.id
+    assert [p.value['value'] for p in history] == ['a_pos', 'ab_neg']
+
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        with pytest.raises(HTTPException) as ei:
+            await svc.update_property(blood.id, {'value': 'unknown'})
+        assert ei.value.status_code == 422 and ei.value.detail == 'blood_type_invalid'
+        with pytest.raises(HTTPException) as ei:
+            await svc.close_property(blood.id)
+        assert ei.value.status_code == 409
+        assert ei.value.detail == 'profile_fixed_fact_cannot_close'
+
+    # Канонический code вместе с частичным индексом закрывает гонку вставок.
+    async with Sess() as s:
+        s.add(t.Property(
+            category=ids['blood'], code='blood_type', name='Группа крови',
+            table='pseudonym', objectid=pseudonym_id,
+            value={'value': 'o_pos', 'source': 'profile'}))
+        with pytest.raises(IntegrityError):
+            await s.commit()
+        await s.rollback()
+    print('[ok] группа крови — один проверяемый и версионируемый профильный факт')
+
     # --- закрыть сессию -> снова 401 ---
     async with Sess() as s:
         svc = _svc(s, ks, payload)

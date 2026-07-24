@@ -24,8 +24,8 @@ from ..versioning import versioned_expire, versioned_update
 from ..cache import get_cache
 from ..database import db_helper
 from ..keyservice import KeyServiceError, PolicyError
-from ..medical_seed import (SEX_SPECIFIC, VITAL_SCOPES, medical_concepts,
-                            symptom_slots)
+from ..medical_seed import (BLOOD_TYPE_CODE, SEX_SPECIFIC, VITAL_SCOPES,
+                            medical_concepts, symptom_slots)
 from ..models.auth import TokenPayload
 from ..models.entity import EntityCreate, EntityUpdate
 from ..models.medical import (AnamnesisEdit, DiagnosisIn, EpisodeIn,
@@ -330,10 +330,27 @@ class MedAccessService:
 
     async def add_property(self, data: MedPropertyIn) -> tables.Property:
         pseudonym = await self._resolve()
+        concepts = await medical_concepts(self.session)
+        code, name, value = data.code, data.name, dict(data.value)
+        blood_category = concepts.get('blood')
+        if blood_category is not None and data.category == blood_category:
+            # Старые клиенты присылали выбранную группу как code (a_pos и т.п.).
+            # Новый контракт хранит один стабильный blood_type, а сам выбор —
+            # в value, чтобы изменение версионировало тот же id.
+            selected = value.get('value')
+            if code != BLOOD_TYPE_CODE and selected is None:
+                selected = code
+            await self._validate_blood_type(selected, data.category)
+            code = BLOOD_TYPE_CODE
+            value = {'value': selected}
+            name = (await self.session.execute(
+                select(tables.Category.name).where(
+                    tables.Category.id == data.category)
+            )).scalar_one_or_none() or name
         conditions = [
             tables.Property.table == 'pseudonym',
             tables.Property.objectid == pseudonym,
-            tables.Property.code == data.code,
+            tables.Property.code == code,
             tables.Property.ends.is_(None),
             tables.Property.value['source'].astext.is_distinct_from('diary'),
         ]
@@ -350,11 +367,11 @@ class MedAccessService:
             return await PropertyService(session=self.session).create(
                 PropertyCreate(
                     category=data.category,
-                    code=data.code,
-                    name=data.name,
+                    code=code,
+                    name=name,
                     table='pseudonym',
                     objectid=pseudonym,
-                    value={**data.value, 'source': 'profile'},
+                    value={**value, 'source': 'profile'},
                 ),
                 creator=self.payload.sub,
             )
@@ -367,6 +384,21 @@ class MedAccessService:
                                     detail='property_exists')
             raise
 
+    async def _validate_blood_type(
+            self, selected: object, category: uuid.UUID | None) -> None:
+        """Группа крови обязана быть значением из справочника blood."""
+        if not isinstance(selected, str):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail='blood_type_invalid')
+        exists = (await self.session.execute(
+            select(tables.Entity.id).where(
+                tables.Entity.category == category,
+                tables.Entity.code == selected)
+        )).scalars().first()
+        if exists is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail='blood_type_invalid')
+
     async def _gate_property(self, property_id: uuid.UUID) -> tables.Property:
         """Запись обязана висеть на псевдониме вызывающего (чужая/нет -> 404)."""
         pseudonym = await self._resolve()
@@ -378,8 +410,15 @@ class MedAccessService:
     async def update_property(self, property_id: uuid.UUID, value: dict) -> tables.Property:
         """Новое значение записи (рост, дозировка...); версия-копия — история бесплатно."""
         row = await self._gate_property(property_id)
+        concepts = await medical_concepts(self.session)
         source = (row.value or {}).get('source')
-        value = {**value, 'source': source or 'profile'}
+        blood_category = concepts.get('blood')
+        if blood_category is not None and row.category == blood_category:
+            selected = value.get('value')
+            await self._validate_blood_type(selected, row.category)
+            value = {'value': selected, 'source': source or 'profile'}
+        else:
+            value = {**value, 'source': source or 'profile'}
         updated = await versioned_update(self.session, tables.Property, row.id, {'value': value})
         await self.session.commit()
         return updated
@@ -388,10 +427,14 @@ class MedAccessService:
         """Закрыть запись (перестал принимать лекарство и т.п.) — строка уходит в историю."""
         row = await self._gate_property(property_id)
         concepts = await medical_concepts(self.session)
-        if (row.category == concepts.get('vital')
+        fixed_categories = {
+            cid for cid in (concepts.get('vital'), concepts.get('blood'))
+            if cid is not None
+        }
+        if (row.category in fixed_categories
                 and (row.value or {}).get('source') != 'diary'):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                detail='profile_vital_cannot_close')
+                                detail='profile_fixed_fact_cannot_close')
         closed = await versioned_expire(self.session, tables.Property, row.id)
         await self.session.commit()
         return closed

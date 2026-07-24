@@ -159,6 +159,11 @@ a:hover { text-decoration: underline; }
 .profile-remove:hover { background: var(--danger-soft); color: var(--danger); filter: none; }
 .profile-vitals .profile-value-name { flex: 1; }
 .profile-vitals b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.profile-blood-warning { margin: 8px 0 4px; }
+.profile-confirm { display: flex; align-items: flex-start; gap: 8px; }
+.profile-confirm input[type=checkbox] {
+  width: auto; min-width: 0; padding: 0; margin-top: 3px;
+}
 .profile-history { margin-left: 2px; }
 .profile-history-list { margin: 0 0 4px 12px; }
 .profile-editor { margin-top: 8px; padding: 10px; border: 1px solid var(--line);
