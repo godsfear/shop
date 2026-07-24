@@ -236,9 +236,13 @@ export const addDiaryEntry = (p: { category?: string; code: string; name?: strin
   req<MedProperty>('/me/diary', json(p))
 
 // --- сон: журнал ночей + оценка ИИ за период (ставится при записи) ---
-export interface SleepAssessment { quality?: string; summary?: string; status?: string; nights?: number }
+export interface SleepAssessment {
+  quality?: string; summary?: string; status?: string; nights?: number
+  current_quality?: string; current_summary?: string; assessed_day?: string
+}
 export interface SleepJournal { entries: MedProperty[]; assessment: SleepAssessment | null }
-export const getSleep = () => req<SleepJournal>('/me/sleep')
+export const getSleep = (day?: string) =>
+  req<SleepJournal>(`/me/sleep${day ? `?day=${encodeURIComponent(day)}` : ''}`)
 export const addSleep = (day: string, value: Record<string, unknown>) =>
   req<MedProperty>('/me/sleep', json({ day, value }))
 

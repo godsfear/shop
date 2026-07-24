@@ -842,6 +842,26 @@ class MedAccessService:
                 'meals': [out_meal(p) for p in meals], 'totals': totals}
 
     # --- сон: журнал ночей + оценка ИИ за период (один раз при записи) --------
+    async def _queue_sleep_assessment(
+            self, pseudonym: uuid.UUID, day: str,
+            assess: tables.Property | None) -> dict:
+        """Поставить оценку ночи и сразу пометить её датой как pending."""
+        age, sex, residence = await self._owner_identity()
+        request_sleep_assess(
+            self.session, pseudonym, age, sex, residence, lang=self.lang, day=day)
+        pend = {**(assess.value if assess else {}), 'status': 'pending',
+                'assessed_day': day}
+        # На дашборде нельзя показывать вчерашний current-текст под новой датой,
+        # пока консумер ещё считает оценку только что добавленной ночи.
+        pend.pop('current_quality', None)
+        pend.pop('current_summary', None)
+        if assess is not None:
+            await versioned_update(self.session, tables.Property, assess.id, {'value': pend})
+        else:
+            self.session.add(tables.Property(table='pseudonym', objectid=pseudonym,
+                                             code=ASSESS_CODE, value=pend))
+        return pend
+
     async def add_sleep(self, day: str, value: dict) -> tables.Property:
         """Запись ночи (Property на псевдониме) + постановка оценки сна за период.
         Оценку пересчитываем при каждой записи; прежний текст висит со
@@ -856,22 +876,15 @@ class MedAccessService:
                                name=day, value={**value, 'date': day})
         self.session.add(prop)
         await self.session.flush()
-        age, sex, residence = await self._owner_identity()
-        request_sleep_assess(self.session, pseudonym, age, sex, residence, lang=self.lang)
         assess = (await self.session.execute(select(tables.Property).where(
             tables.Property.table == 'pseudonym',
             tables.Property.objectid == pseudonym,
             tables.Property.code == ASSESS_CODE))).scalars().first()
-        pend = {**(assess.value if assess else {}), 'status': 'pending'}
-        if assess is not None:
-            await versioned_update(self.session, tables.Property, assess.id, {'value': pend})
-        else:
-            self.session.add(tables.Property(table='pseudonym', objectid=pseudonym,
-                                             code=ASSESS_CODE, value=pend))
+        await self._queue_sleep_assessment(pseudonym, day, assess)
         await self.session.commit()
         return prop
 
-    async def sleep_journal(self) -> dict:
+    async def sleep_journal(self, current_day: str | None = None) -> dict:
         """Журнал ночей (свежие сверху) + последняя оценка сна ИИ."""
         pseudonym = await self._resolve()
         cats = await medical_concepts(self.session)
@@ -884,9 +897,20 @@ class MedAccessService:
             tables.Property.table == 'pseudonym',
             tables.Property.objectid == pseudonym,
             tables.Property.code == ASSESS_CODE))).scalars().first()
+        assessment = assess.value if assess else None
+        has_current = current_day is not None and any(
+            str((entry.value or {}).get('date')) == current_day for entry in entries)
+        if has_current and (
+                assessment is None or assessment.get('assessed_day') != current_day):
+            # Обратная совместимость: сегодняшняя ночь могла быть записана до
+            # появления current-проекции. Первый запрос дашборда ставит одну
+            # задачу; assessed_day не даёт ставить дубли при следующем GET.
+            assessment = await self._queue_sleep_assessment(
+                pseudonym, current_day, assess)
+            await self.session.commit()
         out = MedPropertyOut.model_validate
         return {'entries': [out(p) for p in entries],
-                'assessment': assess.value if assess else None}
+                'assessment': assessment}
 
     # --- интервью (сбор анамнеза по протоколу) — за теми же воротами эпизода ---
     async def interview_open(self, episode_id: uuid.UUID) -> dict:

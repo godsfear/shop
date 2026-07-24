@@ -287,9 +287,15 @@ async def add_meal(day: str = Form(...),
 
 # --- сон: журнал ночей + оценка ИИ за период (запрашивается один раз при записи) ---
 @router.get('/sleep')
-async def sleep(svc: MedAccessService = Depends()):
+async def sleep(day: str | None = Query(None), svc: MedAccessService = Depends()):
     """Журнал ночей (свежие сверху) + последняя оценка сна ИИ."""
-    return await svc.sleep_journal()
+    if day is not None:
+        try:
+            datetime.date.fromisoformat(day)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail='bad_day') from None
+    return await svc.sleep_journal(current_day=day)
 
 
 @router.post('/sleep', response_model=MedPropertyOut,

@@ -2,6 +2,7 @@
 (заглушка без Gemini). Оценка ставится один раз при записи (pending),
 консумер дозаполняет (done). Требует Redis (owner-сессия)."""
 import datetime
+import os
 
 from sqlalchemy import select, func, text
 from sqlalchemy.pool import NullPool
@@ -19,7 +20,8 @@ from shop.services.user import UserService
 from shop.settings import settings
 from conftest import drain
 
-URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
+URI = os.getenv(
+    'TEST_DATABASE_URI', 'postgresql+asyncpg://shop:secret@localhost:5432/shop')
 DAY = datetime.date.today().isoformat()
 
 
@@ -80,8 +82,39 @@ async def test_main():
         j2 = await _svc(s, ks, payload).sleep_journal()
     assert j2['assessment']['status'] == 'done', j2['assessment']
     assert j2['assessment'].get('summary'), j2['assessment']
+    assert j2['assessment'].get('current_summary'), j2['assessment']
+    assert j2['assessment'].get('assessed_day') == DAY, j2['assessment']
     assert j2['assessment'].get('nights') == 1, j2['assessment']
     print('[ok] оценка сна дозаполнена консумером (заглушка)')
+
+    # Старая оценка без current-проекции пересчитывается один раз при запросе
+    # дашборда за текущий день; повторный GET не плодит второе событие.
+    async with Sess() as s:
+        row = (await s.execute(select(t.Property).where(
+            t.Property.code == ASSESS_CODE,
+            t.Property.version_of.is_(None)))).scalars().one()
+        legacy = dict(row.value)
+        legacy.pop('assessed_day', None)
+        legacy.pop('current_quality', None)
+        legacy.pop('current_summary', None)
+        row.value = legacy
+        await s.commit()
+    async with Sess() as s:
+        legacy_journal = await _svc(s, ks, payload).sleep_journal(current_day=DAY)
+    assert legacy_journal['assessment']['status'] == 'pending'
+    assert legacy_journal['assessment']['assessed_day'] == DAY
+    assert 'current_summary' not in legacy_journal['assessment']
+    async with Sess() as s:
+        await _svc(s, ks, payload).sleep_journal(current_day=DAY)
+        pending_current = (await s.execute(select(func.count()).select_from(t.Outbox)
+                           .where(t.Outbox.processed.is_(None),
+                                  t.Outbox.topic == 'sleep.assess'))).scalar_one()
+    assert pending_current == 1
+    await drain(Sess)
+    async with Sess() as s:
+        current = await _svc(s, ks, payload).sleep_journal(current_day=DAY)
+    assert current['assessment'].get('current_summary')
+    print('[ok] старая оценка лениво дополнена current-проекцией без дублей')
 
     # --- запись второй ночи не плодит вторую строку оценки (versioned_update) ---
     async with Sess() as s:

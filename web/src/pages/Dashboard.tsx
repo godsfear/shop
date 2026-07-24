@@ -98,7 +98,7 @@ export default function Dashboard() {
     }).catch((e) => setErr((e as Error).message))
     load()
     getNutrition(localDay()).then(setNutri).catch(() => {})
-    getSleep().then(setSleep).catch(() => {})
+    getSleep(localDay()).then(setSleep).catch(() => {})
     getDiary().then(setDiary).catch(() => {})
   }, [])
 
@@ -126,6 +126,11 @@ export default function Dashboard() {
   const closed = eps.filter((e) => e.closed)
   const todayDiary = diary.filter((p) => isToday(p.begins))
   const dashboardDiary = todayDiary.length > 0 ? todayDiary : diary.slice(0, 2)
+  const today = localDay()
+  const hasTodaySleep = sleep?.entries.some((p) =>
+    String((p.value as Record<string, unknown>).date ?? '') === today) ?? false
+  const currentSleepAssessment = hasTodaySleep && sleep?.assessment?.assessed_day === today
+    ? sleep.assessment : null
 
   return (
     <div>
@@ -214,14 +219,16 @@ export default function Dashboard() {
         <header><h3>{ui('Сон')}</h3>
           <Link to="/sleep"><button className="ghost">{ui('Открыть')}</button></Link>
         </header>
-        {sleep?.assessment?.summary ? (
+        {currentSleepAssessment?.current_summary ? (
           <>
-            {sleep.assessment.quality && sleep.assessment.quality !== '—' &&
-              <p><b>{ui('Качество')}: {sleep.assessment.quality}</b>
-                {sleep.assessment.status === 'pending' && <span className="muted"> · {ui('обновляется…')}</span>}</p>}
-            <p className="muted">{sleep.assessment.summary}</p>
+            {currentSleepAssessment.current_quality
+              && currentSleepAssessment.current_quality !== '—' &&
+              <p><b>{ui('Качество')}: {currentSleepAssessment.current_quality}</b>
+                {currentSleepAssessment.status === 'pending' &&
+                  <span className="muted"> · {ui('обновляется…')}</span>}</p>}
+            <p className="muted">{currentSleepAssessment.current_summary}</p>
           </>
-        ) : sleep && sleep.entries.length > 0
+        ) : hasTodaySleep
           ? <p className="muted">{ui('Оценка сна обновляется…')}</p>
           : <p className="muted">{ui('Запишите ночь — сон, пробуждения, пульс, HRV.')}</p>}
       </section>}

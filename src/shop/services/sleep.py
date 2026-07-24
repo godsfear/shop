@@ -26,6 +26,9 @@ _PERIOD = 14                     # сколько последних ночей 
 _ASSESS_PROMPT = (
     'Ты — врач-сомнолог. По журналу сна за последние ночи и данным пациента '
     'дай краткую оценку качества сна ЗА ПЕРИОД и 1–2 конкретные рекомендации. '
+    'Отдельно оцени ТОЛЬКО текущую ночь из поля current: current_quality — '
+    'одно слово, current_summary — 1–2 коротких предложения без выводов по '
+    'предыдущим ночам. '
     'Смотри на продолжительность, эффективность, число и длительность '
     'пробуждений, ночной пульс, HRV, SpO2, утреннее самочувствие и их динамику. '
     'Учитывай возраст, пол и хронические состояния. quality — одно слово: '
@@ -37,17 +40,21 @@ _ASSESS_SCHEMA = {
     'properties': {
         'quality': {'type': 'STRING'},
         'summary': {'type': 'STRING'},
+        'current_quality': {'type': 'STRING'},
+        'current_summary': {'type': 'STRING'},
     },
-    'required': ['quality', 'summary'],
+    'required': ['quality', 'summary', 'current_quality', 'current_summary'],
 }
 
 
 def request_sleep_assess(session: AsyncSession, pseudonym: uuid.UUID,
                          age: int | None, sex: str | None,
-                         residence: dict | None = None, lang: str = 'ru') -> None:
+                         residence: dict | None = None, lang: str = 'ru',
+                         day: str | None = None) -> None:
     """Оценку сна за период в очередь — в транзакции записи ночи."""
     emit(session, TOPIC_SLEEP, {'pseudonym': str(pseudonym), 'age': age,
-                                'sex': sex, 'residence': residence, 'lang': lang})
+                                'sex': sex, 'residence': residence, 'lang': lang,
+                                'day': day})
 
 
 @outbox_handler(TOPIC_SLEEP)
@@ -60,6 +67,10 @@ async def _assess(session: AsyncSession, payload: dict) -> None:
         tables.Property.objectid == pseudonym,
         tables.Property.category == cats.get('sleep'))
         .order_by(tables.Property.begins.desc()).limit(_PERIOD))).scalars().all()]
+    assessed_day = payload.get('day') or (
+        str(nights[0].get('date')) if nights and nights[0].get('date') else None)
+    current = next(
+        (night for night in nights if str(night.get('date')) == assessed_day), None)
 
     async def latest(category: uuid.UUID | None, code: str) -> dict | None:
         if category is None:
@@ -81,10 +92,14 @@ async def _assess(session: AsyncSession, payload: dict) -> None:
         'residence': payload.get('residence'),
         'height': await latest(cats.get('vital'), 'height'),
         'weight': await latest(cats.get('vital'), 'weight'),
-        'chronic': list(chronic), 'nights': nights,
+        'chronic': list(chronic), 'nights': nights, 'current': current,
     }
 
-    result = {'quality': '—', 'summary': 'оценка недоступна (нет ключа ИИ)'}
+    result = {
+        'quality': '—', 'summary': 'оценка недоступна (нет ключа ИИ)',
+        'current_quality': '—',
+        'current_summary': 'оценка недоступна (нет ключа ИИ)',
+    }
     if settings.google_api_key and nights:
         try:
             result = await _gemini(
@@ -94,7 +109,8 @@ async def _assess(session: AsyncSession, payload: dict) -> None:
             logger.warning('sleep: Gemini недоступен (%r) — заглушка', e)
 
     value = {**result, 'status': 'done', 'source': 'ai',
-             'nights': len(nights), 'model': settings.gemini_model}
+             'nights': len(nights), 'assessed_day': assessed_day,
+             'model': settings.gemini_model}
     existing = (await session.execute(select(tables.Property).where(
         tables.Property.table == 'pseudonym',
         tables.Property.objectid == pseudonym,
