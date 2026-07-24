@@ -6,6 +6,7 @@ import {
 } from '../api'
 import { SECTIONS, UNITS, t } from '../ui'
 import { ui } from '../i18n'
+import { normalizeVitalInput, vitalInputHint } from '../vitals'
 
 const BLOOD_TYPE_CODE = 'blood_type'
 
@@ -24,6 +25,7 @@ function Section({ concept, cid, bloodCid }: {
   const [val, setVal] = useState('')          // значение для vital
   const [bloodValue, setBloodValue] = useState('')
   const [bloodConfirmed, setBloodConfirmed] = useState(false)
+  const [valueErr, setValueErr] = useState('')
   const [picked, setPicked] = useState('')
   const [adding, setAdding] = useState(false)
   const [addFormOpen, setAddFormOpen] = useState(false)
@@ -36,6 +38,7 @@ function Section({ concept, cid, bloodCid }: {
   const bloodSelected = vital && selectedCode === BLOOD_TYPE_CODE
   const selectedExists = !vital && items.some((i) => i.code === selectedCode)
   const selectedItem = items.find((i) => i.code === selectedCode)
+  const selectedRule = dict.find((i) => i.code === selectedCode)?.validation
   const bloodChanged = bloodSelected && !!selectedItem &&
     selectedItem.value.value !== bloodValue
 
@@ -56,12 +59,18 @@ function Section({ concept, cid, bloodCid }: {
     setErr('')
     const code = selectedCode
     if (!code || selectedExists || adding) return
+    let normalizedValue = val.trim()
+    if (vital && !bloodSelected) {
+      const checked = normalizeVitalInput(val, selectedRule)
+      if (!checked.value) { setValueErr(checked.error || ''); return }
+      normalizedValue = checked.value
+    }
     setAdding(true)
     try {
       const value: Record<string, unknown> = bloodSelected
         ? { value: bloodValue }
         : vital
-          ? { value: val.trim(), unit: ui(UNITS[code] ?? '') } // единица — на языке ввода
+          ? { value: normalizedValue, unit: ui(UNITS[code] ?? '') } // единица — на языке ввода
         : { status: 'present' }
       const existing = vital ? items.find((i) => i.code === code) : undefined
       if (existing) await updateProperty(existing.id, { ...existing.value, ...value })
@@ -71,7 +80,8 @@ function Section({ concept, cid, bloodCid }: {
         name: bloodSelected ? t(SECTIONS, 'blood') : names.get(code),
         value,
       })
-      setFree(''); setVal(''); setBloodValue(''); setBloodConfirmed(false); setPicked('')
+      setFree(''); setVal(''); setValueErr('')
+      setBloodValue(''); setBloodConfirmed(false); setPicked('')
       setAddFormOpen(false)
       await load()
     } catch (e) { setErr((e as Error).message) }
@@ -95,7 +105,8 @@ function Section({ concept, cid, bloodCid }: {
   }
 
   const closeAddForm = () => {
-    setFree(''); setVal(''); setBloodValue(''); setBloodConfirmed(false); setPicked('')
+    setFree(''); setVal(''); setValueErr('')
+    setBloodValue(''); setBloodConfirmed(false); setPicked('')
     setAddFormOpen(false)
   }
 
@@ -154,7 +165,7 @@ function Section({ concept, cid, bloodCid }: {
           <div className="inline">
             {dict.length > 0 && (
               <select value={picked} onChange={(e) => {
-                setPicked(e.target.value)
+                setPicked(e.target.value); setValueErr('')
                 if (e.target.value) setFree('')
               }}>
                 <option value="">{ui('— из справочника —')}</option>
@@ -177,9 +188,17 @@ function Section({ concept, cid, bloodCid }: {
                 {bloodDict.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
               </select>
             )}
-            {vital && !bloodSelected && <input placeholder={ui('значение')} value={val}
-                                                onChange={(e) => setVal(e.target.value)} />}
+            {vital && !bloodSelected && <input
+              placeholder={selectedRule?.example || ui('значение')}
+              inputMode={selectedRule?.kind === 'blood_pressure' ? 'text'
+                : selectedRule?.kind === 'number' && selectedRule.decimals === 0
+                  ? 'numeric' : 'decimal'}
+              value={val}
+              onChange={(e) => { setVal(e.target.value); setValueErr('') }} />}
           </div>
+          {vital && !bloodSelected && selectedCode && vitalInputHint(selectedRule) &&
+            <p className="muted profile-value-hint">{vitalInputHint(selectedRule)}</p>}
+          {valueErr && <p className="error profile-value-hint">{valueErr}</p>}
           {bloodChanged && (
             <>
               <p className="muted profile-blood-warning">

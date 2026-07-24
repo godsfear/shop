@@ -92,6 +92,11 @@ async def test_main():
     async with Sess() as s:
         props = await _svc(s, ks, payload).properties()
     assert len(props) == 1 and props[0].code == 'allergy', props
+    async with Sess() as s:
+        vital_dict = await _svc(s, ks, payload).dictionary('vital')
+    rules = {item['code']: item['validation'] for item in vital_dict}
+    assert rules['temperature']['decimals'] == 1
+    assert rules['blood_pressure']['kind'] == 'blood_pressure'
     out = MedPropertyOut.model_validate(props[0])
     assert not hasattr(out, 'objectid'), 'проекция не должна раскрывать псевдоним'
     print('[ok] сессия открыта, данные видны, objectid (псевдоним) скрыт')
@@ -122,7 +127,7 @@ async def test_main():
         svc = _svc(s, ks, payload)
         await svc.add_diary_entry(MedPropertyIn(
             category=ids['vital'], code='blood_pressure', name='Давление',
-            value={'value': '135/90', 'unit': 'мм рт. ст.'}))
+            value={'value': ' 135 / 90 ', 'unit': 'мм рт. ст.'}))
         await svc.add_diary_entry(MedPropertyIn(
             category=ids['vital'], code='blood_pressure', name='Давление',
             value={'value': '130/85', 'unit': 'мм рт. ст.'}))
@@ -134,6 +139,24 @@ async def test_main():
         ('blood_pressure', '120/80')
     ]
     assert [p.value['value'] for p in diary] == ['130/85', '135/90']
+
+    # Формат и технический диапазон проверяет сервер, не только форма.
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        temperature = await svc.add_diary_entry(MedPropertyIn(
+            category=ids['vital'], code='temperature', name='Температура',
+            value={'value': '37,2', 'unit': '°C'}))
+        assert temperature.value['value'] == '37.2'
+        with pytest.raises(HTTPException) as ei:
+            await svc.add_diary_entry(MedPropertyIn(
+                category=ids['vital'], code='temperature', name='Температура',
+                value={'value': '37.25', 'unit': '°C'}))
+        assert ei.value.detail == 'vital_format_invalid:temperature'
+        with pytest.raises(HTTPException) as ei:
+            await svc.add_diary_entry(MedPropertyIn(
+                category=ids['vital'], code='blood_pressure', name='Давление',
+                value={'value': '80/120', 'unit': 'мм рт. ст.'}))
+        assert ei.value.detail == 'vital_order_invalid:blood_pressure'
 
     # Повторное профильное значение обновляет тот же id и попадает в историю.
     async with Sess() as s:
@@ -152,7 +175,7 @@ async def test_main():
             await svc.close_property(pressure.id)
         assert ei.value.status_code == 409
         await svc.close_property(diary[0].id)
-        assert len(await svc.diary()) == 1
+        assert len(await svc.diary()) == 2  # второй замер давления + температура
 
     # Даже конкурентный/прямой обход сервисной проверки упирается в индекс БД;
     # множественные source=diary выше при этом разрешены.

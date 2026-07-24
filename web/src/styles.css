@@ -160,6 +160,7 @@ a:hover { text-decoration: underline; }
 .profile-vitals .profile-value-name { flex: 1; }
 .profile-vitals b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .profile-blood-warning { margin: 8px 0 4px; }
+.profile-value-hint { margin: 6px 0 0; }
 .profile-confirm { display: flex; align-items: flex-start; gap: 8px; }
 .profile-confirm input[type=checkbox] {
   width: auto; min-width: 0; padding: 0; margin-top: 3px;

@@ -478,6 +478,26 @@ const ERRORS: Record<string, [string, string]> = {
     'a profile value can be changed but cannot be deleted',
   ],
   blood_type_invalid: ['выберите группу крови из справочника', 'select a blood type from the dictionary'],
+  profile_vital_invalid: [
+    'этот показатель нельзя хранить как стандартное значение',
+    'this vital cannot be stored as a standard value',
+  ],
+  vital_unknown_invalid: [
+    'для показателя не настроено правило ввода',
+    'no input rule is configured for this vital',
+  ],
+  vital_format_invalid: [
+    'значение не соответствует формату показателя',
+    'the value does not match the vital format',
+  ],
+  vital_range_invalid: [
+    'значение выходит за допустимый технический диапазон',
+    'the value is outside the allowed technical range',
+  ],
+  vital_order_invalid: [
+    'верхнее давление должно быть больше нижнего',
+    'systolic pressure must be greater than diastolic',
+  ],
   manage_exists: ['у получателя уже есть manage-доступ', 'the grantee already has manage access'],
   consent_required: ['нет доступа: требуется согласие владельца', 'no access: owner consent required'],
   owner_decision_only: ['решает владелец данных или управляющий', 'only the owner or a manager decides'],

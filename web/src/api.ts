@@ -262,7 +262,19 @@ export const interviewAnswer = (id: string, body: Record<string, unknown>) =>
 
 // --- справочники концептов (reference): чипы выбора ---
 // scopes (только vital): где уместен показатель — profile и/или diary
-export interface DictItem { code: string; name: string; scopes?: string[] }
+export type VitalValidation =
+  | {
+      kind: 'number'; min: number; max: number; decimals: number; example: string
+    }
+  | {
+      kind: 'blood_pressure'
+      systolic_min: number; systolic_max: number
+      diastolic_min: number; diastolic_max: number
+      example: string
+    }
+export interface DictItem {
+  code: string; name: string; scopes?: string[]; validation?: VitalValidation
+}
 export const dictionary = (concept: string) => req<DictItem[]>(`/me/dictionary/${concept}`)
 
 // подписи доменных кодов (единый источник — БД), см. ui.ts/loadMeta

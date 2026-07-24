@@ -25,7 +25,7 @@ from ..cache import get_cache
 from ..database import db_helper
 from ..keyservice import KeyServiceError, PolicyError
 from ..medical_seed import (BLOOD_TYPE_CODE, SEX_SPECIFIC, VITAL_SCOPES,
-                            medical_concepts, symptom_slots)
+                            VITAL_VALIDATION, medical_concepts, symptom_slots)
 from ..models.auth import TokenPayload
 from ..models.entity import EntityCreate, EntityUpdate
 from ..models.medical import (AnamnesisEdit, DiagnosisIn, EpisodeIn,
@@ -38,6 +38,7 @@ from ..services.entity import EntityService
 from ..services.evaluate import _upsert, request_evaluate, request_plan
 from ..services.nutrition import NORM_CODE, request_meal_estimate, request_norm
 from ..services.sleep import ASSESS_CODE, request_sleep_assess
+from ..vitals import VitalValueError, normalize_vital_value
 from ..services.extract import request_extract
 from ..services.files import FileStore
 from ..services.fsm import FSMService
@@ -221,6 +222,7 @@ class MedAccessService:
         if concept_code == 'vital':   # области применения: profile и/или diary
             for i in items:
                 i['scopes'] = sorted(VITAL_SCOPES.get(i['code'], {'profile', 'diary'}))
+                i['validation'] = VITAL_VALIDATION.get(i['code'])
         # owner-режим: скрыть не соответствующее полу владельца (кесарево у
         # мужчины). Слой B (link_id) — пол пациента не раскрыт, показываем всё.
         if self.link_id is None:
@@ -333,6 +335,7 @@ class MedAccessService:
         concepts = await medical_concepts(self.session)
         code, name, value = data.code, data.name, dict(data.value)
         blood_category = concepts.get('blood')
+        vital_category = concepts.get('vital')
         if blood_category is not None and data.category == blood_category:
             # Старые клиенты присылали выбранную группу как code (a_pos и т.п.).
             # Новый контракт хранит один стабильный blood_type, а сам выбор —
@@ -347,6 +350,11 @@ class MedAccessService:
                 select(tables.Category.name).where(
                     tables.Category.id == data.category)
             )).scalar_one_or_none() or name
+        elif vital_category is not None and data.category == vital_category:
+            if code not in VITAL_SCOPES or 'profile' not in VITAL_SCOPES[code]:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                    detail=f'profile_vital_invalid:{code}')
+            value = self._normalize_vital(code, value)
         conditions = [
             tables.Property.table == 'pseudonym',
             tables.Property.objectid == pseudonym,
@@ -399,6 +407,18 @@ class MedAccessService:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                                 detail='blood_type_invalid')
 
+    @staticmethod
+    def _normalize_vital(code: str, value: dict) -> dict:
+        """Нормализовать value, сохранив unit/context и другие метаданные."""
+        try:
+            normalized = normalize_vital_value(code, value.get('value'))
+        except VitalValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f'vital_{exc.reason}_invalid:{code}',
+            ) from exc
+        return {**value, 'value': normalized}
+
     async def _gate_property(self, property_id: uuid.UUID) -> tables.Property:
         """Запись обязана висеть на псевдониме вызывающего (чужая/нет -> 404)."""
         pseudonym = await self._resolve()
@@ -413,10 +433,16 @@ class MedAccessService:
         concepts = await medical_concepts(self.session)
         source = (row.value or {}).get('source')
         blood_category = concepts.get('blood')
+        vital_category = concepts.get('vital')
         if blood_category is not None and row.category == blood_category:
             selected = value.get('value')
             await self._validate_blood_type(selected, row.category)
             value = {'value': selected, 'source': source or 'profile'}
+        elif vital_category is not None and row.category == vital_category:
+            value = {
+                **self._normalize_vital(row.code, value),
+                'source': source or 'profile',
+            }
         else:
             value = {**value, 'source': source or 'profile'}
         updated = await versioned_update(self.session, tables.Property, row.id, {'value': value})
@@ -476,15 +502,14 @@ class MedAccessService:
         pseudonym = await self._resolve()
         cats = await medical_concepts(self.session)
         vital, note = cats.get('vital'), cats.get('note')
+        value = dict(data.value)
         if data.category == vital:
             if data.code not in VITAL_SCOPES or 'diary' not in VITAL_SCOPES[data.code]:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                                     detail='diary_vital_invalid')
-            if not str(data.value.get('value', '')).strip():
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                    detail='diary_value_required')
+            value = self._normalize_vital(data.code, value)
         elif data.category == note:
-            if not str(data.value.get('text', '')).strip():
+            if not str(value.get('text', '')).strip():
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                                     detail='diary_note_required')
         else:
@@ -492,7 +517,7 @@ class MedAccessService:
                                 detail='diary_category_invalid')
         prop = tables.Property(category=data.category, code=data.code, name=data.name,
                                table='pseudonym', objectid=pseudonym,
-                               value={**data.value, 'source': 'diary'},
+                               value={**value, 'source': 'diary'},
                                creator=self.payload.sub)
         self.session.add(prop)
         await self.session.commit()
@@ -574,9 +599,13 @@ class MedAccessService:
 
     async def add_episode_property(self, episode_id: uuid.UUID, data: MedPropertyIn) -> tables.Property:
         await self._gate_episode(episode_id)
+        value = dict(data.value)
+        vital = (await medical_concepts(self.session)).get('vital')
+        if vital is not None and data.category == vital:
+            value = self._normalize_vital(data.code, value)
         return await PropertyService(session=self.session).create(
             PropertyCreate(category=data.category, code=data.code, name=data.name,
-                           table='entity', objectid=episode_id, value=data.value),
+                           table='entity', objectid=episode_id, value=value),
             creator=self.payload.sub)
 
     async def close_episode_property(self, episode_id: uuid.UUID,

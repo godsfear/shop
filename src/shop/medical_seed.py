@@ -77,6 +77,39 @@ VITAL_SCOPES = {
     "glucose": {"diary"},          # замер в моменте по глюкометру
 }
 
+# Технические правила ввода, не диагностические «нормы». Диапазоны намеренно
+# широкие: они ловят переставленную запятую/лишний ноль, но не запрещают
+# редкое или опасное реальное значение. dictionary('vital') отдаёт тот же
+# контракт UI, а сервер всегда проверяет его повторно.
+VITAL_VALIDATION = {
+    "height": {
+        "kind": "number", "min": 30, "max": 300, "decimals": 1,
+        "example": "170.0",
+    },
+    "weight": {
+        "kind": "number", "min": 0.5, "max": 700, "decimals": 1,
+        "example": "70.0",
+    },
+    "blood_pressure": {
+        "kind": "blood_pressure",
+        "systolic_min": 40, "systolic_max": 300,
+        "diastolic_min": 20, "diastolic_max": 200,
+        "example": "120/80",
+    },
+    "pulse": {
+        "kind": "number", "min": 20, "max": 300, "decimals": 0,
+        "example": "72",
+    },
+    "temperature": {
+        "kind": "number", "min": 20, "max": 45, "decimals": 1,
+        "example": "36.6",
+    },
+    "glucose": {
+        "kind": "number", "min": 0.1, "max": 60, "decimals": 1,
+        "example": "5.5",
+    },
+}
+
 # Группа крови хранится как ОДИН профильный факт с этим стабильным code.
 # Восемь элементов DICTIONARY["blood"] — допустимые значения этого факта,
 # а не восемь независимо добавляемых свойств.
