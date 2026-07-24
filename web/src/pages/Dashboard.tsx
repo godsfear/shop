@@ -10,15 +10,19 @@ import { ui } from '../i18n'
 
 // available пуст -> маршрут завершён: эпизод уходит в «Историю болезни»
 interface EpisodeRow extends Episode { fsm?: string; closed?: boolean }
-type OptionalTile = 'nutrition' | 'sleep'
+type OptionalTile = 'nutrition' | 'sleep' | 'activity'
 type TileVisibility = Record<OptionalTile, boolean>
 
 const TILE_VISIBILITY_KEY = 'dashboard-optional-tiles'
 const tileVisibility = (): TileVisibility => {
   try {
     const saved = JSON.parse(localStorage.getItem(TILE_VISIBILITY_KEY) ?? '{}')
-    return { nutrition: saved.nutrition !== false, sleep: saved.sleep !== false }
-  } catch { return { nutrition: true, sleep: true } }
+    return {
+      nutrition: saved.nutrition !== false,
+      sleep: saved.sleep !== false,
+      activity: saved.activity !== false,
+    }
+  } catch { return { nutrition: true, sleep: true, activity: true } }
 }
 
 function diaryLabel(p: MedProperty) {
@@ -38,8 +42,8 @@ function EpisodeLink({ ep }: { ep: EpisodeRow }) {
   )
 }
 
-// Дашборд «Сегодня»: эпизоды и общий дневник всегда под рукой; питание и сон
-// пользователь может скрыть без потери самих данных.
+// Дашборд «Сегодня»: эпизоды и общий дневник всегда под рукой; дополнительные
+// плашки пользователь может скрыть без потери самих данных.
 export default function Dashboard() {
   const nav = useNavigate()
   const [eps, setEps] = useState<EpisodeRow[]>([])
@@ -109,6 +113,8 @@ export default function Dashboard() {
                         onChange={(e) => setTileVisibility('nutrition', e.target.checked)} /> {ui('Питание')}</label>
           <label><input type="checkbox" checked={visibleTiles.sleep}
                         onChange={(e) => setTileVisibility('sleep', e.target.checked)} /> {ui('Сон')}</label>
+          <label><input type="checkbox" checked={visibleTiles.activity}
+                        onChange={(e) => setTileVisibility('activity', e.target.checked)} /> {ui('Нагрузки')}</label>
         </div>
       </details>
 
@@ -196,7 +202,8 @@ export default function Dashboard() {
       </section>}
 
       {/* перспектива: данные подключатся новыми концептами ядра */}
-      <section className="tile future"><header><h3>{ui('Нагрузки')}</h3></header><p>{ui('скоро')}</p></section>
+      {visibleTiles.activity &&
+        <section className="tile future"><header><h3>{ui('Нагрузки')}</h3></header><p>{ui('скоро')}</p></section>}
       </div>
     </div>
   )
