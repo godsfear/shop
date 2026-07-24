@@ -95,10 +95,12 @@ function Section({ concept, cid }: { concept: string; cid: string }) {
               {vital && <b>{String(p.value.value ?? '')} {String(p.value.unit ?? '')}</b>}
               {vital && <button className="ghost small profile-history" onClick={() => toggleHist(p)}>
                 {hist[p.id] ? ui('скрыть') : ui('история')}</button>}
-              <button className="profile-remove" type="button"
-                      title={ui('удалить')}
-                      aria-label={`${ui('удалить')}: ${p.name || names.get(p.code) || p.code}`}
-                      onClick={() => close(p)}>×</button>
+              {!vital && (
+                <button className="profile-remove" type="button"
+                        title={ui('удалить')}
+                        aria-label={`${ui('удалить')}: ${p.name || names.get(p.code) || p.code}`}
+                        onClick={() => close(p)}>×</button>
+              )}
             </div>
             {hist[p.id] && (
               <ul className="rows hist profile-history-list">

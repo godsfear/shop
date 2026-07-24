@@ -321,8 +321,12 @@ class MedAccessService:
     async def properties(self, category: uuid.UUID | None = None,
                          code: str | None = None) -> list[tables.Property]:
         pseudonym = await self._resolve()
-        return await PropertyService(session=self.session).find(PropertyFilter(
+        rows = await PropertyService(session=self.session).find(PropertyFilter(
             table='pseudonym', objectid=pseudonym, category=category, code=code))
+        # /properties — стандартные факты «Моей карты». Ситуационные замеры
+        # читаются только через /diary, хотя технически используют ту же
+        # категорию vital и того же владельца-псевдоним.
+        return [row for row in rows if (row.value or {}).get('source') != 'diary']
 
     async def add_property(self, data: MedPropertyIn) -> tables.Property:
         pseudonym = await self._resolve()
@@ -331,6 +335,7 @@ class MedAccessService:
             tables.Property.objectid == pseudonym,
             tables.Property.code == data.code,
             tables.Property.ends.is_(None),
+            tables.Property.value['source'].astext.is_distinct_from('diary'),
         ]
         if data.category is None:
             conditions.append(tables.Property.category.is_(None))
@@ -341,10 +346,26 @@ class MedAccessService:
         if existing is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                                 detail='property_exists')
-        return await PropertyService(session=self.session).create(
-            PropertyCreate(category=data.category, code=data.code, name=data.name,
-                           table='pseudonym', objectid=pseudonym, value=data.value),
-            creator=self.payload.sub)
+        try:
+            return await PropertyService(session=self.session).create(
+                PropertyCreate(
+                    category=data.category,
+                    code=data.code,
+                    name=data.name,
+                    table='pseudonym',
+                    objectid=pseudonym,
+                    value={**data.value, 'source': 'profile'},
+                ),
+                creator=self.payload.sub,
+            )
+        except IntegrityError as exc:
+            # Две конкурентные вставки могут одновременно пройти SELECT выше;
+            # окончательный инвариант держит uq_property_active_profile.
+            await self.session.rollback()
+            if getattr(exc.orig, 'sqlstate', None) == '23505':
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                    detail='property_exists')
+            raise
 
     async def _gate_property(self, property_id: uuid.UUID) -> tables.Property:
         """Запись обязана висеть на псевдониме вызывающего (чужая/нет -> 404)."""
@@ -357,6 +378,8 @@ class MedAccessService:
     async def update_property(self, property_id: uuid.UUID, value: dict) -> tables.Property:
         """Новое значение записи (рост, дозировка...); версия-копия — история бесплатно."""
         row = await self._gate_property(property_id)
+        source = (row.value or {}).get('source')
+        value = {**value, 'source': source or 'profile'}
         updated = await versioned_update(self.session, tables.Property, row.id, {'value': value})
         await self.session.commit()
         return updated
@@ -364,6 +387,11 @@ class MedAccessService:
     async def close_property(self, property_id: uuid.UUID) -> tables.Property:
         """Закрыть запись (перестал принимать лекарство и т.п.) — строка уходит в историю."""
         row = await self._gate_property(property_id)
+        concepts = await medical_concepts(self.session)
+        if (row.category == concepts.get('vital')
+                and (row.value or {}).get('source') != 'diary'):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail='profile_vital_cannot_close')
         closed = await versioned_expire(self.session, tables.Property, row.id)
         await self.session.commit()
         return closed

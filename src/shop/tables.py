@@ -516,6 +516,16 @@ class Property(BaseCategory, CrossTable, DescriptionMixin):
               postgresql_where=ACTIVE
         ),
         Index('ix_property_value', 'value', postgresql_using='gin'),
+        # Стандартный факт «Моей карты» единственный по логическому ключу.
+        # Ситуационные diary-замеры намеренно множественные и сюда не входят.
+        Index('uq_property_active_profile',
+              'table', 'objectid', 'category', 'code',
+              unique=True,
+              postgresql_where=text(
+                  "ends IS NULL AND version_of IS NULL "
+                  "AND value ->> 'source' = 'profile'"
+              ),
+              postgresql_nulls_not_distinct=True),
         # инвариант FSM: одно активное состояние на объект держит БД,
         # а не только блокировка в FSMService.trigger
         Index('uq_property_active_state', 'table', 'objectid', unique=True,

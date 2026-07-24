@@ -4,15 +4,18 @@
 разворачивает мост, чтение/запись скоупятся на псевдоним, проекция не раскрывает
 objectid (псевдоним), закрытие отзывает доступ."""
 import datetime
+import os
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import shop.tables as t
 from shop.keyservice import DbKeyService
+from shop.medical_seed import seed_medical
 from shop.models.auth import TokenPayload
 from shop.models.medical import MedPropertyIn, MedPropertyOut
 from shop.models.property import PropertyCreate
@@ -22,7 +25,7 @@ from shop.services.medaccess import MedAccessService
 from shop.services.property import PropertyService
 from shop.services.user import UserService
 
-URI = 'postgresql+asyncpg://shop:secret@localhost:5432/shop'
+URI = os.getenv('TEST_DATABASE_URI', 'postgresql+asyncpg://shop:secret@localhost:5432/shop')
 
 
 def _svc(s, ks, payload):
@@ -38,6 +41,8 @@ async def test_main():
         await conn.run_sync(t.Root.metadata.create_all)
     Sess = async_sessionmaker(eng, expire_on_commit=False)
 
+    async with Sess() as s:
+        ids = await seed_medical(s)
     async with Sess() as s:
         country = t.Country(iso2='ru', iso3='rus', name='Russia')
         s.add(country); await s.flush()
@@ -105,6 +110,61 @@ async def test_main():
         props = await _svc(s, ks, payload).properties()
     assert {p.code for p in props} == {'allergy', 'symptom'}, props
     print('[ok] запись факта скоупится на псевдоним сессии, дубли отклоняются')
+
+    # --- профильный показатель и ситуационные замеры строго разделены ---
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        pressure = await svc.add_property(MedPropertyIn(
+            category=ids['vital'], code='blood_pressure', name='Давление',
+            value={'value': '120/80', 'unit': 'мм рт. ст.'}))
+    assert pressure.value['source'] == 'profile'
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        await svc.add_diary_entry(MedPropertyIn(
+            category=ids['vital'], code='blood_pressure', name='Давление',
+            value={'value': '135/90', 'unit': 'мм рт. ст.'}))
+        await svc.add_diary_entry(MedPropertyIn(
+            category=ids['vital'], code='blood_pressure', name='Давление',
+            value={'value': '130/85', 'unit': 'мм рт. ст.'}))
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        profile_vitals = await svc.properties(category=ids['vital'])
+        diary = await svc.diary()
+    assert [(p.code, p.value['value']) for p in profile_vitals] == [
+        ('blood_pressure', '120/80')
+    ]
+    assert [p.value['value'] for p in diary] == ['130/85', '135/90']
+
+    # Повторное профильное значение обновляет тот же id и попадает в историю.
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        updated = await svc.update_property(
+            pressure.id, {'value': '125/85', 'unit': 'мм рт. ст.'})
+        history = await svc.property_history(updated.id)
+    assert updated.id == pressure.id
+    assert [p.value['value'] for p in history] == ['120/80', '125/85']
+    assert all(p.value['source'] == 'profile' for p in history)
+
+    # Профильный vital нельзя закрыть, но дневниковый замер — можно.
+    async with Sess() as s:
+        svc = _svc(s, ks, payload)
+        with pytest.raises(HTTPException) as ei:
+            await svc.close_property(pressure.id)
+        assert ei.value.status_code == 409
+        await svc.close_property(diary[0].id)
+        assert len(await svc.diary()) == 1
+
+    # Даже конкурентный/прямой обход сервисной проверки упирается в индекс БД;
+    # множественные source=diary выше при этом разрешены.
+    async with Sess() as s:
+        s.add(t.Property(
+            category=ids['vital'], code='blood_pressure', name='Давление',
+            table='pseudonym', objectid=pseudonym_id,
+            value={'value': '140/90', 'unit': 'мм рт. ст.', 'source': 'profile'}))
+        with pytest.raises(IntegrityError):
+            await s.commit()
+        await s.rollback()
+    print('[ok] профильный vital единственный; дневниковые замеры отдельны и множественны')
 
     # --- закрыть сессию -> снова 401 ---
     async with Sess() as s:
